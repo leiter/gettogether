@@ -1,4 +1,4 @@
-rootProject.name = "letsJam"
+rootProject.name = "GetTogether"
 
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
@@ -29,4 +29,5 @@ dependencyResolutionManagement {
     }
 }
 
-include(":composeApp")
+include(":shared")
+include(":androidApp")
