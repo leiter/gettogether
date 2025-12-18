@@ -1,17 +1,18 @@
 package com.gettogether.app.di
 
+import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.jami.createJamiBridge
+import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
 import org.koin.core.module.Module
+import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val sharedModule = module {
-    // Domain layer
-    // single { SomeUseCase(get()) }
-
-    // Data layer
-    // single { SomeRepository(get()) as SomeRepositoryInterface }
-
     // Jami Bridge
-    // single { JamiBridge() }
+    single<JamiBridge> { createJamiBridge() }
+
+    // ViewModels
+    viewModel { CreateAccountViewModel(get()) }
 }
 
 expect val platformModule: Module

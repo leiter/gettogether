@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.gettogether.app.ui.screens.auth.CreateAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
 
 @Composable
@@ -17,11 +18,33 @@ fun AppNavigation() {
         composable(Screen.Welcome.route) {
             WelcomeScreen(
                 onNavigateToCreateAccount = {
-                    // TODO: Navigate to create account
+                    navController.navigate(Screen.CreateAccount.route)
                 },
                 onNavigateToImportAccount = {
                     // TODO: Navigate to import account
                 }
+            )
+        }
+
+        composable(Screen.CreateAccount.route) {
+            CreateAccountScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onAccountCreated = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        composable(Screen.Home.route) {
+            // TODO: HomeScreen
+            // For now, just show a placeholder
+            WelcomeScreen(
+                onNavigateToCreateAccount = {},
+                onNavigateToImportAccount = {}
             )
         }
     }
