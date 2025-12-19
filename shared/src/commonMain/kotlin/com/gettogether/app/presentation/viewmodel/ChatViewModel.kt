@@ -2,7 +2,9 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.jami.JamiConversationEvent
 import com.gettogether.app.presentation.state.ChatMessage
 import com.gettogether.app.presentation.state.ChatState
 import com.gettogether.app.presentation.state.MessageStatus
@@ -13,21 +15,62 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ChatViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
     val state: StateFlow<ChatState> = _state.asStateFlow()
 
+    init {
+        // Listen to conversation events
+        viewModelScope.launch {
+            jamiBridge.conversationEvents.collect { event ->
+                handleConversationEvent(event)
+            }
+        }
+    }
+
     fun loadConversation(conversationId: String) {
-        // For now, load demo data based on conversation ID
-        val (contactName, messages) = getDemoConversation(conversationId)
-        _state.update {
-            it.copy(
-                conversationId = conversationId,
-                contactName = contactName,
-                messages = messages
-            )
+        viewModelScope.launch {
+            _state.update { it.copy(conversationId = conversationId) }
+
+            try {
+                val accountId = accountRepository.currentAccountId.value
+
+                if (accountId != null) {
+                    // Load conversation info
+                    val convInfo = jamiBridge.getConversationInfo(accountId, conversationId)
+                    val contactName = convInfo["title"] ?: "Conversation"
+
+                    // Request messages to be loaded (results come via conversationEvents)
+                    jamiBridge.loadConversationMessages(accountId, conversationId, "", 50)
+
+                    _state.update {
+                        it.copy(
+                            contactName = contactName
+                        )
+                    }
+                } else {
+                    // Fallback to demo data if no account
+                    val (contactName, messages) = getDemoConversation(conversationId)
+                    _state.update {
+                        it.copy(
+                            contactName = contactName,
+                            messages = messages
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Fallback to demo data on error
+                val (contactName, messages) = getDemoConversation(conversationId)
+                _state.update {
+                    it.copy(
+                        contactName = contactName,
+                        messages = messages
+                    )
+                }
+            }
         }
     }
 
@@ -58,11 +101,15 @@ class ChatViewModel(
             }
 
             try {
-                // TODO: Actually send via JamiBridge
-                // jamiBridge.sendMessage(currentState.conversationId, messageContent)
-
-                // Simulate sending delay
-                kotlinx.coroutines.delay(500)
+                val accountId = accountRepository.currentAccountId.value
+                if (accountId != null) {
+                    jamiBridge.sendMessage(
+                        accountId,
+                        currentState.conversationId,
+                        messageContent,
+                        null
+                    )
+                }
 
                 // Update message status to sent
                 _state.update { state ->
@@ -97,6 +144,54 @@ class ChatViewModel(
 
     fun clearError() {
         _state.update { it.copy(error = null) }
+    }
+
+    private fun handleConversationEvent(event: JamiConversationEvent) {
+        when (event) {
+            is JamiConversationEvent.MessageReceived -> {
+                if (event.conversationId == _state.value.conversationId) {
+                    val accountId = accountRepository.currentAccountId.value
+                    val messageBody = event.message.body["body"] ?: ""
+                    val newMessage = ChatMessage(
+                        id = event.message.id,
+                        content = messageBody,
+                        timestamp = formatTimestamp(event.message.timestamp),
+                        isFromMe = event.message.author == accountId,
+                        status = MessageStatus.Sent
+                    )
+                    _state.update { it.copy(messages = it.messages + newMessage) }
+                }
+            }
+            is JamiConversationEvent.MessagesLoaded -> {
+                if (event.conversationId == _state.value.conversationId) {
+                    val accountId = accountRepository.currentAccountId.value
+                    val chatMessages = event.messages.mapNotNull { msg ->
+                        val body = msg.body["body"] ?: return@mapNotNull null
+                        ChatMessage(
+                            id = msg.id,
+                            content = body,
+                            timestamp = formatTimestamp(msg.timestamp),
+                            isFromMe = msg.author == accountId,
+                            status = MessageStatus.Sent
+                        )
+                    }
+                    _state.update { it.copy(messages = chatMessages) }
+                }
+            }
+            else -> { /* Handle other events */ }
+        }
+    }
+
+    private fun formatTimestamp(timestamp: Long): String {
+        // Simple timestamp formatting - could be enhanced
+        val now = System.currentTimeMillis()
+        val diff = now - timestamp
+        return when {
+            diff < 60_000 -> "Just now"
+            diff < 3600_000 -> "${diff / 60_000}m ago"
+            diff < 86400_000 -> "${diff / 3600_000}h ago"
+            else -> "Yesterday"
+        }
     }
 
     private fun getDemoConversation(conversationId: String): Pair<String, List<ChatMessage>> {

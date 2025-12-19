@@ -2,7 +2,10 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.jami.CallState as JamiCallState
 import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.jami.JamiCallEvent
 import com.gettogether.app.platform.CallServiceBridge
 import com.gettogether.app.presentation.state.CallState
 import com.gettogether.app.presentation.state.CallStatus
@@ -17,6 +20,7 @@ import kotlinx.coroutines.launch
 
 class CallViewModel(
     private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository,
     private val callServiceBridge: CallServiceBridge? = null
 ) : ViewModel() {
 
@@ -24,6 +28,15 @@ class CallViewModel(
     val state: StateFlow<CallState> = _state.asStateFlow()
 
     private var durationJob: Job? = null
+
+    init {
+        // Listen to call events
+        viewModelScope.launch {
+            jamiBridge.callEvents.collect { event ->
+                handleCallEvent(event)
+            }
+        }
+    }
 
     fun initializeOutgoingCall(contactId: String, withVideo: Boolean) {
         _state.update {
@@ -39,23 +52,34 @@ class CallViewModel(
             // Load contact info
             loadContactInfo(contactId)
 
-            // Start call via service bridge (for foreground service) or simulate
+            // Start call via service bridge (for foreground service)
             callServiceBridge?.startOutgoingCall(
                 contactId = contactId,
                 contactName = _state.value.contactName,
                 isVideo = withVideo
             )
 
-            // Simulate initiating call
-            delay(500)
-            _state.update { it.copy(callStatus = CallStatus.Ringing) }
-
-            // TODO: Actually start call via JamiBridge
-            // jamiBridge.startCall(contactId, withVideo)
-
-            // Simulate call being answered (for demo)
-            delay(2000)
-            onCallConnected()
+            try {
+                val accountId = accountRepository.currentAccountId.value
+                if (accountId != null) {
+                    // Start call via JamiBridge
+                    val callId = jamiBridge.placeCall(accountId, contactId, withVideo)
+                    _state.update { it.copy(callId = callId, callStatus = CallStatus.Ringing) }
+                } else {
+                    // Demo mode - simulate call
+                    delay(500)
+                    _state.update { it.copy(callStatus = CallStatus.Ringing) }
+                    delay(2000)
+                    onCallConnected()
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        callStatus = CallStatus.Failed,
+                        error = e.message ?: "Failed to place call"
+                    )
+                }
+            }
         }
     }
 
@@ -80,11 +104,12 @@ class CallViewModel(
             _state.update { it.copy(callStatus = CallStatus.Connecting) }
 
             try {
-                // TODO: Actually accept call via JamiBridge
-                // jamiBridge.acceptCall(state.value.callId)
-
-                delay(500)
-                onCallConnected()
+                val accountId = accountRepository.currentAccountId.value
+                val callId = _state.value.callId
+                if (accountId != null && callId.isNotEmpty()) {
+                    jamiBridge.acceptCall(accountId, callId, _state.value.isVideo)
+                }
+                // Call state will be updated via call events
             } catch (e: Exception) {
                 _state.update {
                     it.copy(
@@ -99,9 +124,11 @@ class CallViewModel(
     fun rejectCall() {
         viewModelScope.launch {
             try {
-                // TODO: Actually reject call via JamiBridge
-                // jamiBridge.rejectCall(state.value.callId)
-
+                val accountId = accountRepository.currentAccountId.value
+                val callId = _state.value.callId
+                if (accountId != null && callId.isNotEmpty()) {
+                    jamiBridge.refuseCall(accountId, callId)
+                }
                 _state.update { it.copy(callStatus = CallStatus.Ended) }
             } catch (e: Exception) {
                 _state.update {
@@ -121,8 +148,11 @@ class CallViewModel(
                 // End call via service bridge
                 callServiceBridge?.endCall()
 
-                // TODO: Actually hang up via JamiBridge
-                // jamiBridge.hangUp(state.value.callId)
+                val accountId = accountRepository.currentAccountId.value
+                val callId = _state.value.callId
+                if (accountId != null && callId.isNotEmpty()) {
+                    jamiBridge.hangUp(accountId, callId)
+                }
 
                 _state.update { it.copy(callStatus = CallStatus.Ended) }
             } catch (e: Exception) {
@@ -141,8 +171,11 @@ class CallViewModel(
         _state.update { it.copy(isMuted = newMuteState) }
 
         viewModelScope.launch {
-            // TODO: Actually toggle mute via JamiBridge
-            // jamiBridge.toggleMute(state.value.callId)
+            val accountId = accountRepository.currentAccountId.value
+            val callId = _state.value.callId
+            if (accountId != null && callId.isNotEmpty()) {
+                jamiBridge.muteAudio(accountId, callId, newMuteState)
+            }
         }
     }
 
@@ -151,8 +184,7 @@ class CallViewModel(
         _state.update { it.copy(isSpeakerOn = newSpeakerState) }
 
         viewModelScope.launch {
-            // TODO: Actually toggle speaker via JamiBridge
-            // jamiBridge.toggleSpeaker(state.value.callId)
+            jamiBridge.switchAudioOutput(newSpeakerState)
         }
     }
 
@@ -163,8 +195,11 @@ class CallViewModel(
         _state.update { it.copy(isLocalVideoEnabled = newVideoState) }
 
         viewModelScope.launch {
-            // TODO: Actually toggle video via JamiBridge
-            // jamiBridge.toggleVideo(state.value.callId)
+            val accountId = accountRepository.currentAccountId.value
+            val callId = _state.value.callId
+            if (accountId != null && callId.isNotEmpty()) {
+                jamiBridge.muteVideo(accountId, callId, !newVideoState)
+            }
         }
     }
 
@@ -173,13 +208,36 @@ class CallViewModel(
         _state.update { it.copy(isFrontCamera = newCameraState) }
 
         viewModelScope.launch {
-            // TODO: Actually switch camera via JamiBridge
-            // jamiBridge.switchCamera(state.value.callId)
+            jamiBridge.switchCamera()
         }
     }
 
     fun clearError() {
         _state.update { it.copy(error = null) }
+    }
+
+    private fun handleCallEvent(event: JamiCallEvent) {
+        val currentCallId = _state.value.callId
+        when (event) {
+            is JamiCallEvent.CallStateChanged -> {
+                if (event.callId == currentCallId || currentCallId.isEmpty()) {
+                    when (event.state) {
+                        JamiCallState.CURRENT -> onCallConnected()
+                        JamiCallState.RINGING -> _state.update { it.copy(callStatus = CallStatus.Ringing) }
+                        JamiCallState.CONNECTING -> _state.update { it.copy(callStatus = CallStatus.Connecting) }
+                        JamiCallState.OVER, JamiCallState.HUNGUP -> {
+                            durationJob?.cancel()
+                            _state.update { it.copy(callStatus = CallStatus.Ended) }
+                        }
+                        JamiCallState.BUSY -> {
+                            _state.update { it.copy(callStatus = CallStatus.Failed, error = "User is busy") }
+                        }
+                        else -> { /* Handle other states */ }
+                    }
+                }
+            }
+            else -> { /* Handle other events */ }
+        }
     }
 
     private fun onCallConnected() {
@@ -198,16 +256,28 @@ class CallViewModel(
     }
 
     private suspend fun loadContactInfo(contactId: String) {
-        // TODO: Load actual contact info from repository
-        // For now, use demo data
-        val contactName = when (contactId) {
-            "1" -> "Alice"
-            "2" -> "Bob"
-            "3" -> "Charlie"
-            else -> "Contact"
+        try {
+            val accountId = accountRepository.currentAccountId.value
+            if (accountId != null) {
+                val contactDetails = jamiBridge.getContactDetails(accountId, contactId)
+                val contactName = contactDetails["displayName"]
+                    ?: contactDetails["username"]
+                    ?: contactId.take(8)
+                _state.update { it.copy(contactName = contactName) }
+            } else {
+                // Demo data fallback
+                val contactName = when (contactId) {
+                    "1" -> "Alice"
+                    "2" -> "Bob"
+                    "3" -> "Charlie"
+                    else -> "Contact"
+                }
+                _state.update { it.copy(contactName = contactName) }
+            }
+        } catch (e: Exception) {
+            // Fallback to simple name
+            _state.update { it.copy(contactName = contactId.take(8)) }
         }
-
-        _state.update { it.copy(contactName = contactName) }
     }
 
     override fun onCleared() {

@@ -2,6 +2,7 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.NewConversationState
 import com.gettogether.app.presentation.state.SelectableContact
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class NewConversationViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(NewConversationState())
@@ -26,20 +28,44 @@ class NewConversationViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
-                // For now, load demo contacts
+                val accountId = accountRepository.currentAccountId.value
+
+                if (accountId != null) {
+                    val jamiContacts = jamiBridge.getContacts(accountId)
+                    val contacts = jamiContacts.map { contact ->
+                        SelectableContact(
+                            id = contact.uri,
+                            name = contact.displayName.ifEmpty { contact.uri.take(8) },
+                            isOnline = contact.isConfirmed // Use confirmed status as online indicator
+                        )
+                    }
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            contacts = contacts,
+                            filteredContacts = contacts
+                        )
+                    }
+                } else {
+                    // Demo contacts fallback
+                    val contacts = getDemoContacts()
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            contacts = contacts,
+                            filteredContacts = contacts
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Fallback to demo contacts on error
                 val contacts = getDemoContacts()
                 _state.update {
                     it.copy(
                         isLoading = false,
                         contacts = contacts,
-                        filteredContacts = contacts
-                    )
-                }
-            } catch (e: Exception) {
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Failed to load contacts"
+                        filteredContacts = contacts,
+                        error = null
                     )
                 }
             }
@@ -106,15 +132,27 @@ class NewConversationViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
-                // TODO: Actually create conversation via JamiBridge
-                // val conversationId = jamiBridge.createConversation(contactId)
+                val accountId = accountRepository.currentAccountId.value
 
-                // For now, use the contact ID as conversation ID
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        createdConversationId = contactId
-                    )
+                if (accountId != null) {
+                    // Create a new conversation
+                    val conversationId = jamiBridge.startConversation(accountId)
+                    // Add the contact to the conversation
+                    jamiBridge.addConversationMember(accountId, conversationId, contactId)
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            createdConversationId = conversationId
+                        )
+                    }
+                } else {
+                    // Demo mode - use contact ID as conversation ID
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            createdConversationId = contactId
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.update {

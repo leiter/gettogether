@@ -2,6 +2,7 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.AddContactState
 import com.gettogether.app.presentation.state.ContactSearchResult
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class AddContactViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(AddContactState())
@@ -39,21 +41,44 @@ class AddContactViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isSearching = true, error = null, searchResult = null) }
             try {
-                // TODO: Actually search via JamiBridge
-                // val result = jamiBridge.lookupUsername(currentState.contactId)
+                val accountId = accountRepository.currentAccountId.value
 
-                // Simulate search delay
-                kotlinx.coroutines.delay(800)
-
-                // Demo: simulate finding a user
-                val searchResult = simulateSearch(currentState.contactId)
-
-                _state.update {
-                    it.copy(
-                        isSearching = false,
-                        searchResult = searchResult,
-                        error = if (searchResult == null) "User not found" else null
-                    )
+                if (accountId != null) {
+                    // Perform lookup via JamiBridge
+                    val result = jamiBridge.lookupName(accountId, currentState.contactId)
+                    if (result != null) {
+                        val searchResult = ContactSearchResult(
+                            id = result.address,
+                            username = result.name,
+                            displayName = result.name,
+                            isAlreadyContact = false
+                        )
+                        _state.update {
+                            it.copy(
+                                isSearching = false,
+                                searchResult = searchResult,
+                                error = null
+                            )
+                        }
+                    } else {
+                        _state.update {
+                            it.copy(
+                                isSearching = false,
+                                error = "User not found"
+                            )
+                        }
+                    }
+                } else {
+                    // Demo mode: simulate finding a user
+                    kotlinx.coroutines.delay(800)
+                    val searchResult = simulateSearch(currentState.contactId)
+                    _state.update {
+                        it.copy(
+                            isSearching = false,
+                            searchResult = searchResult,
+                            error = if (searchResult == null) "User not found" else null
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.update {
@@ -78,11 +103,11 @@ class AddContactViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isAdding = true, error = null) }
             try {
-                // TODO: Actually add contact via JamiBridge
-                // jamiBridge.addContact(searchResult.id, currentState.displayName)
+                val accountId = accountRepository.currentAccountId.value
 
-                // Simulate adding delay
-                kotlinx.coroutines.delay(500)
+                if (accountId != null) {
+                    jamiBridge.addContact(accountId, searchResult.id)
+                }
 
                 _state.update { it.copy(isAdding = false, isContactAdded = true) }
             } catch (e: Exception) {

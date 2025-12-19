@@ -2,6 +2,7 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.ContactDetails
 import com.gettogether.app.presentation.state.ContactDetailsState
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ContactDetailsViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ContactDetailsState())
@@ -22,28 +24,48 @@ class ContactDetailsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
-                // TODO: Load actual contact from JamiBridge
-                // val contacts = jamiBridge.getContacts(accountId)
-                // val contact = contacts.find { it["id"] == contactId }
+                val accountId = accountRepository.currentAccountId.value
 
-                // Simulate loading delay
-                kotlinx.coroutines.delay(300)
+                if (accountId != null) {
+                    val contactDetails = jamiBridge.getContactDetails(accountId, contactId)
 
-                // Demo contact data
+                    val contact = ContactDetails(
+                        id = contactId,
+                        displayName = contactDetails["displayName"] ?: contactDetails["username"] ?: contactId.take(8),
+                        username = contactDetails["username"] ?: "",
+                        jamiId = contactId,
+                        isOnline = contactDetails["presence"] == "1",
+                        isTrusted = contactDetails["confirmed"] == "true",
+                        isBlocked = contactDetails["banned"] == "true",
+                        addedDate = contactDetails["addedDate"] ?: "",
+                        lastSeen = if (contactDetails["presence"] == "1") null else contactDetails["lastSeen"]
+                    )
+
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            contact = contact
+                        )
+                    }
+                } else {
+                    // Demo contact data fallback
+                    val contact = getDemoContact(contactId)
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            contact = contact,
+                            error = if (contact == null) "Contact not found" else null
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                // Fallback to demo data on error
                 val contact = getDemoContact(contactId)
-
                 _state.update {
                     it.copy(
                         isLoading = false,
                         contact = contact,
                         error = if (contact == null) "Contact not found" else null
-                    )
-                }
-            } catch (e: Exception) {
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        error = e.message ?: "Failed to load contact"
                     )
                 }
             }
@@ -55,15 +77,19 @@ class ContactDetailsViewModel(
 
         viewModelScope.launch {
             try {
-                // TODO: Start actual conversation via JamiBridge
-                // val conversationId = jamiBridge.startConversation(accountId)
-                // jamiBridge.addContact(accountId, contact.jamiId)
+                val accountId = accountRepository.currentAccountId.value
 
-                // Simulate with demo conversation ID
-                kotlinx.coroutines.delay(200)
-                val conversationId = "conv_${contact.id}"
-
-                _state.update { it.copy(conversationStarted = conversationId) }
+                if (accountId != null) {
+                    // Start a conversation with this contact
+                    val conversationId = jamiBridge.startConversation(accountId)
+                    // Add the contact to the conversation
+                    jamiBridge.addConversationMember(accountId, conversationId, contact.jamiId)
+                    _state.update { it.copy(conversationStarted = conversationId) }
+                } else {
+                    // Demo mode
+                    val conversationId = "conv_${contact.id}"
+                    _state.update { it.copy(conversationStarted = conversationId) }
+                }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }
@@ -96,11 +122,11 @@ class ContactDetailsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isRemoving = true, showRemoveDialog = false) }
             try {
-                // TODO: Remove contact via JamiBridge
-                // jamiBridge.removeContact(accountId, contact.jamiId)
+                val accountId = accountRepository.currentAccountId.value
 
-                // Simulate removal
-                kotlinx.coroutines.delay(300)
+                if (accountId != null) {
+                    jamiBridge.removeContact(accountId, contact.jamiId, ban = false)
+                }
 
                 _state.update {
                     it.copy(
@@ -125,10 +151,17 @@ class ContactDetailsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isBlocking = true, showBlockDialog = false) }
             try {
-                // TODO: Block/unblock via JamiBridge
+                val accountId = accountRepository.currentAccountId.value
 
-                // Simulate block toggle
-                kotlinx.coroutines.delay(300)
+                if (accountId != null) {
+                    if (contact.isBlocked) {
+                        // Unblock by adding contact back
+                        jamiBridge.addContact(accountId, contact.jamiId)
+                    } else {
+                        // Block by removing with ban flag
+                        jamiBridge.removeContact(accountId, contact.jamiId, ban = true)
+                    }
+                }
 
                 _state.update {
                     it.copy(

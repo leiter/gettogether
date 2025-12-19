@@ -2,7 +2,9 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.jami.RegistrationState
 import com.gettogether.app.presentation.state.NotificationSettings
 import com.gettogether.app.presentation.state.PrivacySettings
 import com.gettogether.app.presentation.state.SettingsState
@@ -14,7 +16,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class SettingsViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -22,32 +25,69 @@ class SettingsViewModel(
 
     init {
         loadUserProfile()
+        observeAccountState()
+    }
+
+    private fun observeAccountState() {
+        viewModelScope.launch {
+            accountRepository.accountState.collect { accountState ->
+                if (accountState.isLoaded && accountState.accountId != null) {
+                    _state.update {
+                        it.copy(
+                            userProfile = it.userProfile.copy(
+                                accountId = accountState.accountId,
+                                displayName = accountState.displayName,
+                                username = accountState.username,
+                                jamiId = accountState.jamiId,
+                                registrationState = accountState.registrationState.toDisplayString()
+                            )
+                        )
+                    }
+                }
+            }
+        }
     }
 
     private fun loadUserProfile() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
-                // TODO: Load actual account from JamiBridge
-                // val accountIds = jamiBridge.getAccountIds()
-                // val accountDetails = if (accountIds.isNotEmpty()) {
-                //     jamiBridge.getAccountDetails(accountIds.first())
-                // } else emptyMap()
+                val accountId = accountRepository.currentAccountId.value
 
-                // Demo profile
-                val profile = UserProfile(
-                    accountId = "demo_account_123",
-                    displayName = "TestUser",
-                    username = "testuser",
-                    jamiId = "ring:abc123def456",
-                    registrationState = "REGISTERED"
-                )
+                if (accountId != null) {
+                    val accountDetails = jamiBridge.getAccountDetails(accountId)
+                    val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
 
-                _state.update {
-                    it.copy(
-                        isLoading = false,
-                        userProfile = profile
+                    val profile = UserProfile(
+                        accountId = accountId,
+                        displayName = accountDetails["Account.displayName"] ?: "",
+                        username = accountDetails["Account.username"] ?: "",
+                        jamiId = accountDetails["Account.username"] ?: accountId,
+                        registrationState = volatileDetails["Account.registrationStatus"] ?: "UNREGISTERED"
                     )
+
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            userProfile = profile
+                        )
+                    }
+                } else {
+                    // Demo profile when no account exists
+                    val profile = UserProfile(
+                        accountId = "",
+                        displayName = "No Account",
+                        username = "",
+                        jamiId = "",
+                        registrationState = "UNREGISTERED"
+                    )
+
+                    _state.update {
+                        it.copy(
+                            isLoading = false,
+                            userProfile = profile
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.update {
@@ -63,15 +103,25 @@ class SettingsViewModel(
     fun updateDisplayName(name: String) {
         viewModelScope.launch {
             try {
-                // TODO: Update via JamiBridge
-                // jamiBridge.setAccountDetails(state.value.userProfile.accountId, mapOf("Account.displayName" to name))
-
+                accountRepository.updateDisplayName(name)
                 _state.update {
                     it.copy(userProfile = it.userProfile.copy(displayName = name))
                 }
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message) }
             }
+        }
+    }
+
+    private fun RegistrationState.toDisplayString(): String {
+        return when (this) {
+            RegistrationState.REGISTERED -> "REGISTERED"
+            RegistrationState.UNREGISTERED -> "UNREGISTERED"
+            RegistrationState.TRYING -> "TRYING"
+            RegistrationState.ERROR_GENERIC, RegistrationState.ERROR_AUTH,
+            RegistrationState.ERROR_NETWORK, RegistrationState.ERROR_HOST,
+            RegistrationState.ERROR_SERVICE_UNAVAILABLE, RegistrationState.ERROR_NEED_MIGRATION -> "ERROR"
+            RegistrationState.INITIALIZING -> "INITIALIZING"
         }
     }
 
@@ -151,11 +201,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isSigningOut = true, showSignOutDialog = false) }
             try {
-                // TODO: Delete account via JamiBridge
-                // jamiBridge.deleteAccount(state.value.userProfile.accountId)
-
-                // Simulate sign out delay
-                kotlinx.coroutines.delay(500)
+                accountRepository.deleteCurrentAccount()
 
                 _state.update {
                     it.copy(

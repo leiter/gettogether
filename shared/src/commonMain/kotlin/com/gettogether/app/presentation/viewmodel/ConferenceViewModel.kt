@@ -2,7 +2,9 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.jami.JamiCallEvent
 import com.gettogether.app.presentation.state.ConferenceLayoutMode
 import com.gettogether.app.presentation.state.ConferenceParticipant
 import com.gettogether.app.presentation.state.ConferenceState
@@ -18,7 +20,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class ConferenceViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ConferenceState())
@@ -26,6 +29,33 @@ class ConferenceViewModel(
 
     private var durationJob: Job? = null
     private var simulationJob: Job? = null
+
+    init {
+        // Listen to call events for conference updates
+        viewModelScope.launch {
+            jamiBridge.callEvents.collect { event ->
+                handleCallEvent(event)
+            }
+        }
+    }
+
+    private fun handleCallEvent(event: JamiCallEvent) {
+        when (event) {
+            is JamiCallEvent.ConferenceCreated -> {
+                _state.update { it.copy(conferenceId = event.conferenceId) }
+            }
+            is JamiCallEvent.ConferenceChanged -> {
+                // Conference state changed - could update participants here
+            }
+            is JamiCallEvent.ConferenceRemoved -> {
+                if (event.conferenceId == _state.value.conferenceId) {
+                    durationJob?.cancel()
+                    _state.update { it.copy(status = ConferenceStatus.Ended) }
+                }
+            }
+            else -> { /* Handle other events */ }
+        }
+    }
 
     fun createConference(participantIds: List<String>, withVideo: Boolean) {
         val conferenceId = generateConferenceId()
@@ -113,7 +143,15 @@ class ConferenceViewModel(
         simulationJob?.cancel()
 
         viewModelScope.launch {
-            // TODO: Actually leave via JamiBridge
+            try {
+                val accountId = accountRepository.currentAccountId.value
+                val conferenceId = _state.value.conferenceId
+                if (accountId != null && conferenceId.isNotEmpty()) {
+                    jamiBridge.hangUpConference(accountId, conferenceId)
+                }
+            } catch (e: Exception) {
+                // Ignore errors on leave
+            }
             _state.update { it.copy(status = ConferenceStatus.Ended) }
         }
     }

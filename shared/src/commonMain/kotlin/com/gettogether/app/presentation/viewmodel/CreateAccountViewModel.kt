@@ -2,6 +2,7 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.CreateAccountState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,7 +12,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class CreateAccountViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CreateAccountState())
@@ -31,7 +33,7 @@ class CreateAccountViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isCreating = true, error = null) }
             try {
-                jamiBridge.createAccount(currentState.displayName)
+                accountRepository.createAccount(currentState.displayName)
                 _state.update { it.copy(isCreating = false, isAccountCreated = true) }
             } catch (e: Exception) {
                 _state.update {

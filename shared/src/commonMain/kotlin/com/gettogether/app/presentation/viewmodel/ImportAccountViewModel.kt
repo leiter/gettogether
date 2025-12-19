@@ -2,6 +2,7 @@ package com.gettogether.app.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.ImportAccountState
 import com.gettogether.app.presentation.state.ImportMethod
@@ -12,7 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class ImportAccountViewModel(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val accountRepository: AccountRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ImportAccountState())
@@ -50,17 +52,15 @@ class ImportAccountViewModel(
             try {
                 when (currentState.importMethod) {
                     ImportMethod.Archive -> {
-                        // TODO: Actually import via JamiBridge
-                        // jamiBridge.importAccountFromArchive(
-                        //     currentState.archivePath,
-                        //     currentState.archivePassword
-                        // )
-                        kotlinx.coroutines.delay(1500) // Simulate import
+                        accountRepository.importAccount(
+                            currentState.archivePath,
+                            currentState.archivePassword
+                        )
                     }
                     ImportMethod.Pin -> {
-                        // TODO: Actually import via JamiBridge
-                        // jamiBridge.importAccountFromPin(currentState.accountPin)
-                        kotlinx.coroutines.delay(1500) // Simulate import
+                        // PIN-based import - PIN is used as password with empty archive path
+                        // The Jami daemon treats this as a DHT import
+                        accountRepository.importAccount("", currentState.accountPin)
                     }
                 }
                 _state.update { it.copy(isImporting = false, isAccountImported = true) }
