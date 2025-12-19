@@ -5,11 +5,24 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import co.touchlab.kermit.Logger
+import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.jami.JamiBridge
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 /**
  * Handles call notification actions (answer, decline, end call, mute, call back)
  */
-class CallNotificationReceiver : BroadcastReceiver() {
+class CallNotificationReceiver : BroadcastReceiver(), KoinComponent {
+
+    private val jamiBridge: JamiBridge by inject()
+    private val accountRepository: AccountRepository by inject()
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onReceive(context: Context, intent: Intent) {
         Logger.d("CallNotificationReceiver") { "Received action: ${intent.action}" }
@@ -28,6 +41,12 @@ class CallNotificationReceiver : BroadcastReceiver() {
         val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID) ?: return
         val isVideo = intent.getBooleanExtra(NotificationConstants.EXTRA_IS_VIDEO, false)
 
+        val accountId = accountRepository.currentAccountId.value
+        if (accountId == null) {
+            Logger.w("CallNotificationReceiver") { "No active account" }
+            return
+        }
+
         Logger.d("CallNotificationReceiver") {
             "Answer call: $callId from $contactId (video: $isVideo)"
         }
@@ -35,6 +54,16 @@ class CallNotificationReceiver : BroadcastReceiver() {
         // Cancel incoming call notification
         NotificationManagerCompat.from(context)
             .cancel(NotificationConstants.INCOMING_CALL_NOTIFICATION_ID)
+
+        // Accept call via JamiBridge
+        scope.launch {
+            try {
+                jamiBridge.acceptCall(accountId, callId, isVideo)
+                Logger.d("CallNotificationReceiver") { "Call accepted via JamiBridge" }
+            } catch (e: Exception) {
+                Logger.e("CallNotificationReceiver") { "Failed to accept call: ${e.message}" }
+            }
+        }
 
         // Launch the app to the call screen
         val launchIntent = Intent(context, Class.forName("com.gettogether.app.MainActivity")).apply {
@@ -45,20 +74,16 @@ class CallNotificationReceiver : BroadcastReceiver() {
             putExtra(NotificationConstants.EXTRA_IS_VIDEO, isVideo)
         }
         context.startActivity(launchIntent)
-
-        // TODO: Also signal the CallService to answer
-        val serviceIntent = Intent(context, Class.forName("com.gettogether.app.service.CallService")).apply {
-            action = "com.gettogether.app.ANSWER_CALL"
-        }
-        try {
-            context.startService(serviceIntent)
-        } catch (e: Exception) {
-            Logger.e("CallNotificationReceiver") { "Failed to start CallService: ${e.message}" }
-        }
     }
 
     private fun handleDeclineCall(context: Context, intent: Intent) {
         val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID) ?: return
+
+        val accountId = accountRepository.currentAccountId.value
+        if (accountId == null) {
+            Logger.w("CallNotificationReceiver") { "No active account" }
+            return
+        }
 
         Logger.d("CallNotificationReceiver") { "Decline call: $callId" }
 
@@ -66,46 +91,58 @@ class CallNotificationReceiver : BroadcastReceiver() {
         NotificationManagerCompat.from(context)
             .cancel(NotificationConstants.INCOMING_CALL_NOTIFICATION_ID)
 
-        // Signal CallService to decline
-        val serviceIntent = Intent(context, Class.forName("com.gettogether.app.service.CallService")).apply {
-            action = "com.gettogether.app.DECLINE_CALL"
-        }
-        try {
-            context.startService(serviceIntent)
-        } catch (e: Exception) {
-            Logger.e("CallNotificationReceiver") { "Failed to start CallService: ${e.message}" }
+        // Decline call via JamiBridge
+        scope.launch {
+            try {
+                jamiBridge.refuseCall(accountId, callId)
+                Logger.d("CallNotificationReceiver") { "Call declined via JamiBridge" }
+            } catch (e: Exception) {
+                Logger.e("CallNotificationReceiver") { "Failed to decline call: ${e.message}" }
+            }
         }
     }
 
     private fun handleEndCall(context: Context, intent: Intent) {
         val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID) ?: return
 
+        val accountId = accountRepository.currentAccountId.value
+        if (accountId == null) {
+            Logger.w("CallNotificationReceiver") { "No active account" }
+            return
+        }
+
         Logger.d("CallNotificationReceiver") { "End call: $callId" }
 
-        // Signal CallService to end call
-        val serviceIntent = Intent(context, Class.forName("com.gettogether.app.service.CallService")).apply {
-            action = "com.gettogether.app.END_CALL"
-        }
-        try {
-            context.startService(serviceIntent)
-        } catch (e: Exception) {
-            Logger.e("CallNotificationReceiver") { "Failed to start CallService: ${e.message}" }
+        // End call via JamiBridge
+        scope.launch {
+            try {
+                jamiBridge.hangUp(accountId, callId)
+                Logger.d("CallNotificationReceiver") { "Call ended via JamiBridge" }
+            } catch (e: Exception) {
+                Logger.e("CallNotificationReceiver") { "Failed to end call: ${e.message}" }
+            }
         }
     }
 
     private fun handleMuteCall(context: Context, intent: Intent) {
         val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID) ?: return
 
+        val accountId = accountRepository.currentAccountId.value
+        if (accountId == null) {
+            Logger.w("CallNotificationReceiver") { "No active account" }
+            return
+        }
+
         Logger.d("CallNotificationReceiver") { "Toggle mute for call: $callId" }
 
-        // Signal CallService to toggle mute
-        val serviceIntent = Intent(context, Class.forName("com.gettogether.app.service.CallService")).apply {
-            action = "com.gettogether.app.TOGGLE_MUTE"
-        }
-        try {
-            context.startService(serviceIntent)
-        } catch (e: Exception) {
-            Logger.e("CallNotificationReceiver") { "Failed to start CallService: ${e.message}" }
+        // Toggle mute via JamiBridge
+        scope.launch {
+            try {
+                jamiBridge.muteAudio(accountId, callId, true) // TODO: Track mute state to toggle
+                Logger.d("CallNotificationReceiver") { "Call muted via JamiBridge" }
+            } catch (e: Exception) {
+                Logger.e("CallNotificationReceiver") { "Failed to mute call: ${e.message}" }
+            }
         }
     }
 

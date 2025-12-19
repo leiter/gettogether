@@ -127,6 +127,19 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                 _events.tryEmit(event)
             }
         }
+
+        override fun getAppDataPath(name: String?, result: StringVect?) {
+            // Provide the data path to the daemon
+            // This is critical for account data persistence
+            val dataPath = context.filesDir.absolutePath
+            Log.i(TAG, "getAppDataPath called with name: $name, returning: $dataPath")
+            result?.add(dataPath)
+        }
+
+        override fun getDeviceName(result: StringVect?) {
+            // Provide a device name for this device
+            result?.add(android.os.Build.MODEL)
+        }
     }
 
     private val callCallback = object : Callback() {

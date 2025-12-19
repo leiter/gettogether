@@ -3,6 +3,7 @@ package com.gettogether.app.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.RegistrationState
 import com.gettogether.app.presentation.state.NotificationSettings
@@ -17,7 +18,8 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val jamiBridge: JamiBridge,
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -26,6 +28,20 @@ class SettingsViewModel(
     init {
         loadUserProfile()
         observeAccountState()
+        observeSettings()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            settingsRepository.notificationSettings.collect { settings ->
+                _state.update { it.copy(notificationSettings = settings) }
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.privacySettings.collect { settings ->
+                _state.update { it.copy(privacySettings = settings) }
+            }
+        }
     }
 
     private fun observeAccountState() {
@@ -126,67 +142,60 @@ class SettingsViewModel(
     }
 
     fun updateNotificationSettings(settings: NotificationSettings) {
-        _state.update { it.copy(notificationSettings = settings) }
-        // TODO: Persist notification settings
+        viewModelScope.launch {
+            settingsRepository.updateNotificationSettings(settings)
+        }
     }
 
     fun toggleNotifications(enabled: Boolean) {
-        _state.update {
-            it.copy(notificationSettings = it.notificationSettings.copy(enabled = enabled))
-        }
+        val newSettings = _state.value.notificationSettings.copy(enabled = enabled)
+        updateNotificationSettings(newSettings)
     }
 
     fun toggleMessageNotifications(enabled: Boolean) {
-        _state.update {
-            it.copy(notificationSettings = it.notificationSettings.copy(messageNotifications = enabled))
-        }
+        val newSettings = _state.value.notificationSettings.copy(messageNotifications = enabled)
+        updateNotificationSettings(newSettings)
     }
 
     fun toggleCallNotifications(enabled: Boolean) {
-        _state.update {
-            it.copy(notificationSettings = it.notificationSettings.copy(callNotifications = enabled))
-        }
+        val newSettings = _state.value.notificationSettings.copy(callNotifications = enabled)
+        updateNotificationSettings(newSettings)
     }
 
     fun toggleSound(enabled: Boolean) {
-        _state.update {
-            it.copy(notificationSettings = it.notificationSettings.copy(soundEnabled = enabled))
-        }
+        val newSettings = _state.value.notificationSettings.copy(soundEnabled = enabled)
+        updateNotificationSettings(newSettings)
     }
 
     fun toggleVibration(enabled: Boolean) {
-        _state.update {
-            it.copy(notificationSettings = it.notificationSettings.copy(vibrationEnabled = enabled))
-        }
+        val newSettings = _state.value.notificationSettings.copy(vibrationEnabled = enabled)
+        updateNotificationSettings(newSettings)
     }
 
     fun updatePrivacySettings(settings: PrivacySettings) {
-        _state.update { it.copy(privacySettings = settings) }
-        // TODO: Persist privacy settings
+        viewModelScope.launch {
+            settingsRepository.updatePrivacySettings(settings)
+        }
     }
 
     fun toggleShareOnlineStatus(enabled: Boolean) {
-        _state.update {
-            it.copy(privacySettings = it.privacySettings.copy(shareOnlineStatus = enabled))
-        }
+        val newSettings = _state.value.privacySettings.copy(shareOnlineStatus = enabled)
+        updatePrivacySettings(newSettings)
     }
 
     fun toggleReadReceipts(enabled: Boolean) {
-        _state.update {
-            it.copy(privacySettings = it.privacySettings.copy(readReceipts = enabled))
-        }
+        val newSettings = _state.value.privacySettings.copy(readReceipts = enabled)
+        updatePrivacySettings(newSettings)
     }
 
     fun toggleTypingIndicators(enabled: Boolean) {
-        _state.update {
-            it.copy(privacySettings = it.privacySettings.copy(typingIndicators = enabled))
-        }
+        val newSettings = _state.value.privacySettings.copy(typingIndicators = enabled)
+        updatePrivacySettings(newSettings)
     }
 
     fun toggleBlockUnknownContacts(enabled: Boolean) {
-        _state.update {
-            it.copy(privacySettings = it.privacySettings.copy(blockUnknownContacts = enabled))
-        }
+        val newSettings = _state.value.privacySettings.copy(blockUnknownContacts = enabled)
+        updatePrivacySettings(newSettings)
     }
 
     fun showSignOutDialog() {

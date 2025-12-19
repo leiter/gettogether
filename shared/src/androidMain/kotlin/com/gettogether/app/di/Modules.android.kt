@@ -1,5 +1,8 @@
 package com.gettogether.app.di
 
+import com.gettogether.app.data.repository.AndroidSettingsRepository
+import com.gettogether.app.data.repository.SettingsRepository
+import com.gettogether.app.data.repository.setSettingsRepository
 import com.gettogether.app.jami.AndroidJamiBridge
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
@@ -14,6 +17,11 @@ actual val platformModule: Module = module {
     // Android-specific dependencies
     single { CallServiceBridge(androidContext()) }
     single { NotificationHelper(androidContext()) }
+
+    // Settings persistence
+    single<SettingsRepository> {
+        AndroidSettingsRepository(androidContext()).also { setSettingsRepository(it) }
+    }
 
     // Jami daemon bridge and lifecycle
     single { DataPathProvider(androidContext()) }

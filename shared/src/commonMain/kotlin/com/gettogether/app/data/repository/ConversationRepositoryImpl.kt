@@ -316,4 +316,33 @@ class ConversationRepositoryImpl(
         }
         _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
     }
+
+    /**
+     * Mark a conversation as read.
+     */
+    suspend fun markAsRead(accountId: String, conversationId: String) {
+        try {
+            // Get the latest message ID to mark as read
+            val key = "$accountId:$conversationId"
+            val messages = _messagesCache.value[key]
+            val lastMessageId = messages?.lastOrNull()?.id
+
+            if (lastMessageId != null) {
+                jamiBridge.setMessageDisplayed(accountId, conversationId, lastMessageId)
+            }
+
+            // Update local unread count
+            val currentConversations = _conversationsCache.value[accountId] ?: return
+            val updatedConversations = currentConversations.map { conv ->
+                if (conv.id == conversationId) {
+                    conv.copy(unreadCount = 0)
+                } else {
+                    conv
+                }
+            }
+            _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
+        } catch (e: Exception) {
+            // Handle error silently
+        }
+    }
 }
