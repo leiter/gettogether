@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -21,17 +22,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.gettogether.app.presentation.viewmodel.ContactUiItem
+import com.gettogether.app.presentation.viewmodel.ContactsViewModel
+import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsTab(
     onContactClick: (String) -> Unit,
-    onAddContact: () -> Unit
+    onAddContact: () -> Unit,
+    viewModel: ContactsViewModel = koinViewModel()
 ) {
+    val state by viewModel.state.collectAsState()
+
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Contacts") },
@@ -45,25 +55,38 @@ fun ContactsTab(
             }
         )
 
-        // Placeholder contacts for demo
-        val demoContacts = listOf(
-            DemoContact("1", "Alice Smith", true),
-            DemoContact("2", "Bob Johnson", false),
-            DemoContact("3", "Carol Williams", true),
-            DemoContact("4", "David Brown", false),
-        )
-
-        if (demoContacts.isEmpty()) {
-            EmptyContactsPlaceholder()
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(demoContacts) { contact ->
-                    ContactItem(
-                        contact = contact,
-                        onClick = { onContactClick(contact.id) }
-                    )
+        when {
+            state.isLoading && state.contacts.isEmpty() -> {
+                LoadingPlaceholder()
+            }
+            !state.hasAccount -> {
+                NoAccountPlaceholder()
+            }
+            state.contacts.isEmpty() -> {
+                PullToRefreshBox(
+                    isRefreshing = state.isLoading,
+                    onRefresh = { viewModel.refresh() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    EmptyContactsPlaceholder()
+                }
+            }
+            else -> {
+                PullToRefreshBox(
+                    isRefreshing = state.isLoading,
+                    onRefresh = { viewModel.refresh() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(state.contacts, key = { it.id }) { contact ->
+                            ContactItem(
+                                contact = contact,
+                                onClick = { onContactClick(contact.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -72,7 +95,7 @@ fun ContactsTab(
 
 @Composable
 private fun ContactItem(
-    contact: DemoContact,
+    contact: ContactUiItem,
     onClick: () -> Unit
 ) {
     Surface(
@@ -95,7 +118,7 @@ private fun ContactItem(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Text(
-                            text = contact.name.first().uppercase(),
+                            text = contact.avatarInitial,
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
@@ -144,6 +167,37 @@ private fun ContactItem(
 }
 
 @Composable
+private fun LoadingPlaceholder() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun NoAccountPlaceholder() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "No account",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "Create an account to add contacts",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+}
+
+@Composable
 private fun EmptyContactsPlaceholder() {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -163,9 +217,3 @@ private fun EmptyContactsPlaceholder() {
         }
     }
 }
-
-private data class DemoContact(
-    val id: String,
-    val name: String,
-    val isOnline: Boolean
-)
