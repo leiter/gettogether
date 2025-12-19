@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.gettogether.app.ui.screens.auth.CreateAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
+import com.gettogether.app.ui.screens.chat.ChatScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 
 @Composable
@@ -56,8 +57,12 @@ fun AppNavigation() {
 
         composable(Screen.Chat.route) { backStackEntry ->
             val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
-            // TODO: ChatScreen
-            // For now, navigate back
+            ChatScreen(
+                conversationId = conversationId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
         }
     }
 }
