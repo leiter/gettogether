@@ -2,6 +2,7 @@ package com.gettogether.app.di
 
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
+import com.gettogether.app.presentation.viewmodel.AddContactViewModel
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
@@ -19,6 +20,7 @@ val sharedModule = module {
     viewModel { ImportAccountViewModel(get()) }
     viewModel { ChatViewModel(get()) }
     viewModel { NewConversationViewModel(get()) }
+    viewModel { AddContactViewModel(get()) }
 }
 
 expect val platformModule: Module

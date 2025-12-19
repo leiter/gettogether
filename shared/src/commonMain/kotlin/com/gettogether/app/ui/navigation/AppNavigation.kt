@@ -8,6 +8,7 @@ import com.gettogether.app.ui.screens.auth.CreateAccountScreen
 import com.gettogether.app.ui.screens.auth.ImportAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
 import com.gettogether.app.ui.screens.chat.ChatScreen
+import com.gettogether.app.ui.screens.contacts.AddContactScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
 
@@ -66,6 +67,20 @@ fun AppNavigation() {
                 },
                 onStartNewConversation = {
                     navController.navigate(Screen.NewConversation.route)
+                },
+                onAddContact = {
+                    navController.navigate(Screen.AddContact.route)
+                }
+            )
+        }
+
+        composable(Screen.AddContact.route) {
+            AddContactScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onContactAdded = {
+                    navController.popBackStack()
                 }
             )
         }
@@ -102,6 +117,7 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object NewConversation : Screen("new_conversation")
     object Contacts : Screen("contacts")
+    object AddContact : Screen("add_contact")
     object Conversations : Screen("conversations")
     object Chat : Screen("chat/{conversationId}") {
         fun createRoute(conversationId: String) = "chat/$conversationId"

@@ -29,13 +29,14 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContactsTab(
-    onContactClick: (String) -> Unit
+    onContactClick: (String) -> Unit,
+    onAddContact: () -> Unit
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Contacts") },
             actions = {
-                IconButton(onClick = { /* TODO: Add contact */ }) {
+                IconButton(onClick = onAddContact) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "Add contact"

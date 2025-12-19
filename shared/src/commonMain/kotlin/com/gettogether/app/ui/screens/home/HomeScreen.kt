@@ -30,7 +30,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 fun HomeScreen(
     onNavigateToChat: (String) -> Unit,
     onNavigateToContact: (String) -> Unit,
-    onStartNewConversation: () -> Unit
+    onStartNewConversation: () -> Unit,
+    onAddContact: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.Conversations) }
 
@@ -65,7 +66,8 @@ fun HomeScreen(
                     onConversationClick = onNavigateToChat
                 )
                 HomeTab.Contacts -> ContactsTab(
-                    onContactClick = onNavigateToContact
+                    onContactClick = onNavigateToContact,
+                    onAddContact = onAddContact
                 )
                 HomeTab.Settings -> SettingsTab()
             }
