@@ -4,6 +4,7 @@ import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
+import com.gettogether.app.presentation.viewmodel.NewConversationViewModel
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -15,6 +16,7 @@ val sharedModule = module {
     // ViewModels
     viewModel { CreateAccountViewModel(get()) }
     viewModel { ChatViewModel(get()) }
+    viewModel { NewConversationViewModel(get()) }
 }
 
 expect val platformModule: Module
