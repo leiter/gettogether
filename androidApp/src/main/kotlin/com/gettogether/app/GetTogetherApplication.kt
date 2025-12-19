@@ -3,6 +3,7 @@ package com.gettogether.app
 import android.app.Application
 import com.gettogether.app.di.platformModule
 import com.gettogether.app.di.sharedModule
+import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.platform.NotificationHelper
 import com.gettogether.app.service.CallNotificationManager
 import org.koin.android.ext.android.inject
@@ -25,5 +26,9 @@ class GetTogetherApplication : Application() {
 
         // Create notification channels for calls (legacy)
         CallNotificationManager(this).createNotificationChannels()
+
+        // Start Jami daemon
+        val daemonManager: DaemonManager by inject()
+        daemonManager.start()
     }
 }

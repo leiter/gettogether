@@ -37,14 +37,25 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
 
     companion object {
         private const val TAG = "JamiBridge"
+        private var nativeLoaded = false
 
         init {
-            // Load native library when class is loaded
+            // Load native libraries when class is loaded
+            // First try to load the full jami daemon library (optional)
             try {
                 System.loadLibrary("jami")
-                System.loadLibrary("jami_jni")
+                android.util.Log.i(TAG, "Loaded libjami.so")
             } catch (e: UnsatisfiedLinkError) {
-                android.util.Log.e(TAG, "Failed to load native libraries: ${e.message}")
+                android.util.Log.w(TAG, "libjami.so not available, using stub mode")
+            }
+
+            // Always load our JNI wrapper (contains stubs if daemon not available)
+            try {
+                System.loadLibrary("jami_jni")
+                nativeLoaded = true
+                android.util.Log.i(TAG, "Loaded libjami_jni.so")
+            } catch (e: UnsatisfiedLinkError) {
+                android.util.Log.e(TAG, "Failed to load libjami_jni.so: ${e.message}")
             }
         }
     }
