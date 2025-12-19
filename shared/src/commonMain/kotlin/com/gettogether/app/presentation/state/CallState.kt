@@ -21,7 +21,7 @@ data class CallState(
         get() {
             val minutes = callDuration / 60
             val seconds = callDuration % 60
-            return "%02d:%02d".format(minutes, seconds)
+            return "${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}"
         }
 
     val isCallActive: Boolean

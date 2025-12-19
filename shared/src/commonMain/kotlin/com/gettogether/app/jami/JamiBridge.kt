@@ -1,7 +1,7 @@
 package com.gettogether.app.jami
 
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.datetime.Clock
 
 /**
  * JamiBridge provides the platform-specific implementation to interface with
@@ -596,13 +596,13 @@ sealed class JamiAccountEvent : JamiEvent() {
         val state: RegistrationState,
         val code: Int,
         val detail: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiAccountEvent()
 
     data class AccountDetailsChanged(
         val accountId: String,
         val details: Map<String, String>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiAccountEvent()
 
     data class ProfileReceived(
@@ -610,14 +610,14 @@ sealed class JamiAccountEvent : JamiEvent() {
         val from: String,
         val displayName: String,
         val avatarPath: String?,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiAccountEvent()
 
     data class NameRegistrationEnded(
         val accountId: String,
         val state: Int,
         val name: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiAccountEvent()
 
     data class RegisteredNameFound(
@@ -625,13 +625,13 @@ sealed class JamiAccountEvent : JamiEvent() {
         val state: LookupState,
         val address: String,
         val name: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiAccountEvent()
 
     data class KnownDevicesChanged(
         val accountId: String,
         val devices: Map<String, String>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiAccountEvent()
 }
 
@@ -655,7 +655,7 @@ sealed class JamiCallEvent : JamiEvent() {
         val peerId: String,
         val peerDisplayName: String,
         val hasVideo: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class CallStateChanged(
@@ -663,52 +663,52 @@ sealed class JamiCallEvent : JamiEvent() {
         val callId: String,
         val state: CallState,
         val code: Int,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class MediaChangeRequested(
         val accountId: String,
         val callId: String,
         val mediaList: List<Map<String, String>>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class AudioMuted(
         val callId: String,
         val muted: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class VideoMuted(
         val callId: String,
         val muted: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class ConferenceCreated(
         val accountId: String,
         val conversationId: String,
         val conferenceId: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class ConferenceChanged(
         val accountId: String,
         val conferenceId: String,
         val state: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class ConferenceRemoved(
         val accountId: String,
         val conferenceId: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 
     data class ConferenceInfoUpdated(
         val conferenceId: String,
         val participantInfos: List<Map<String, String>>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 }
 
@@ -730,34 +730,34 @@ sealed class JamiConversationEvent : JamiEvent() {
     data class ConversationReady(
         val accountId: String,
         val conversationId: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ConversationRemoved(
         val accountId: String,
         val conversationId: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ConversationRequestReceived(
         val accountId: String,
         val conversationId: String,
         val metadata: Map<String, String>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class MessageReceived(
         val accountId: String,
         val conversationId: String,
         val message: SwarmMessage,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class MessageUpdated(
         val accountId: String,
         val conversationId: String,
         val message: SwarmMessage,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class MessagesLoaded(
@@ -765,7 +765,7 @@ sealed class JamiConversationEvent : JamiEvent() {
         val accountId: String,
         val conversationId: String,
         val messages: List<SwarmMessage>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ConversationMemberEvent(
@@ -773,7 +773,7 @@ sealed class JamiConversationEvent : JamiEvent() {
         val conversationId: String,
         val memberUri: String,
         val event: MemberEventType,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ComposingStatusChanged(
@@ -781,14 +781,14 @@ sealed class JamiConversationEvent : JamiEvent() {
         val conversationId: String,
         val from: String,
         val isComposing: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ConversationProfileUpdated(
         val accountId: String,
         val conversationId: String,
         val profile: Map<String, String>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ReactionAdded(
@@ -796,7 +796,7 @@ sealed class JamiConversationEvent : JamiEvent() {
         val conversationId: String,
         val messageId: String,
         val reaction: Map<String, String>,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 
     data class ReactionRemoved(
@@ -804,7 +804,7 @@ sealed class JamiConversationEvent : JamiEvent() {
         val conversationId: String,
         val messageId: String,
         val reactionId: String,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 }
 
@@ -828,14 +828,14 @@ sealed class JamiContactEvent : JamiEvent() {
         val accountId: String,
         val uri: String,
         val confirmed: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiContactEvent()
 
     data class ContactRemoved(
         val accountId: String,
         val uri: String,
         val banned: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiContactEvent()
 
     data class IncomingTrustRequest(
@@ -844,14 +844,14 @@ sealed class JamiContactEvent : JamiEvent() {
         val from: String,
         val payload: ByteArray,
         val received: Long,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiContactEvent()
 
     data class PresenceChanged(
         val accountId: String,
         val uri: String,
         val isOnline: Boolean,
-        override val timestamp: Long = System.currentTimeMillis()
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiContactEvent()
 }
 

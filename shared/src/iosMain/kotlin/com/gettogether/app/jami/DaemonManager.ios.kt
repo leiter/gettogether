@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package com.gettogether.app.jami
 
 import platform.Foundation.NSDocumentDirectory

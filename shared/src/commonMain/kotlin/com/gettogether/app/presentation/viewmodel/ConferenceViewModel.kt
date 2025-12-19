@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlin.random.Random
 
 class ConferenceViewModel(
     private val jamiBridge: JamiBridge,
@@ -254,7 +256,7 @@ class ConferenceViewModel(
         simulationJob?.cancel()
         simulationJob = viewModelScope.launch {
             while (isActive) {
-                delay(2000 + (Math.random() * 3000).toLong())
+                delay(2000 + (Random.nextDouble() * 3000).toLong())
 
                 val allParticipants = _state.value.participants + listOfNotNull(_state.value.localParticipant)
                 if (allParticipants.isNotEmpty()) {
@@ -289,7 +291,7 @@ class ConferenceViewModel(
     }
 
     private fun generateConferenceId(): String {
-        return "conf_${System.currentTimeMillis()}"
+        return "conf_${Clock.System.now().toEpochMilliseconds()}"
     }
 
     override fun onCleared() {

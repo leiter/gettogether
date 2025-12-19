@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 class ChatViewModel(
     private val jamiBridge: JamiBridge,
@@ -84,7 +85,7 @@ class ChatViewModel(
 
         val messageContent = currentState.messageInput.trim()
         val newMessage = ChatMessage(
-            id = System.currentTimeMillis().toString(),
+            id = Clock.System.now().toEpochMilliseconds().toString(),
             content = messageContent,
             timestamp = "Just now",
             isFromMe = true,
@@ -184,7 +185,7 @@ class ChatViewModel(
 
     private fun formatTimestamp(timestamp: Long): String {
         // Simple timestamp formatting - could be enhanced
-        val now = System.currentTimeMillis()
+        val now = Clock.System.now().toEpochMilliseconds()
         val diff = now - timestamp
         return when {
             diff < 60_000 -> "Just now"
