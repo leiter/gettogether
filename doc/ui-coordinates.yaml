@@ -1,0 +1,81 @@
+# UI Coordinates for GetTogether App
+# ===================================
+# Machine-readable UI element coordinates for automated testing
+#
+# How to capture new coordinates:
+#   adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml
+#
+# How to get device info:
+#   adb devices -l
+
+devices:
+  # Pixel 7a Test Device
+  37281JEHN03065:
+    model: Pixel_7a
+    product: lynx
+    resolution: [1080, 2400]
+
+    screens:
+      welcome:
+        create_account_button:
+          bounds: [[84, 1176], [996, 1302]]
+          tap: [540, 1239]
+        import_account_button:
+          bounds: [[84, 1344], [996, 1470]]
+          tap: [540, 1407]
+
+      create_account:
+        display_name_field:
+          bounds: [[84, 1053], [996, 1221]]
+          tap: [540, 1137]
+        create_button:
+          bounds: [[84, 1306], [996, 1432]]
+          tap: [540, 1369]
+
+      home:
+        bottom_nav:
+          chats_tab:
+            bounds: [[0, 2127], [346, 2337]]
+            tap: [173, 2232]
+          contacts_tab:
+            bounds: [[367, 2127], [713, 2337]]
+            tap: [540, 2232]
+          settings_tab:
+            bounds: [[734, 2127], [1080, 2337]]
+            tap: [907, 2232]
+        fab_new_conversation:
+          bounds: [[891, 1938], [1038, 2085]]
+          tap: [965, 2012]
+
+      chats:
+        list_items:
+          first:
+            bounds: [[0, 404], [1080, 614]]
+            tap: [540, 509]
+          second:
+            bounds: [[0, 614], [1080, 824]]
+            tap: [540, 719]
+          third:
+            bounds: [[0, 824], [1080, 1034]]
+            tap: [540, 929]
+
+# =============================================================================
+# Template for adding new devices
+# =============================================================================
+# To add a new device:
+# 1. Get serial: adb devices
+# 2. Get model: adb devices -l (look for model:XXX)
+# 3. Get resolution: adb shell wm size
+# 4. Capture UI: adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml
+# 5. Add section below with coordinates from ui.xml
+#
+# Example:
+#   NEW_SERIAL_NUMBER:
+#     model: Device_Model
+#     product: product_name
+#     resolution: [width, height]
+#     screens:
+#       welcome:
+#         create_account_button:
+#           bounds: [[x1, y1], [x2, y2]]
+#           tap: [center_x, center_y]
