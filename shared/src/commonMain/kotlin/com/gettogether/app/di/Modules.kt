@@ -1,6 +1,7 @@
 package com.gettogether.app.di
 
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.data.repository.ConversationRepositoryImpl
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
 import com.gettogether.app.presentation.viewmodel.AddContactViewModel
@@ -8,6 +9,7 @@ import com.gettogether.app.presentation.viewmodel.CallViewModel
 import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
 import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
+import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
 import com.gettogether.app.presentation.viewmodel.NewConversationViewModel
@@ -22,11 +24,13 @@ val sharedModule = module {
 
     // Repositories
     single { AccountRepository(get()) }
+    single { ConversationRepositoryImpl(get(), get()) }
 
     // ViewModels
     viewModel { CreateAccountViewModel(get(), get()) }
     viewModel { ImportAccountViewModel(get(), get()) }
     viewModel { ChatViewModel(get(), get()) }
+    viewModel { ConversationsViewModel(get(), get()) }
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }
     viewModel { SettingsViewModel(get(), get()) }

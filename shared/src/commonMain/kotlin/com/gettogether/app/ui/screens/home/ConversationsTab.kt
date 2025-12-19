@@ -13,46 +13,70 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.gettogether.app.presentation.viewmodel.ConversationUiItem
+import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
+import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConversationsTab(
-    onConversationClick: (String) -> Unit
+    onConversationClick: (String) -> Unit,
+    viewModel: ConversationsViewModel = koinViewModel()
 ) {
+    val state by viewModel.state.collectAsState()
+
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Chats") }
         )
 
-        // Placeholder conversations for demo
-        val demoConversations = listOf(
-            DemoConversation("1", "Alice", "Hey, how are you?", "10:30 AM", 2),
-            DemoConversation("2", "Bob", "See you tomorrow!", "Yesterday", 0),
-            DemoConversation("3", "Team Chat", "Meeting at 3pm", "Monday", 5),
-        )
-
-        if (demoConversations.isEmpty()) {
-            EmptyConversationsPlaceholder()
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(demoConversations) { conversation ->
-                    ConversationItem(
-                        conversation = conversation,
-                        onClick = { onConversationClick(conversation.id) }
-                    )
+        when {
+            state.isLoading && state.conversations.isEmpty() -> {
+                LoadingPlaceholder()
+            }
+            !state.hasAccount -> {
+                NoAccountPlaceholder()
+            }
+            state.conversations.isEmpty() -> {
+                PullToRefreshBox(
+                    isRefreshing = state.isLoading,
+                    onRefresh = { viewModel.refresh() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    EmptyConversationsPlaceholder()
+                }
+            }
+            else -> {
+                PullToRefreshBox(
+                    isRefreshing = state.isLoading,
+                    onRefresh = { viewModel.refresh() },
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(state.conversations, key = { it.id }) { conversation ->
+                            ConversationItem(
+                                conversation = conversation,
+                                onClick = { onConversationClick(conversation.id) }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -61,7 +85,7 @@ fun ConversationsTab(
 
 @Composable
 private fun ConversationItem(
-    conversation: DemoConversation,
+    conversation: ConversationUiItem,
     onClick: () -> Unit
 ) {
     Surface(
@@ -83,7 +107,7 @@ private fun ConversationItem(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = conversation.name.first().uppercase(),
+                        text = conversation.avatarInitial,
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -142,6 +166,37 @@ private fun ConversationItem(
 }
 
 @Composable
+private fun LoadingPlaceholder() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun NoAccountPlaceholder() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "No account",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "Create an account to start chatting",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+    }
+}
+
+@Composable
 private fun EmptyConversationsPlaceholder() {
     Box(
         modifier = Modifier.fillMaxSize(),
@@ -161,11 +216,3 @@ private fun EmptyConversationsPlaceholder() {
         }
     }
 }
-
-private data class DemoConversation(
-    val id: String,
-    val name: String,
-    val lastMessage: String,
-    val time: String,
-    val unreadCount: Int
-)
