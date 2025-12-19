@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2152FB032600AC8F00CF470E /* iOSApp.swift */; };
 		7555FF83242A565900829871 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7555FF82242A565900829871 /* ContentView.swift */; };
+		A1B2C3D40001000000000001 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000002 /* CallKitManager.swift */; };
+		A1B2C3D40001000000000003 /* JamiBridgeWrapper.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -16,6 +18,9 @@
 		7555FF7B242A565900829871 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7555FF82242A565900829871 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		7555FF8C242A565B00829871 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1B2C3D40001000000000002 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
+		A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = JamiBridgeWrapper.m; sourceTree = "<group>"; };
+		A1B2C3D40001000000000005 /* JamiBridgeWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = JamiBridgeWrapper.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,6 +57,8 @@
 				2152FB032600AC8F00CF470E /* iOSApp.swift */,
 				7555FF82242A565900829871 /* ContentView.swift */,
 				7555FF8C242A565B00829871 /* Info.plist */,
+				A1B2C3D40001000000000010 /* CallKit */,
+				A1B2C3D40001000000000020 /* JamiBridge */,
 			);
 			path = iosApp;
 			sourceTree = "<group>";
@@ -61,6 +68,23 @@
 			children = (
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A1B2C3D40001000000000010 /* CallKit */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D40001000000000002 /* CallKitManager.swift */,
+			);
+			path = CallKit;
+			sourceTree = "<group>";
+		};
+		A1B2C3D40001000000000020 /* JamiBridge */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D40001000000000005 /* JamiBridgeWrapper.h */,
+				A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */,
+			);
+			path = JamiBridge;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -155,6 +179,8 @@
 			files = (
 				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
 				7555FF83242A565900829871 /* ContentView.swift in Sources */,
+				A1B2C3D40001000000000001 /* CallKitManager.swift in Sources */,
+				A1B2C3D40001000000000003 /* JamiBridgeWrapper.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +326,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gettogether.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/JamiBridge/JamiBridgeWrapper.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -328,6 +355,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.gettogether.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/JamiBridge/JamiBridgeWrapper.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};

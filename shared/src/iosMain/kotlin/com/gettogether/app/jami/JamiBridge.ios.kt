@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package com.gettogether.app.jami
 
 import kotlinx.coroutines.CoroutineScope
@@ -7,15 +9,27 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
+import platform.AVFAudio.AVAudioSession
+import platform.AVFAudio.AVAudioSessionCategoryOptionAllowBluetooth
+import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
+import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
+import platform.AVFAudio.AVAudioSessionModeVoiceChat
+import platform.AVFAudio.AVAudioSessionPortOverrideNone
+import platform.AVFAudio.AVAudioSessionPortOverrideSpeaker
+import platform.Foundation.NSDate
 import platform.Foundation.NSLog
+import platform.Foundation.NSUUID
+import platform.Foundation.timeIntervalSince1970
 
 /**
- * iOS implementation of JamiBridge using Swift/Objective-C interop with jami-daemon.
+ * iOS implementation of JamiBridge.
  *
- * This class serves as the bridge between Kotlin code and the native Jami daemon on iOS.
- * It communicates with a Swift/ObjC wrapper that interfaces with the Jami C++ library.
+ * This implementation provides mock data for testing the UI while the native
+ * daemon integration is pending. The JamiBridgeWrapper Objective-C files have
+ * been created and can be integrated via Xcode's bridging header once the
+ * cinterop issues are resolved.
  *
- * TODO: Implement the actual Swift bridge in iosApp/iosApp/JamiBridgeWrapper.swift
+ * Current approach: Mock implementation that allows the app to build and run.
  */
 class IOSJamiBridge : JamiBridge {
 
@@ -34,34 +48,71 @@ class IOSJamiBridge : JamiBridge {
     override val conversationEvents: SharedFlow<JamiConversationEvent> = _conversationEvents.asSharedFlow()
     override val contactEvents: SharedFlow<JamiContactEvent> = _contactEvents.asSharedFlow()
 
+    // Mock state
     private var _isDaemonRunning = false
+    private val mockAccounts = mutableListOf<String>()
+    private val mockAccountDetails = mutableMapOf<String, MutableMap<String, String>>()
+    private val mockContacts = mutableMapOf<String, MutableList<JamiContact>>()
+    private val mockConversations = mutableMapOf<String, MutableList<String>>()
+
+    // Audio/Video state
+    private val audioSession = AVAudioSession.sharedInstance()
+    private var currentVideoDeviceId: String = "front"
+    private var isVideoActive = false
+    private var isSpeakerEnabled = false
+    private var currentAudioOutputIndex = 0
+    private var currentAudioInputIndex = 0
 
     companion object {
         private const val TAG = "JamiBridge-iOS"
+
+        // Video device IDs
+        private const val VIDEO_DEVICE_FRONT = "front"
+        private const val VIDEO_DEVICE_BACK = "back"
+    }
+
+    init {
+        // Configure audio session for VoIP
+        configureAudioSession()
+    }
+
+    private fun configureAudioSession() {
+        try {
+            audioSession.setCategory(
+                AVAudioSessionCategoryPlayAndRecord,
+                mode = AVAudioSessionModeVoiceChat,
+                options = AVAudioSessionCategoryOptionAllowBluetooth or
+                         AVAudioSessionCategoryOptionDefaultToSpeaker,
+                error = null
+            )
+            NSLog("$TAG: Audio session configured for VoIP")
+        } catch (e: Exception) {
+            NSLog("$TAG: Failed to configure audio session: ${e.message}")
+        }
     }
 
     // =========================================================================
     // Daemon Lifecycle
     // =========================================================================
 
-    override suspend fun initDaemon(dataPath: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: initDaemon with path: $dataPath")
-        // TODO: Call Swift bridge to initialize daemon
-        // JamiBridgeWrapper.shared.initDaemon(dataPath)
+    override suspend fun initDaemon(dataPath: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: initDaemon with path: $dataPath")
+        }
     }
 
-    override suspend fun startDaemon() = withContext(Dispatchers.Default) {
-        NSLog("$TAG: startDaemon")
-        // TODO: Call Swift bridge to start daemon
-        // JamiBridgeWrapper.shared.startDaemon()
-        _isDaemonRunning = true
+    override suspend fun startDaemon() {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: startDaemon")
+            _isDaemonRunning = true
+        }
     }
 
-    override suspend fun stopDaemon() = withContext(Dispatchers.Default) {
-        NSLog("$TAG: stopDaemon")
-        // TODO: Call Swift bridge to stop daemon
-        // JamiBridgeWrapper.shared.stopDaemon()
-        _isDaemonRunning = false
+    override suspend fun stopDaemon() {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: stopDaemon")
+            _isDaemonRunning = false
+        }
     }
 
     override fun isDaemonRunning(): Boolean = _isDaemonRunning
@@ -72,182 +123,247 @@ class IOSJamiBridge : JamiBridge {
 
     override suspend fun createAccount(displayName: String, password: String): String = withContext(Dispatchers.Default) {
         NSLog("$TAG: createAccount: $displayName")
-        // TODO: Implement via Swift bridge
-        "placeholder-account-id"
+        val accountId = generateId()
+        mockAccounts.add(accountId)
+        mockAccountDetails[accountId] = mutableMapOf(
+            "Account.displayName" to displayName,
+            "Account.alias" to displayName,
+            "Account.type" to "JAMI",
+            "Account.enable" to "true",
+            "Account.username" to "jami:$accountId"
+        )
+        mockContacts[accountId] = mutableListOf()
+        mockConversations[accountId] = mutableListOf()
+
+        // Emit registration events
+        _accountEvents.tryEmit(JamiAccountEvent.RegistrationStateChanged(
+            accountId, RegistrationState.TRYING, 0, ""
+        ))
+        _accountEvents.tryEmit(JamiAccountEvent.RegistrationStateChanged(
+            accountId, RegistrationState.REGISTERED, 0, ""
+        ))
+
+        accountId
     }
 
     override suspend fun importAccount(archivePath: String, password: String): String = withContext(Dispatchers.Default) {
         NSLog("$TAG: importAccount from: $archivePath")
-        // TODO: Implement via Swift bridge
-        "placeholder-account-id"
+        createAccount("Imported Account", password)
     }
 
     override suspend fun exportAccount(accountId: String, destinationPath: String, password: String): Boolean =
         withContext(Dispatchers.Default) {
             NSLog("$TAG: exportAccount: $accountId to $destinationPath")
-            // TODO: Implement via Swift bridge
-            false
+            true
         }
 
-    override suspend fun deleteAccount(accountId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: deleteAccount: $accountId")
-        // TODO: Implement via Swift bridge
+    override suspend fun deleteAccount(accountId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: deleteAccount: $accountId")
+            mockAccounts.remove(accountId)
+            mockAccountDetails.remove(accountId)
+            mockContacts.remove(accountId)
+            mockConversations.remove(accountId)
+        }
     }
 
-    override fun getAccountIds(): List<String> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
-    }
+    override fun getAccountIds(): List<String> = mockAccounts.toList()
 
-    override fun getAccountDetails(accountId: String): Map<String, String> {
-        // TODO: Implement via Swift bridge
-        return emptyMap()
-    }
+    override fun getAccountDetails(accountId: String): Map<String, String> =
+        mockAccountDetails[accountId]?.toMap() ?: emptyMap()
 
     override fun getVolatileAccountDetails(accountId: String): Map<String, String> {
-        // TODO: Implement via Swift bridge
-        return emptyMap()
+        return if (mockAccounts.contains(accountId)) {
+            mapOf(
+                "Account.registrationStatus" to "REGISTERED",
+                "Account.registrationStateCode" to "0"
+            )
+        } else {
+            emptyMap()
+        }
     }
 
-    override suspend fun setAccountDetails(accountId: String, details: Map<String, String>) =
+    override suspend fun setAccountDetails(accountId: String, details: Map<String, String>) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: setAccountDetails: $accountId")
-            // TODO: Implement via Swift bridge
+            mockAccountDetails[accountId]?.putAll(details)
+            _accountEvents.tryEmit(JamiAccountEvent.AccountDetailsChanged(
+                accountId, mockAccountDetails[accountId]?.toMap() ?: emptyMap()
+            ))
         }
-
-    override suspend fun setAccountActive(accountId: String, active: Boolean) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: setAccountActive: $accountId = $active")
-        // TODO: Implement via Swift bridge
     }
 
-    override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) =
+    override suspend fun setAccountActive(accountId: String, active: Boolean) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: setAccountActive: $accountId = $active")
+            val state = if (active) RegistrationState.REGISTERED else RegistrationState.UNREGISTERED
+            _accountEvents.tryEmit(JamiAccountEvent.RegistrationStateChanged(accountId, state, 0, ""))
+        }
+    }
+
+    override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: updateProfile: $accountId, name=$displayName")
-            // TODO: Implement via Swift bridge
+            mockAccountDetails[accountId]?.set("Account.displayName", displayName)
+            avatarPath?.let { mockAccountDetails[accountId]?.set("Account.avatar", it) }
         }
+    }
 
     override suspend fun registerName(accountId: String, name: String, password: String): Boolean =
         withContext(Dispatchers.Default) {
             NSLog("$TAG: registerName: $name for $accountId")
-            // TODO: Implement via Swift bridge
-            false
+            _accountEvents.tryEmit(JamiAccountEvent.NameRegistrationEnded(accountId, 0, name))
+            true
         }
 
     override suspend fun lookupName(accountId: String, name: String): LookupResult? {
         NSLog("$TAG: lookupName: $name")
-        // TODO: Implement via Swift bridge
-        return null
+        _accountEvents.tryEmit(JamiAccountEvent.RegisteredNameFound(
+            accountId, LookupState.NOT_FOUND, "", name
+        ))
+        return LookupResult("", name, LookupState.NOT_FOUND)
     }
 
     override suspend fun lookupAddress(accountId: String, address: String): LookupResult? {
         NSLog("$TAG: lookupAddress: $address")
-        // TODO: Implement via Swift bridge
-        return null
+        return LookupResult(address, "", LookupState.NOT_FOUND)
     }
 
     // =========================================================================
     // Contact Management
     // =========================================================================
 
-    override fun getContacts(accountId: String): List<JamiContact> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
+    override fun getContacts(accountId: String): List<JamiContact> =
+        mockContacts[accountId]?.toList() ?: emptyList()
+
+    override suspend fun addContact(accountId: String, uri: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: addContact: $uri")
+            val contact = JamiContact(
+                uri = uri,
+                displayName = "Contact ${uri.take(8)}",
+                avatarPath = null,
+                isConfirmed = false,
+                isBanned = false
+            )
+            mockContacts[accountId]?.add(contact)
+            _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, false))
+        }
     }
 
-    override suspend fun addContact(accountId: String, uri: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: addContact: $uri")
-        // TODO: Implement via Swift bridge
-    }
-
-    override suspend fun removeContact(accountId: String, uri: String, ban: Boolean) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: removeContact: $uri, ban=$ban")
-        // TODO: Implement via Swift bridge
+    override suspend fun removeContact(accountId: String, uri: String, ban: Boolean) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: removeContact: $uri, ban=$ban")
+            mockContacts[accountId]?.removeAll { it.uri == uri }
+            _contactEvents.tryEmit(JamiContactEvent.ContactRemoved(accountId, uri, ban))
+        }
     }
 
     override fun getContactDetails(accountId: String, uri: String): Map<String, String> {
-        // TODO: Implement via Swift bridge
-        return emptyMap()
+        val contact = mockContacts[accountId]?.find { it.uri == uri }
+        return contact?.let {
+            mapOf(
+                "uri" to it.uri,
+                "displayName" to it.displayName,
+                "confirmed" to it.isConfirmed.toString(),
+                "banned" to it.isBanned.toString()
+            )
+        } ?: emptyMap()
     }
 
-    override suspend fun acceptTrustRequest(accountId: String, uri: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: acceptTrustRequest from: $uri")
-        // TODO: Implement via Swift bridge
+    override suspend fun acceptTrustRequest(accountId: String, uri: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: acceptTrustRequest from: $uri")
+            mockContacts[accountId]?.find { it.uri == uri }?.let {
+                val updated = it.copy(isConfirmed = true)
+                mockContacts[accountId]?.remove(it)
+                mockContacts[accountId]?.add(updated)
+            }
+            _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, true))
+        }
     }
 
-    override suspend fun discardTrustRequest(accountId: String, uri: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: discardTrustRequest from: $uri")
-        // TODO: Implement via Swift bridge
+    override suspend fun discardTrustRequest(accountId: String, uri: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: discardTrustRequest from: $uri")
+        }
     }
 
-    override fun getTrustRequests(accountId: String): List<TrustRequest> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
-    }
+    override fun getTrustRequests(accountId: String): List<TrustRequest> = emptyList()
 
     // =========================================================================
     // Conversation Management
     // =========================================================================
 
-    override fun getConversations(accountId: String): List<String> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
-    }
+    override fun getConversations(accountId: String): List<String> =
+        mockConversations[accountId]?.toList() ?: emptyList()
 
     override suspend fun startConversation(accountId: String): String = withContext(Dispatchers.Default) {
         NSLog("$TAG: startConversation")
-        // TODO: Implement via Swift bridge
-        "placeholder-conversation-id"
+        val conversationId = generateId()
+        mockConversations[accountId]?.add(conversationId)
+        _conversationEvents.tryEmit(JamiConversationEvent.ConversationReady(accountId, conversationId))
+        conversationId
     }
 
-    override suspend fun removeConversation(accountId: String, conversationId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: removeConversation: $conversationId")
-        // TODO: Implement via Swift bridge
+    override suspend fun removeConversation(accountId: String, conversationId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: removeConversation: $conversationId")
+            mockConversations[accountId]?.remove(conversationId)
+            _conversationEvents.tryEmit(JamiConversationEvent.ConversationRemoved(accountId, conversationId))
+        }
     }
 
-    override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> {
-        // TODO: Implement via Swift bridge
-        return emptyMap()
-    }
+    override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> =
+        mapOf("id" to conversationId, "title" to "Conversation", "mode" to "0")
 
-    override suspend fun updateConversationInfo(accountId: String, conversationId: String, info: Map<String, String>) =
+    override suspend fun updateConversationInfo(accountId: String, conversationId: String, info: Map<String, String>) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: updateConversationInfo: $conversationId")
-            // TODO: Implement via Swift bridge
+            _conversationEvents.tryEmit(JamiConversationEvent.ConversationProfileUpdated(
+                accountId, conversationId, info
+            ))
         }
+    }
 
     override fun getConversationMembers(accountId: String, conversationId: String): List<ConversationMember> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
+        val selfUri = mockAccountDetails[accountId]?.get("Account.username") ?: ""
+        return listOf(ConversationMember(selfUri, MemberRole.ADMIN))
     }
 
-    override suspend fun addConversationMember(accountId: String, conversationId: String, contactUri: String) =
+    override suspend fun addConversationMember(accountId: String, conversationId: String, contactUri: String) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: addConversationMember: $contactUri to $conversationId")
-            // TODO: Implement via Swift bridge
+            _conversationEvents.tryEmit(JamiConversationEvent.ConversationMemberEvent(
+                accountId, conversationId, contactUri, MemberEventType.JOIN
+            ))
         }
+    }
 
-    override suspend fun removeConversationMember(accountId: String, conversationId: String, contactUri: String) =
+    override suspend fun removeConversationMember(accountId: String, conversationId: String, contactUri: String) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: removeConversationMember: $contactUri from $conversationId")
-            // TODO: Implement via Swift bridge
+            _conversationEvents.tryEmit(JamiConversationEvent.ConversationMemberEvent(
+                accountId, conversationId, contactUri, MemberEventType.LEAVE
+            ))
         }
+    }
 
-    override suspend fun acceptConversationRequest(accountId: String, conversationId: String) =
+    override suspend fun acceptConversationRequest(accountId: String, conversationId: String) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: acceptConversationRequest: $conversationId")
-            // TODO: Implement via Swift bridge
+            mockConversations[accountId]?.add(conversationId)
+            _conversationEvents.tryEmit(JamiConversationEvent.ConversationReady(accountId, conversationId))
         }
+    }
 
-    override suspend fun declineConversationRequest(accountId: String, conversationId: String) =
+    override suspend fun declineConversationRequest(accountId: String, conversationId: String) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: declineConversationRequest: $conversationId")
-            // TODO: Implement via Swift bridge
         }
-
-    override fun getConversationRequests(accountId: String): List<ConversationRequest> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
     }
+
+    override fun getConversationRequests(accountId: String): List<ConversationRequest> = emptyList()
 
     // =========================================================================
     // Messaging
@@ -260,8 +376,20 @@ class IOSJamiBridge : JamiBridge {
         replyTo: String?
     ): String = withContext(Dispatchers.Default) {
         NSLog("$TAG: sendMessage to $conversationId: $message")
-        // TODO: Implement via Swift bridge
-        "placeholder-message-id"
+        val messageId = generateId()
+        val selfUri = mockAccountDetails[accountId]?.get("Account.username") ?: ""
+        val swarmMessage = SwarmMessage(
+            id = messageId,
+            type = "text/plain",
+            author = selfUri,
+            body = mapOf("body" to message),
+            reactions = emptyList(),
+            timestamp = currentTimestamp(),
+            replyTo = replyTo,
+            status = emptyMap()
+        )
+        _conversationEvents.tryEmit(JamiConversationEvent.MessageReceived(accountId, conversationId, swarmMessage))
+        messageId
     }
 
     override suspend fun loadConversationMessages(
@@ -271,19 +399,20 @@ class IOSJamiBridge : JamiBridge {
         count: Int
     ): Int = withContext(Dispatchers.Default) {
         NSLog("$TAG: loadConversationMessages: $conversationId, count=$count")
-        // TODO: Implement via Swift bridge
-        0
+        val requestId = (0..Int.MAX_VALUE).random()
+        _conversationEvents.tryEmit(JamiConversationEvent.MessagesLoaded(
+            requestId, accountId, conversationId, emptyList()
+        ))
+        requestId
     }
 
-    override suspend fun setIsComposing(accountId: String, conversationId: String, isComposing: Boolean) =
-        withContext(Dispatchers.Default) {
-            // TODO: Implement via Swift bridge
-        }
+    override suspend fun setIsComposing(accountId: String, conversationId: String, isComposing: Boolean) {
+        withContext(Dispatchers.Default) { }
+    }
 
-    override suspend fun setMessageDisplayed(accountId: String, conversationId: String, messageId: String) =
-        withContext(Dispatchers.Default) {
-            // TODO: Implement via Swift bridge
-        }
+    override suspend fun setMessageDisplayed(accountId: String, conversationId: String, messageId: String) {
+        withContext(Dispatchers.Default) { }
+    }
 
     // =========================================================================
     // Calls
@@ -292,64 +421,93 @@ class IOSJamiBridge : JamiBridge {
     override suspend fun placeCall(accountId: String, uri: String, withVideo: Boolean): String =
         withContext(Dispatchers.Default) {
             NSLog("$TAG: placeCall to $uri, video=$withVideo")
-            // TODO: Implement via Swift bridge with CallKit integration
-            "placeholder-call-id"
+            val callId = generateId()
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.CONNECTING, 0))
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.RINGING, 0))
+            callId
         }
 
-    override suspend fun acceptCall(accountId: String, callId: String, withVideo: Boolean) =
+    override suspend fun acceptCall(accountId: String, callId: String, withVideo: Boolean) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: acceptCall: $callId")
-            // TODO: Implement via Swift bridge with CallKit
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.CURRENT, 0))
         }
-
-    override suspend fun refuseCall(accountId: String, callId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: refuseCall: $callId")
-        // TODO: Implement via Swift bridge
     }
 
-    override suspend fun hangUp(accountId: String, callId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: hangUp: $callId")
-        // TODO: Implement via Swift bridge
+    override suspend fun refuseCall(accountId: String, callId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: refuseCall: $callId")
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.OVER, 0))
+        }
     }
 
-    override suspend fun holdCall(accountId: String, callId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: holdCall: $callId")
-        // TODO: Implement via Swift bridge
+    override suspend fun hangUp(accountId: String, callId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: hangUp: $callId")
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.OVER, 0))
+        }
     }
 
-    override suspend fun unholdCall(accountId: String, callId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: unholdCall: $callId")
-        // TODO: Implement via Swift bridge
+    override suspend fun holdCall(accountId: String, callId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: holdCall: $callId")
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.HOLD, 0))
+        }
     }
 
-    override suspend fun muteAudio(accountId: String, callId: String, muted: Boolean) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: muteAudio: $callId = $muted")
-        // TODO: Implement via Swift bridge
+    override suspend fun unholdCall(accountId: String, callId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: unholdCall: $callId")
+            _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, CallState.CURRENT, 0))
+        }
     }
 
-    override suspend fun muteVideo(accountId: String, callId: String, muted: Boolean) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: muteVideo: $callId = $muted")
-        // TODO: Implement via Swift bridge
+    override suspend fun muteAudio(accountId: String, callId: String, muted: Boolean) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: muteAudio: $callId = $muted")
+            _callEvents.tryEmit(JamiCallEvent.AudioMuted(callId, muted))
+        }
     }
 
-    override fun getCallDetails(accountId: String, callId: String): Map<String, String> {
-        // TODO: Implement via Swift bridge
-        return emptyMap()
+    override suspend fun muteVideo(accountId: String, callId: String, muted: Boolean) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: muteVideo: $callId = $muted")
+            _callEvents.tryEmit(JamiCallEvent.VideoMuted(callId, muted))
+        }
     }
 
-    override fun getActiveCalls(accountId: String): List<String> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
+    override fun getCallDetails(accountId: String, callId: String): Map<String, String> =
+        mapOf("CALL_STATE" to "CURRENT", "VIDEO_SOURCE" to "true")
+
+    override fun getActiveCalls(accountId: String): List<String> = emptyList()
+
+    override suspend fun switchCamera() {
+        withContext(Dispatchers.Default) {
+            // Toggle between front and back camera
+            currentVideoDeviceId = if (currentVideoDeviceId == VIDEO_DEVICE_FRONT) {
+                VIDEO_DEVICE_BACK
+            } else {
+                VIDEO_DEVICE_FRONT
+            }
+            NSLog("$TAG: switchCamera - now using: $currentVideoDeviceId")
+        }
     }
 
-    override suspend fun switchCamera() = withContext(Dispatchers.Default) {
-        NSLog("$TAG: switchCamera")
-        // TODO: Implement via Swift bridge
-    }
-
-    override suspend fun switchAudioOutput(useSpeaker: Boolean) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: switchAudioOutput: speaker=$useSpeaker")
-        // TODO: Implement via Swift bridge using AVAudioSession
+    override suspend fun switchAudioOutput(useSpeaker: Boolean) {
+        withContext(Dispatchers.Default) {
+            isSpeakerEnabled = useSpeaker
+            try {
+                val portOverride = if (useSpeaker) {
+                    AVAudioSessionPortOverrideSpeaker
+                } else {
+                    AVAudioSessionPortOverrideNone
+                }
+                audioSession.overrideOutputAudioPort(portOverride, null)
+                NSLog("$TAG: switchAudioOutput: speaker=$useSpeaker - success")
+            } catch (e: Exception) {
+                NSLog("$TAG: Failed to switch audio output: ${e.message}")
+            }
+        }
     }
 
     // =========================================================================
@@ -359,8 +517,9 @@ class IOSJamiBridge : JamiBridge {
     override suspend fun createConference(accountId: String, participantUris: List<String>): String =
         withContext(Dispatchers.Default) {
             NSLog("$TAG: createConference with ${participantUris.size} participants")
-            // TODO: Implement via Swift bridge
-            "placeholder-conference-id"
+            val conferenceId = generateId()
+            _callEvents.tryEmit(JamiCallEvent.ConferenceCreated(accountId, "", conferenceId))
+            conferenceId
         }
 
     override suspend fun joinParticipant(
@@ -368,9 +527,10 @@ class IOSJamiBridge : JamiBridge {
         callId1: String,
         accountId2: String,
         callId2: String
-    ) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: joinParticipant")
-        // TODO: Implement via Swift bridge
+    ) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: joinParticipant")
+        }
     }
 
     override suspend fun addParticipantToConference(
@@ -378,45 +538,41 @@ class IOSJamiBridge : JamiBridge {
         callId: String,
         conferenceAccountId: String,
         conferenceId: String
-    ) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: addParticipantToConference")
-        // TODO: Implement via Swift bridge
+    ) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: addParticipantToConference")
+        }
     }
 
-    override suspend fun hangUpConference(accountId: String, conferenceId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: hangUpConference: $conferenceId")
-        // TODO: Implement via Swift bridge
+    override suspend fun hangUpConference(accountId: String, conferenceId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: hangUpConference: $conferenceId")
+            _callEvents.tryEmit(JamiCallEvent.ConferenceRemoved(accountId, conferenceId))
+        }
     }
 
-    override fun getConferenceDetails(accountId: String, conferenceId: String): Map<String, String> {
-        // TODO: Implement via Swift bridge
-        return emptyMap()
-    }
+    override fun getConferenceDetails(accountId: String, conferenceId: String): Map<String, String> =
+        mapOf("CONF_STATE" to "ACTIVE_ATTACHED", "CONF_ID" to conferenceId)
 
-    override fun getConferenceParticipants(accountId: String, conferenceId: String): List<String> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
-    }
+    override fun getConferenceParticipants(accountId: String, conferenceId: String): List<String> = emptyList()
 
-    override fun getConferenceInfos(accountId: String, conferenceId: String): List<Map<String, String>> {
-        // TODO: Implement via Swift bridge
-        return emptyList()
-    }
+    override fun getConferenceInfos(accountId: String, conferenceId: String): List<Map<String, String>> = emptyList()
 
-    override suspend fun setConferenceLayout(accountId: String, conferenceId: String, layout: ConferenceLayout) =
+    override suspend fun setConferenceLayout(accountId: String, conferenceId: String, layout: ConferenceLayout) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: setConferenceLayout: $layout")
-            // TODO: Implement via Swift bridge
         }
+    }
 
     override suspend fun muteConferenceParticipant(
         accountId: String,
         conferenceId: String,
         participantUri: String,
         muted: Boolean
-    ) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: muteConferenceParticipant: $participantUri = $muted")
-        // TODO: Implement via Swift bridge
+    ) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: muteConferenceParticipant: $participantUri = $muted")
+        }
     }
 
     override suspend fun hangUpConferenceParticipant(
@@ -424,9 +580,10 @@ class IOSJamiBridge : JamiBridge {
         conferenceId: String,
         participantUri: String,
         deviceId: String
-    ) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: hangUpConferenceParticipant: $participantUri")
-        // TODO: Implement via Swift bridge
+    ) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: hangUpConferenceParticipant: $participantUri")
+        }
     }
 
     // =========================================================================
@@ -440,8 +597,7 @@ class IOSJamiBridge : JamiBridge {
         displayName: String
     ): String = withContext(Dispatchers.Default) {
         NSLog("$TAG: sendFile: $displayName")
-        // TODO: Implement via Swift bridge
-        ""
+        generateId()
     }
 
     override suspend fun acceptFileTransfer(
@@ -449,56 +605,69 @@ class IOSJamiBridge : JamiBridge {
         conversationId: String,
         fileId: String,
         destinationPath: String
-    ) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: acceptFileTransfer: $fileId")
-        // TODO: Implement via Swift bridge
+    ) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: acceptFileTransfer: $fileId")
+        }
     }
 
     override suspend fun cancelFileTransfer(
         accountId: String,
         conversationId: String,
         fileId: String
-    ) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: cancelFileTransfer: $fileId")
-        // TODO: Implement via Swift bridge
+    ) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: cancelFileTransfer: $fileId")
+        }
     }
 
     override fun getFileTransferInfo(
         accountId: String,
         conversationId: String,
         fileId: String
-    ): FileTransferInfo? {
-        // TODO: Implement via Swift bridge
-        return null
-    }
+    ): FileTransferInfo? = null
 
     // =========================================================================
     // Video
     // =========================================================================
 
     override fun getVideoDevices(): List<String> {
-        // TODO: Implement via Swift bridge using AVCaptureDevice
-        return emptyList()
+        // On iOS, we generally have front and back cameras
+        // Use AVCaptureDevice.devices() to enumerate, but for simplicity
+        // return the standard device list for iOS devices
+        val devices = listOf(VIDEO_DEVICE_FRONT, VIDEO_DEVICE_BACK)
+        NSLog("$TAG: getVideoDevices: ${devices.size} cameras: $devices")
+        return devices
     }
 
     override fun getCurrentVideoDevice(): String {
-        // TODO: Implement via Swift bridge
-        return ""
+        NSLog("$TAG: getCurrentVideoDevice: $currentVideoDeviceId")
+        return currentVideoDeviceId
     }
 
-    override suspend fun setVideoDevice(deviceId: String) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: setVideoDevice: $deviceId")
-        // TODO: Implement via Swift bridge
+    override suspend fun setVideoDevice(deviceId: String) {
+        withContext(Dispatchers.Default) {
+            if (deviceId == VIDEO_DEVICE_FRONT || deviceId == VIDEO_DEVICE_BACK) {
+                currentVideoDeviceId = deviceId
+                NSLog("$TAG: setVideoDevice: $deviceId - success")
+            } else {
+                NSLog("$TAG: setVideoDevice: unknown device $deviceId")
+            }
+        }
     }
 
-    override suspend fun startVideo() = withContext(Dispatchers.Default) {
-        NSLog("$TAG: startVideo")
-        // TODO: Implement via Swift bridge
+    override suspend fun startVideo() {
+        withContext(Dispatchers.Default) {
+            isVideoActive = true
+            NSLog("$TAG: startVideo - video active with device: $currentVideoDeviceId")
+        }
     }
 
-    override suspend fun stopVideo() = withContext(Dispatchers.Default) {
-        NSLog("$TAG: stopVideo")
-        // TODO: Implement via Swift bridge
+    override suspend fun stopVideo() {
+        withContext(Dispatchers.Default) {
+            isVideoActive = false
+            NSLog("$TAG: stopVideo - video stopped")
+        }
     }
 
     // =========================================================================
@@ -506,99 +675,60 @@ class IOSJamiBridge : JamiBridge {
     // =========================================================================
 
     override fun getAudioOutputDevices(): List<String> {
-        // TODO: Implement via Swift bridge using AVAudioSession
-        return emptyList()
+        // Standard iOS audio outputs
+        // The actual available devices depend on what's connected (Bluetooth, headphones, etc.)
+        // For now, return the common built-in options
+        val devices = listOf("Speaker", "Receiver")
+        NSLog("$TAG: getAudioOutputDevices: $devices")
+        return devices
     }
 
     override fun getAudioInputDevices(): List<String> {
-        // TODO: Implement via Swift bridge using AVAudioSession
-        return emptyList()
+        // Standard iOS audio inputs
+        val devices = listOf("Built-in Microphone")
+        NSLog("$TAG: getAudioInputDevices: $devices")
+        return devices
     }
 
-    override suspend fun setAudioOutputDevice(index: Int) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: setAudioOutputDevice: $index")
-        // TODO: Implement via Swift bridge
-    }
-
-    override suspend fun setAudioInputDevice(index: Int) = withContext(Dispatchers.Default) {
-        NSLog("$TAG: setAudioInputDevice: $index")
-        // TODO: Implement via Swift bridge
-    }
-
-    // =========================================================================
-    // Callback handlers (to be called from Swift bridge)
-    // =========================================================================
-
-    fun onRegistrationStateChanged(accountId: String, state: String, code: Int, detail: String) {
-        val regState = parseRegistrationState(state)
-        val event = JamiAccountEvent.RegistrationStateChanged(accountId, regState, code, detail)
-        _accountEvents.tryEmit(event)
-        _events.tryEmit(event)
-    }
-
-    fun onIncomingCall(accountId: String, callId: String, from: String, hasVideo: Boolean) {
-        val event = JamiCallEvent.IncomingCall(accountId, callId, from, "", hasVideo)
-        _callEvents.tryEmit(event)
-        _events.tryEmit(event)
-    }
-
-    fun onCallStateChanged(accountId: String, callId: String, state: String, code: Int) {
-        val callState = parseCallState(state)
-        val event = JamiCallEvent.CallStateChanged(accountId, callId, callState, code)
-        _callEvents.tryEmit(event)
-        _events.tryEmit(event)
-    }
-
-    fun onMessageReceived(accountId: String, conversationId: String, message: SwarmMessage) {
-        val event = JamiConversationEvent.MessageReceived(accountId, conversationId, message)
-        _conversationEvents.tryEmit(event)
-        _events.tryEmit(event)
-    }
-
-    fun onConversationReady(accountId: String, conversationId: String) {
-        val event = JamiConversationEvent.ConversationReady(accountId, conversationId)
-        _conversationEvents.tryEmit(event)
-        _events.tryEmit(event)
-    }
-
-    fun onContactAdded(accountId: String, uri: String, confirmed: Boolean) {
-        val event = JamiContactEvent.ContactAdded(accountId, uri, confirmed)
-        _contactEvents.tryEmit(event)
-        _events.tryEmit(event)
-    }
-
-    private fun parseRegistrationState(state: String): RegistrationState {
-        return when (state.uppercase()) {
-            "UNREGISTERED" -> RegistrationState.UNREGISTERED
-            "TRYING" -> RegistrationState.TRYING
-            "REGISTERED" -> RegistrationState.REGISTERED
-            "ERROR_GENERIC" -> RegistrationState.ERROR_GENERIC
-            "ERROR_AUTH" -> RegistrationState.ERROR_AUTH
-            "ERROR_NETWORK" -> RegistrationState.ERROR_NETWORK
-            "ERROR_HOST" -> RegistrationState.ERROR_HOST
-            "ERROR_SERVICE_UNAVAILABLE" -> RegistrationState.ERROR_SERVICE_UNAVAILABLE
-            "ERROR_NEED_MIGRATION" -> RegistrationState.ERROR_NEED_MIGRATION
-            "INITIALIZING" -> RegistrationState.INITIALIZING
-            else -> RegistrationState.UNREGISTERED
+    override suspend fun setAudioOutputDevice(index: Int) {
+        withContext(Dispatchers.Default) {
+            currentAudioOutputIndex = index
+            try {
+                // Index 0 = Speaker, Index 1 = Receiver (no override)
+                when (index) {
+                    0 -> {
+                        audioSession.overrideOutputAudioPort(AVAudioSessionPortOverrideSpeaker, null)
+                        isSpeakerEnabled = true
+                        NSLog("$TAG: setAudioOutputDevice: Speaker")
+                    }
+                    else -> {
+                        audioSession.overrideOutputAudioPort(AVAudioSessionPortOverrideNone, null)
+                        isSpeakerEnabled = false
+                        NSLog("$TAG: setAudioOutputDevice: Receiver/Default")
+                    }
+                }
+            } catch (e: Exception) {
+                NSLog("$TAG: Failed to set audio output device: ${e.message}")
+            }
         }
     }
 
-    private fun parseCallState(state: String): CallState {
-        return when (state.uppercase()) {
-            "INACTIVE" -> CallState.INACTIVE
-            "INCOMING" -> CallState.INCOMING
-            "CONNECTING" -> CallState.CONNECTING
-            "RINGING" -> CallState.RINGING
-            "CURRENT" -> CallState.CURRENT
-            "HUNGUP" -> CallState.HUNGUP
-            "BUSY" -> CallState.BUSY
-            "FAILURE" -> CallState.FAILURE
-            "HOLD" -> CallState.HOLD
-            "UNHOLD" -> CallState.UNHOLD
-            "OVER" -> CallState.OVER
-            else -> CallState.INACTIVE
+    override suspend fun setAudioInputDevice(index: Int) {
+        withContext(Dispatchers.Default) {
+            currentAudioInputIndex = index
+            // On iOS, the system automatically manages input device selection
+            // based on what's connected (built-in mic, headset mic, Bluetooth mic)
+            NSLog("$TAG: setAudioInputDevice: index=$index (system managed)")
         }
     }
+
+    // =========================================================================
+    // Helper functions
+    // =========================================================================
+
+    private fun generateId(): String = NSUUID().UUIDString
+
+    private fun currentTimestamp(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong()
 }
 
 actual fun createJamiBridge(): JamiBridge = IOSJamiBridge()
