@@ -5,6 +5,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.gettogether.app.ui.screens.auth.CreateAccountScreen
+import com.gettogether.app.ui.screens.auth.ImportAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
 import com.gettogether.app.ui.screens.chat.ChatScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
@@ -24,7 +25,20 @@ fun AppNavigation() {
                     navController.navigate(Screen.CreateAccount.route)
                 },
                 onNavigateToImportAccount = {
-                    // TODO: Navigate to import account
+                    navController.navigate(Screen.ImportAccount.route)
+                }
+            )
+        }
+
+        composable(Screen.ImportAccount.route) {
+            ImportAccountScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onAccountImported = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Welcome.route) { inclusive = true }
+                    }
                 }
             )
         }
