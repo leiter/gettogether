@@ -123,6 +123,8 @@ devices:
       # =====================
       # Chat Screen
       # =====================
+      # TODO: Coordinates untested - requires active conversation
+      # Test when contacts are added and a chat is started
       chat:
         back_button:
           bounds: [[21, 258], [147, 384]]

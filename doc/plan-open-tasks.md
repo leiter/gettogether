@@ -168,3 +168,32 @@ Only iOS platform tasks remain:
 3. **iOS CallServiceBridge** - Implement using CallKit framework
 
 All Android tasks are complete and tested.
+
+---
+
+## Priority 4: UI Coordinate Testing
+
+### 4.1 Chat Screen Coordinates
+**Status**: ⏳ Pending - Requires active conversation
+**File**: `doc/ui-coordinates.yaml`
+
+**Coordinates to verify**:
+- `back_button`: tap [84, 321]
+- `message_input`: tap [498, 2073]
+- `send_button`: tap [996, 2073]
+
+**Prerequisite**:
+1. Add a contact (need another Jami ID)
+2. Start a conversation with the contact
+3. Test coordinates in active chat screen
+
+**Verified screens**:
+- ✅ welcome
+- ✅ create_account
+- ✅ home (bottom_nav, fab)
+- ✅ contacts (add_contact_button)
+- ✅ settings (all sections)
+- ✅ add_contact (username_field, search_button, back_button)
+- ✅ new_conversation (back_button, groups_button, search_field)
+- ⏳ chat (requires active conversation)
+- ⏳ chats list_items (requires conversations)
