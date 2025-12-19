@@ -70,6 +70,11 @@ fun AppNavigation() {
                 },
                 onAddContact = {
                     navController.navigate(Screen.AddContact.route)
+                },
+                onSignedOut = {
+                    navController.navigate(Screen.Welcome.route) {
+                        popUpTo(Screen.Home.route) { inclusive = true }
+                    }
                 }
             )
         }
