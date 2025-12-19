@@ -57,9 +57,49 @@ class NewConversationViewModel(
             }
             state.copy(
                 searchQuery = query,
-                filteredContacts = filtered
+                filteredContacts = updateFilteredWithSelection(filtered, state.selectedContactIds)
             )
         }
+    }
+
+    fun toggleMultiSelectMode() {
+        _state.update { state ->
+            if (state.isMultiSelectMode) {
+                // Exiting multi-select mode - clear selections
+                state.copy(
+                    isMultiSelectMode = false,
+                    selectedContactIds = emptySet(),
+                    filteredContacts = state.filteredContacts.map { it.copy(isSelected = false) }
+                )
+            } else {
+                state.copy(isMultiSelectMode = true)
+            }
+        }
+    }
+
+    fun toggleContactSelection(contactId: String) {
+        _state.update { state ->
+            val newSelectedIds = if (contactId in state.selectedContactIds) {
+                state.selectedContactIds - contactId
+            } else {
+                state.selectedContactIds + contactId
+            }
+            state.copy(
+                selectedContactIds = newSelectedIds,
+                filteredContacts = updateFilteredWithSelection(state.filteredContacts, newSelectedIds)
+            )
+        }
+    }
+
+    fun getSelectedContactIds(): List<String> {
+        return _state.value.selectedContactIds.toList()
+    }
+
+    private fun updateFilteredWithSelection(
+        contacts: List<SelectableContact>,
+        selectedIds: Set<String>
+    ): List<SelectableContact> {
+        return contacts.map { it.copy(isSelected = it.id in selectedIds) }
     }
 
     fun startConversation(contactId: String) {

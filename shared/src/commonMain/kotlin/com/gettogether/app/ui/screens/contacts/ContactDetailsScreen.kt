@@ -58,6 +58,7 @@ fun ContactDetailsScreen(
     contactId: String,
     onNavigateBack: () -> Unit,
     onNavigateToChat: (String) -> Unit,
+    onNavigateToCall: (contactId: String, isVideo: Boolean) -> Unit,
     onContactRemoved: () -> Unit,
     viewModel: ContactDetailsViewModel = koinViewModel()
 ) {
@@ -188,8 +189,8 @@ fun ContactDetailsScreen(
                     ContactDetailsContent(
                         contact = state.contact!!,
                         onMessageClick = { viewModel.startConversation() },
-                        onCallClick = { /* TODO: Start call */ },
-                        onVideoCallClick = { /* TODO: Start video call */ },
+                        onCallClick = { onNavigateToCall(contactId, false) },
+                        onVideoCallClick = { onNavigateToCall(contactId, true) },
                         onBlockClick = { viewModel.showBlockDialog() },
                         onRemoveClick = { viewModel.showRemoveDialog() }
                     )

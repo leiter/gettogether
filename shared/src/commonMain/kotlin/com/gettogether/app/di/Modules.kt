@@ -3,6 +3,8 @@ package com.gettogether.app.di
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
 import com.gettogether.app.presentation.viewmodel.AddContactViewModel
+import com.gettogether.app.presentation.viewmodel.CallViewModel
+import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
 import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
@@ -25,6 +27,8 @@ val sharedModule = module {
     viewModel { AddContactViewModel(get()) }
     viewModel { SettingsViewModel(get()) }
     viewModel { ContactDetailsViewModel(get()) }
+    viewModel { CallViewModel(get(), getOrNull()) }
+    viewModel { ConferenceViewModel(get()) }
 }
 
 expect val platformModule: Module

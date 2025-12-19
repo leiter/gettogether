@@ -1,0 +1,274 @@
+package com.gettogether.app.service
+
+import android.app.Service
+import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Binder
+import android.os.Build
+import android.os.IBinder
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+
+class CallService : Service() {
+
+    companion object {
+        const val ACTION_START_OUTGOING_CALL = "com.gettogether.app.START_OUTGOING_CALL"
+        const val ACTION_START_INCOMING_CALL = "com.gettogether.app.START_INCOMING_CALL"
+        const val ACTION_ANSWER_CALL = "com.gettogether.app.ANSWER_CALL"
+        const val ACTION_DECLINE_CALL = "com.gettogether.app.DECLINE_CALL"
+        const val ACTION_END_CALL = "com.gettogether.app.END_CALL"
+        const val ACTION_TOGGLE_MUTE = "com.gettogether.app.TOGGLE_MUTE"
+        const val ACTION_TOGGLE_SPEAKER = "com.gettogether.app.TOGGLE_SPEAKER"
+        const val ACTION_TOGGLE_VIDEO = "com.gettogether.app.TOGGLE_VIDEO"
+    }
+
+    private val binder = CallBinder()
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var durationJob: Job? = null
+
+    private lateinit var notificationManager: CallNotificationManager
+
+    private val _callState = MutableStateFlow(ServiceCallState())
+    val callState: StateFlow<ServiceCallState> = _callState.asStateFlow()
+
+    inner class CallBinder : Binder() {
+        fun getService(): CallService = this@CallService
+    }
+
+    override fun onCreate() {
+        super.onCreate()
+        notificationManager = CallNotificationManager(this)
+        notificationManager.createNotificationChannels()
+    }
+
+    override fun onBind(intent: Intent?): IBinder = binder
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_START_OUTGOING_CALL -> {
+                val contactId = intent.getStringExtra(CallNotificationManager.EXTRA_CONTACT_ID) ?: ""
+                val contactName = intent.getStringExtra(CallNotificationManager.EXTRA_CONTACT_NAME) ?: "Unknown"
+                val isVideo = intent.getBooleanExtra(CallNotificationManager.EXTRA_IS_VIDEO, false)
+                startOutgoingCall(contactId, contactName, isVideo)
+            }
+            ACTION_START_INCOMING_CALL -> {
+                val callId = intent.getStringExtra(CallNotificationManager.EXTRA_CALL_ID) ?: ""
+                val contactId = intent.getStringExtra(CallNotificationManager.EXTRA_CONTACT_ID) ?: ""
+                val contactName = intent.getStringExtra(CallNotificationManager.EXTRA_CONTACT_NAME) ?: "Unknown"
+                val isVideo = intent.getBooleanExtra(CallNotificationManager.EXTRA_IS_VIDEO, false)
+                startIncomingCall(callId, contactId, contactName, isVideo)
+            }
+            ACTION_ANSWER_CALL -> {
+                answerCall()
+            }
+            ACTION_DECLINE_CALL -> {
+                declineCall()
+            }
+            ACTION_END_CALL -> {
+                endCall()
+            }
+            ACTION_TOGGLE_MUTE -> {
+                toggleMute()
+            }
+            ACTION_TOGGLE_SPEAKER -> {
+                toggleSpeaker()
+            }
+            ACTION_TOGGLE_VIDEO -> {
+                toggleVideo()
+            }
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun startOutgoingCall(contactId: String, contactName: String, isVideo: Boolean) {
+        val callId = generateCallId()
+
+        _callState.value = ServiceCallState(
+            callId = callId,
+            contactId = contactId,
+            contactName = contactName,
+            isVideo = isVideo,
+            status = CallStatus.INITIATING,
+            isOutgoing = true
+        )
+
+        startForegroundWithNotification()
+
+        // Simulate call progression
+        serviceScope.launch {
+            delay(500)
+            _callState.value = _callState.value.copy(status = CallStatus.RINGING)
+            updateNotification()
+
+            // Simulate call being answered
+            delay(2000)
+            _callState.value = _callState.value.copy(status = CallStatus.CONNECTED)
+            startDurationTimer()
+            updateNotification()
+        }
+    }
+
+    private fun startIncomingCall(callId: String, contactId: String, contactName: String, isVideo: Boolean) {
+        _callState.value = ServiceCallState(
+            callId = callId,
+            contactId = contactId,
+            contactName = contactName,
+            isVideo = isVideo,
+            status = CallStatus.INCOMING,
+            isOutgoing = false
+        )
+
+        // Show incoming call notification
+        notificationManager.showIncomingCallNotification(
+            contactName = contactName,
+            isVideo = isVideo,
+            callId = callId,
+            contactId = contactId
+        )
+    }
+
+    private fun answerCall() {
+        notificationManager.cancelIncomingCallNotification()
+
+        _callState.value = _callState.value.copy(status = CallStatus.CONNECTING)
+        startForegroundWithNotification()
+
+        serviceScope.launch {
+            delay(500)
+            _callState.value = _callState.value.copy(status = CallStatus.CONNECTED)
+            startDurationTimer()
+            updateNotification()
+        }
+    }
+
+    private fun declineCall() {
+        notificationManager.cancelIncomingCallNotification()
+        _callState.value = _callState.value.copy(status = CallStatus.ENDED)
+        stopSelf()
+    }
+
+    private fun endCall() {
+        durationJob?.cancel()
+        _callState.value = _callState.value.copy(status = CallStatus.ENDED)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
+    }
+
+    private fun toggleMute() {
+        _callState.value = _callState.value.copy(isMuted = !_callState.value.isMuted)
+        updateNotification()
+    }
+
+    private fun toggleSpeaker() {
+        _callState.value = _callState.value.copy(isSpeakerOn = !_callState.value.isSpeakerOn)
+    }
+
+    private fun toggleVideo() {
+        _callState.value = _callState.value.copy(isLocalVideoEnabled = !_callState.value.isLocalVideoEnabled)
+    }
+
+    private fun startForegroundWithNotification() {
+        val notification = notificationManager.createOngoingCallNotification(
+            contactName = _callState.value.contactName,
+            callDuration = formatDuration(_callState.value.durationSeconds),
+            isMuted = _callState.value.isMuted,
+            isVideo = _callState.value.isVideo,
+            callId = _callState.value.callId
+        )
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                CallNotificationManager.NOTIFICATION_ID_ONGOING_CALL,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                CallNotificationManager.NOTIFICATION_ID_ONGOING_CALL,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MANIFEST
+            )
+        } else {
+            startForeground(CallNotificationManager.NOTIFICATION_ID_ONGOING_CALL, notification)
+        }
+    }
+
+    private fun updateNotification() {
+        if (_callState.value.status == CallStatus.CONNECTED ||
+            _callState.value.status == CallStatus.CONNECTING ||
+            _callState.value.status == CallStatus.RINGING ||
+            _callState.value.status == CallStatus.INITIATING
+        ) {
+            val notification = notificationManager.createOngoingCallNotification(
+                contactName = _callState.value.contactName,
+                callDuration = formatDuration(_callState.value.durationSeconds),
+                isMuted = _callState.value.isMuted,
+                isVideo = _callState.value.isVideo,
+                callId = _callState.value.callId
+            )
+            val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+            nm.notify(CallNotificationManager.NOTIFICATION_ID_ONGOING_CALL, notification)
+        }
+    }
+
+    private fun startDurationTimer() {
+        durationJob?.cancel()
+        durationJob = serviceScope.launch {
+            while (isActive) {
+                delay(1000)
+                _callState.value = _callState.value.copy(
+                    durationSeconds = _callState.value.durationSeconds + 1
+                )
+                updateNotification()
+            }
+        }
+    }
+
+    private fun formatDuration(seconds: Long): String {
+        val minutes = seconds / 60
+        val secs = seconds % 60
+        return "%02d:%02d".format(minutes, secs)
+    }
+
+    private fun generateCallId(): String {
+        return "call_${System.currentTimeMillis()}"
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        durationJob?.cancel()
+        serviceScope.cancel()
+    }
+}
+
+data class ServiceCallState(
+    val callId: String = "",
+    val contactId: String = "",
+    val contactName: String = "",
+    val isVideo: Boolean = false,
+    val status: CallStatus = CallStatus.IDLE,
+    val isOutgoing: Boolean = true,
+    val isMuted: Boolean = false,
+    val isSpeakerOn: Boolean = false,
+    val isLocalVideoEnabled: Boolean = true,
+    val durationSeconds: Long = 0
+)
+
+enum class CallStatus {
+    IDLE,
+    INITIATING,
+    RINGING,
+    INCOMING,
+    CONNECTING,
+    CONNECTED,
+    ENDED
+}

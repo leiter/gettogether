@@ -1,5 +1,8 @@
 package com.gettogether.app.ui.screens.newconversation
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,10 +18,18 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VideoCall
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +59,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun NewConversationScreen(
     onNavigateBack: () -> Unit,
     onConversationCreated: (String) -> Unit,
+    onStartGroupCall: ((List<String>, Boolean) -> Unit)? = null,
     viewModel: NewConversationViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -70,18 +82,79 @@ fun NewConversationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("New Conversation") },
+                title = {
+                    Text(
+                        if (state.isMultiSelectMode) "Select Participants" else "New Conversation"
+                    )
+                },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = {
+                        if (state.isMultiSelectMode) {
+                            viewModel.toggleMultiSelectMode()
+                        } else {
+                            onNavigateBack()
+                        }
+                    }) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
                         )
                     }
+                },
+                actions = {
+                    if (onStartGroupCall != null) {
+                        IconButton(onClick = { viewModel.toggleMultiSelectMode() }) {
+                            Icon(
+                                imageVector = Icons.Default.Groups,
+                                contentDescription = "Group Call",
+                                tint = if (state.isMultiSelectMode)
+                                    MaterialTheme.colorScheme.primary
+                                else
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = state.isMultiSelectMode && state.canStartGroupCall,
+                enter = slideInVertically { it },
+                exit = slideOutVertically { it }
+            ) {
+                Column {
+                    // Video call FAB
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            onStartGroupCall?.invoke(viewModel.getSelectedContactIds(), true)
+                        },
+                        icon = {
+                            Icon(Icons.Default.VideoCall, contentDescription = null)
+                        },
+                        text = {
+                            Text("Video Call (${state.selectedContactIds.size})")
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    // Audio call FAB
+                    ExtendedFloatingActionButton(
+                        onClick = {
+                            onStartGroupCall?.invoke(viewModel.getSelectedContactIds(), false)
+                        },
+                        icon = {
+                            Icon(Icons.Default.Call, contentDescription = null)
+                        },
+                        text = {
+                            Text("Audio Call (${state.selectedContactIds.size})")
+                        },
+                        containerColor = MaterialTheme.colorScheme.secondary
+                    )
+                }
+            }
+        }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -96,6 +169,16 @@ fun NewConversationScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp)
             )
+
+            // Multi-select hint
+            if (state.isMultiSelectMode) {
+                Text(
+                    text = "Select 2 or more contacts for a group call",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
 
             // Content
             when {
@@ -119,8 +202,13 @@ fun NewConversationScreen(
                 else -> {
                     ContactsList(
                         contacts = state.filteredContacts,
+                        isMultiSelectMode = state.isMultiSelectMode,
                         onContactClick = { contact ->
-                            viewModel.startConversation(contact.id)
+                            if (state.isMultiSelectMode) {
+                                viewModel.toggleContactSelection(contact.id)
+                            } else {
+                                viewModel.startConversation(contact.id)
+                            }
                         }
                     )
                 }
@@ -172,6 +260,7 @@ private fun SearchBar(
 @Composable
 private fun ContactsList(
     contacts: List<SelectableContact>,
+    isMultiSelectMode: Boolean,
     onContactClick: (SelectableContact) -> Unit
 ) {
     LazyColumn(
@@ -180,6 +269,7 @@ private fun ContactsList(
         items(contacts) { contact ->
             ContactItem(
                 contact = contact,
+                isMultiSelectMode = isMultiSelectMode,
                 onClick = { onContactClick(contact) }
             )
         }
@@ -189,12 +279,17 @@ private fun ContactsList(
 @Composable
 private fun ContactItem(
     contact: SelectableContact,
+    isMultiSelectMode: Boolean,
     onClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = onClick),
+        color = if (contact.isSelected)
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+        else
+            MaterialTheme.colorScheme.surface
     ) {
         Row(
             modifier = Modifier
@@ -202,6 +297,23 @@ private fun ContactItem(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Selection indicator in multi-select mode
+            if (isMultiSelectMode) {
+                Icon(
+                    imageVector = if (contact.isSelected)
+                        Icons.Default.CheckCircle
+                    else
+                        Icons.Default.RadioButtonUnchecked,
+                    contentDescription = if (contact.isSelected) "Selected" else "Not selected",
+                    tint = if (contact.isSelected)
+                        MaterialTheme.colorScheme.primary
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+            }
+
             // Avatar with online indicator
             Box {
                 Surface(
@@ -239,7 +351,7 @@ private fun ContactItem(
 
             Spacer(modifier = Modifier.width(16.dp))
 
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = contact.name,
                     style = MaterialTheme.typography.bodyLarge
