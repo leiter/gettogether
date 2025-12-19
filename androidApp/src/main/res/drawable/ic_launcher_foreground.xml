@@ -4,19 +4,36 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <group android:scaleX="0.5"
-        android:scaleY="0.5"
+    <!-- Get-Together icon: Three connected people representing community -->
+    <group
         android:pivotX="54"
-        android:pivotY="54">
+        android:pivotY="54"
+        android:scaleX="0.65"
+        android:scaleY="0.65">
+
+        <!-- Center person (larger) -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M54,30 L54,78 M30,54 L78,54"
-            android:strokeWidth="8"
-            android:strokeColor="#FFFFFF"/>
+            android:pathData="M54,36 m-10,0 a10,10 0 1,1 20,0 a10,10 0 1,1 -20,0"/>
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M54,34 m-20,0 a20,20 0 1,1 40,0 a20,20 0 1,1 -40,0"
-            android:strokeWidth="4"
-            android:strokeColor="#FFFFFF"/>
+            android:pathData="M54,52 c-14,0 -22,8 -22,18 v6 h44 v-6 c0,-10 -8,-18 -22,-18"/>
+
+        <!-- Left person (smaller) -->
+        <path
+            android:fillColor="#D0BCFF"
+            android:pathData="M30,42 m-7,0 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0"/>
+        <path
+            android:fillColor="#D0BCFF"
+            android:pathData="M30,54 c-10,0 -16,6 -16,13 v5 h20 c1,-7 5,-13 12,-16 c-4,-2 -10,-2 -16,-2"/>
+
+        <!-- Right person (smaller) -->
+        <path
+            android:fillColor="#D0BCFF"
+            android:pathData="M78,42 m-7,0 a7,7 0 1,1 14,0 a7,7 0 1,1 -14,0"/>
+        <path
+            android:fillColor="#D0BCFF"
+            android:pathData="M78,54 c-6,0 -12,0 -16,2 c7,3 11,9 12,16 h20 v-5 c0,-7 -6,-13 -16,-13"/>
+
     </group>
 </vector>
