@@ -9,6 +9,7 @@ import com.gettogether.app.ui.screens.auth.ImportAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
 import com.gettogether.app.ui.screens.chat.ChatScreen
 import com.gettogether.app.ui.screens.contacts.AddContactScreen
+import com.gettogether.app.ui.screens.contacts.ContactDetailsScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
 
@@ -63,7 +64,7 @@ fun AppNavigation() {
                     navController.navigate(Screen.Chat.createRoute(conversationId))
                 },
                 onNavigateToContact = { contactId ->
-                    // TODO: Navigate to contact details
+                    navController.navigate(Screen.ContactDetails.createRoute(contactId))
                 },
                 onStartNewConversation = {
                     navController.navigate(Screen.NewConversation.route)
@@ -85,6 +86,22 @@ fun AppNavigation() {
                     navController.popBackStack()
                 },
                 onContactAdded = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.ContactDetails.route) { backStackEntry ->
+            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
+            ContactDetailsScreen(
+                contactId = contactId,
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToChat = { conversationId ->
+                    navController.navigate(Screen.Chat.createRoute(conversationId))
+                },
+                onContactRemoved = {
                     navController.popBackStack()
                 }
             )
@@ -123,6 +140,9 @@ sealed class Screen(val route: String) {
     object NewConversation : Screen("new_conversation")
     object Contacts : Screen("contacts")
     object AddContact : Screen("add_contact")
+    object ContactDetails : Screen("contact/{contactId}") {
+        fun createRoute(contactId: String) = "contact/$contactId"
+    }
     object Conversations : Screen("conversations")
     object Chat : Screen("chat/{conversationId}") {
         fun createRoute(conversationId: String) = "chat/$conversationId"
