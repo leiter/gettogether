@@ -1,6 +1,7 @@
 package com.gettogether.app
 
 import android.app.Application
+import com.gettogether.app.di.jamiBridgeModule
 import com.gettogether.app.di.platformModule
 import com.gettogether.app.di.sharedModule
 import com.gettogether.app.jami.DaemonManager
@@ -17,7 +18,8 @@ class GetTogetherApplication : Application() {
         startKoin {
             androidLogger()
             androidContext(this@GetTogetherApplication)
-            modules(sharedModule, platformModule)
+            allowOverride(true)
+            modules(sharedModule, platformModule, jamiBridgeModule)
         }
 
         // Initialize notification channels

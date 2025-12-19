@@ -31,3 +31,6 @@ DerivedData/
 
 # Project specific
 tmp/
+
+# Native libraries (built from jami-daemon)
+androidApp/src/main/jniLibs/
