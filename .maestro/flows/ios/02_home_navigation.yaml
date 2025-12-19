@@ -1,13 +1,21 @@
 appId: com.gettogether.app
 name: iOS - Home Navigation Flow
-tags:
-  - skip  # KNOWN ISSUE: Requires account which can't be created (app crash)
 ---
-# NOTE: This test requires an existing account. Currently blocked because
-# the app crashes when navigating to CreateAccountScreen.
+# Launch app and create account first
+- launchApp:
+    clearState: true
 
-# Launch app (assumes account already exists)
-- launchApp
+# Create account to get to Home screen
+- tapOn: "Create Account"
+- waitForAnimationToEnd
+- tapOn: "Display Name"
+- inputText: "Test User"
+- tapOn:
+    text: "Create Account"
+    index: 1
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 10000
 
 # Verify we're on Home screen with Chats tab
 - assertVisible: "Chats"
@@ -29,7 +37,7 @@ tags:
 
 # Verify Settings screen content
 - assertVisible: "Notifications"
-- assertVisible: "Privacy"
+- assertVisible: "Privacy & Security"
 
 # Navigate back to Chats tab
 - tapOn: "Chats"

@@ -1,13 +1,21 @@
 appId: com.gettogether.app
 name: iOS - Settings Flow
-tags:
-  - skip  # KNOWN ISSUE: Requires account which can't be created (app crash)
 ---
-# NOTE: This test requires an existing account. Currently blocked because
-# the app crashes when navigating to CreateAccountScreen.
+# Launch app and create account first
+- launchApp:
+    clearState: true
 
-# Launch app (assumes account already exists)
-- launchApp
+# Create account to get to Home screen
+- tapOn: "Create Account"
+- waitForAnimationToEnd
+- tapOn: "Display Name"
+- inputText: "Test User"
+- tapOn:
+    text: "Create Account"
+    index: 1
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 10000
 
 # Navigate to Settings tab
 - tapOn: "Settings"
@@ -17,33 +25,13 @@ tags:
 
 # Verify Settings screen sections are visible
 - assertVisible: "Notifications"
-- assertVisible: "Privacy"
+- assertVisible: "Privacy & Security"
 
-# Tap on Notifications section to expand
-- tapOn: "Notifications"
-- waitForAnimationToEnd
+# Verify Sign Out is visible
+- assertVisible: "Sign Out"
 
-# Look for notification toggles/switches
-- assertVisible:
-    text: ".*[Mm]essage.*|.*[Nn]otification.*"
-    optional: true
-
-# Tap on Privacy section
-- tapOn: "Privacy"
-- waitForAnimationToEnd
-
-# Look for privacy toggles
-- assertVisible:
-    text: ".*[Rr]ead [Rr]eceipts.*|.*[Pp]rivacy.*"
-    optional: true
-
-# Scroll down to see more options if needed
-- scroll
-
-# Verify Sign Out button is visible (but don't tap it)
-- assertVisible:
-    text: ".*[Ss]ign [Oo]ut.*"
-    optional: true
+# Verify About section
+- assertVisible: "About"
 
 # Navigate back to Chats to confirm navigation works
 - tapOn: "Chats"

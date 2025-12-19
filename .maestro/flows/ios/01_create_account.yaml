@@ -1,12 +1,6 @@
 appId: com.gettogether.app
 name: iOS - Create Account Flow
-tags:
-  - skip  # KNOWN ISSUE: App crashes when navigating to CreateAccountScreen
 ---
-# NOTE: This test is currently skipped due to a known crash bug
-# The app crashes when navigating to CreateAccountScreen due to
-# a ViewModel injection issue that needs to be fixed.
-
 # Launch app
 - launchApp
 
@@ -24,7 +18,7 @@ tags:
 - assertVisible: "Choose a display name"
 
 # Tap the text input field and enter name
-- tapOn: "Enter your name"
+- tapOn: "Display Name"
 - inputText: "Test User"
 
 # Submit the form

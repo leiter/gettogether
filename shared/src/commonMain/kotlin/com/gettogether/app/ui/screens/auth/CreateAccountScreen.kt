@@ -1,32 +1,29 @@
 package com.gettogether.app.ui.screens.auth
 
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-
-// NOTE: TextField/OutlinedTextField causes iOS crash in Compose Multiplatform 1.7.3
-// See: https://github.com/JetBrains/compose-multiplatform/issues/2048
-// Using placeholder UI until Compose version is upgraded
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +31,8 @@ fun CreateAccountScreen(
     onNavigateBack: () -> Unit,
     onAccountCreated: () -> Unit
 ) {
+    var displayName by remember { mutableStateOf("") }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -73,29 +72,20 @@ fun CreateAccountScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Placeholder for text input - TextField causes iOS crash in CMP 1.7.3
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    .clickable { /* Would open text input dialog on native */ }
-                    .padding(16.dp)
-            ) {
-                Text(
-                    text = "Enter your name",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                label = { Text("Display Name") },
+                placeholder = { Text("Enter your name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Spacer(modifier = Modifier.height(32.dp))
 
             Button(
                 onClick = { onAccountCreated() },
+                enabled = displayName.length >= 2,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Create Account")
