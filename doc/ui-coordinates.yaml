@@ -110,12 +110,15 @@ devices:
       # Add Contact Screen
       # =====================
       add_contact:
-        search_field:
-          bounds: [[84, 680], [996, 806]]
-          tap: [540, 743]
+        back_button:
+          bounds: [[12, 140], [138, 266]]
+          tap: [75, 203]
+        username_field:
+          bounds: [[63, 475], [1017, 643]]
+          tap: [540, 559]
         search_button:
-          bounds: [[84, 848], [996, 974]]
-          tap: [540, 911]
+          bounds: [[63, 686], [1017, 812]]
+          tap: [540, 749]
 
       # =====================
       # Chat Screen
