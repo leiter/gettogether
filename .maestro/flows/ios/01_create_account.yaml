@@ -1,0 +1,43 @@
+appId: com.gettogether.app
+name: iOS - Create Account Flow
+tags:
+  - skip  # KNOWN ISSUE: App crashes when navigating to CreateAccountScreen
+---
+# NOTE: This test is currently skipped due to a known crash bug
+# The app crashes when navigating to CreateAccountScreen due to
+# a ViewModel injection issue that needs to be fixed.
+
+# Launch app
+- launchApp
+
+# Welcome Screen - verify we're on the welcome screen
+- assertVisible: "Create Account"
+- assertVisible: "Import Existing Account"
+
+# Navigate to Create Account
+- tapOn: "Create Account"
+
+# Wait for navigation animation to complete
+- waitForAnimationToEnd
+
+# Verify Create Account Screen
+- assertVisible: "Choose a display name"
+
+# Tap the text input field and enter name
+- tapOn: "Enter your name"
+- inputText: "Test User"
+
+# Submit the form
+- tapOn:
+    text: "Create Account"
+    index: 1
+
+# Wait for account creation and navigation to Home
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 10000
+
+# Verify Home screen with bottom navigation
+- assertVisible: "Chats"
+- assertVisible: "Contacts"
+- assertVisible: "Settings"

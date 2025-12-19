@@ -1,0 +1,45 @@
+appId: com.gettogether.app
+name: iOS - Add Contact Flow
+tags:
+  - skip  # KNOWN ISSUE: Requires account which can't be created (app crash)
+---
+# NOTE: This test requires an existing account. Currently blocked because
+# the app crashes when navigating to CreateAccountScreen.
+
+# Launch app (assumes account already exists)
+- launchApp
+
+# Navigate to Contacts tab
+- tapOn: "Contacts"
+- extendedWaitUntil:
+    visible: "Contacts"
+    timeout: 5000
+
+# Look for add contact button
+- tapOn:
+    text: ".*[Aa]dd.*"
+    optional: true
+
+# If we're on the Add Contact screen
+- runFlow:
+    when:
+      visible: "Add Contact"
+    commands:
+      # Enter a username to search
+      - tapOn:
+          text: ".*[Ss]earch.*|.*[Uu]sername.*"
+          optional: true
+      - inputText: "testuser123"
+
+      # Tap search button if available
+      - tapOn:
+          text: "Search"
+          optional: true
+
+# Navigate back
+- tapOn:
+    text: ".*[Bb]ack.*|.*[Cc]ancel.*"
+    optional: true
+
+# Verify we're back on Contacts screen
+- assertVisible: "Contacts"

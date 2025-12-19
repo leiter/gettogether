@@ -23,15 +23,25 @@ import org.koin.dsl.module
 
 val sharedModule = module {
     // Jami Bridge
-    single<JamiBridge> { createJamiBridge() }
+    single<JamiBridge> {
+        println("Koin: Creating JamiBridge")
+        createJamiBridge().also { println("Koin: JamiBridge created") }
+    }
 
     // Repositories
-    single { AccountRepository(get()) }
+    single {
+        println("Koin: Creating AccountRepository")
+        AccountRepository(get()).also { println("Koin: AccountRepository created") }
+    }
     single { ContactRepositoryImpl(get(), get()) }
     single { ConversationRepositoryImpl(get(), get()) }
 
     // ViewModels
-    viewModel { CreateAccountViewModel(get(), get()) }
+    // Using factory for CreateAccountViewModel to work around iOS koinViewModel issue
+    factory {
+        println("Koin: Creating CreateAccountViewModel")
+        CreateAccountViewModel(get(), get()).also { println("Koin: CreateAccountViewModel created") }
+    }
     viewModel { ImportAccountViewModel(get(), get()) }
     viewModel { ChatViewModel(get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }

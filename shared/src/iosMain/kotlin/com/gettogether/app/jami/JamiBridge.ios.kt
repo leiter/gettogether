@@ -55,13 +55,14 @@ class IOSJamiBridge : JamiBridge {
     private val mockContacts = mutableMapOf<String, MutableList<JamiContact>>()
     private val mockConversations = mutableMapOf<String, MutableList<String>>()
 
-    // Audio/Video state
-    private val audioSession = AVAudioSession.sharedInstance()
+    // Audio/Video state - lazy initialization to avoid init-time crashes
+    private val audioSession by lazy { AVAudioSession.sharedInstance() }
     private var currentVideoDeviceId: String = "front"
     private var isVideoActive = false
     private var isSpeakerEnabled = false
     private var currentAudioOutputIndex = 0
     private var currentAudioInputIndex = 0
+    private var audioSessionConfigured = false
 
     companion object {
         private const val TAG = "JamiBridge-iOS"
@@ -72,11 +73,12 @@ class IOSJamiBridge : JamiBridge {
     }
 
     init {
-        // Configure audio session for VoIP
-        configureAudioSession()
+        NSLog("$TAG: IOSJamiBridge initialized")
+        // Don't configure audio session in init - do it lazily when needed
     }
 
-    private fun configureAudioSession() {
+    private fun configureAudioSessionIfNeeded() {
+        if (audioSessionConfigured) return
         try {
             audioSession.setCategory(
                 AVAudioSessionCategoryPlayAndRecord,
@@ -85,6 +87,7 @@ class IOSJamiBridge : JamiBridge {
                          AVAudioSessionCategoryOptionDefaultToSpeaker,
                 error = null
             )
+            audioSessionConfigured = true
             NSLog("$TAG: Audio session configured for VoIP")
         } catch (e: Exception) {
             NSLog("$TAG: Failed to configure audio session: ${e.message}")

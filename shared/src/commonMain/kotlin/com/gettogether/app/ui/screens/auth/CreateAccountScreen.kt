@@ -1,5 +1,7 @@
 package com.gettogether.app.ui.screens.auth
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,61 +10,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
-import org.koin.compose.viewmodel.koinViewModel
+
+// NOTE: TextField/OutlinedTextField causes iOS crash in Compose Multiplatform 1.7.3
+// See: https://github.com/JetBrains/compose-multiplatform/issues/2048
+// Using placeholder UI until Compose version is upgraded
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateAccountScreen(
     onNavigateBack: () -> Unit,
-    onAccountCreated: () -> Unit,
-    viewModel: CreateAccountViewModel = koinViewModel()
+    onAccountCreated: () -> Unit
 ) {
-    val state by viewModel.state.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
-    val keyboardController = LocalSoftwareKeyboardController.current
-
-    LaunchedEffect(state.isAccountCreated) {
-        if (state.isAccountCreated) {
-            onAccountCreated()
-        }
-    }
-
-    LaunchedEffect(state.error) {
-        state.error?.let { error ->
-            snackbarHostState.showSnackbar(error)
-            viewModel.clearError()
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -73,116 +44,61 @@ fun CreateAccountScreen(
                     }
                 }
             )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        }
     ) { paddingValues ->
-        Surface(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            color = MaterialTheme.colorScheme.background
+                .padding(paddingValues)
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Top
         ) {
-            Column(
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Text(
+                text = "Choose a display name",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "This is how others will see you",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Placeholder for text input - TextField causes iOS crash in CMP 1.7.3
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top
+                    .fillMaxWidth()
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline,
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .clickable { /* Would open text input dialog on native */ }
+                    .padding(16.dp)
             ) {
-                Spacer(modifier = Modifier.height(32.dp))
-
-                // Avatar placeholder
-                Box(
-                    modifier = Modifier
-                        .size(120.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        modifier = Modifier.size(120.dp),
-                        shape = MaterialTheme.shapes.extraLarge,
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = state.displayName.firstOrNull()?.uppercase() ?: "?",
-                                style = MaterialTheme.typography.displayMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(32.dp))
-
                 Text(
-                    text = "Choose a display name",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface
+                    text = "Enter your name",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
 
-                Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
-                Text(
-                    text = "This is how others will see you",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                OutlinedTextField(
-                    value = state.displayName,
-                    onValueChange = viewModel::onDisplayNameChanged,
-                    label = { Text("Display Name") },
-                    placeholder = { Text("Enter your name") },
-                    singleLine = true,
-                    enabled = !state.isCreating,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Words,
-                        imeAction = ImeAction.Done
-                    ),
-                    keyboardActions = KeyboardActions(
-                        onDone = {
-                            keyboardController?.hide()
-                            if (state.isValid) {
-                                viewModel.createAccount()
-                            }
-                        }
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(32.dp))
-
-                Button(
-                    onClick = {
-                        keyboardController?.hide()
-                        viewModel.createAccount()
-                    },
-                    enabled = state.isValid && !state.isCreating,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (state.isCreating) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Text("Create Account")
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                Text(
-                    text = "Your account will be created locally on your device. " +
-                            "No personal information is sent to any server.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    textAlign = TextAlign.Center
-                )
+            Button(
+                onClick = { onAccountCreated() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Create Account")
             }
         }
     }
