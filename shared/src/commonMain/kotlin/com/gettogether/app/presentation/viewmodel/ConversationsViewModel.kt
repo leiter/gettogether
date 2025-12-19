@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 data class ConversationsState(
     val conversations: List<ConversationUiItem> = emptyList(),
@@ -114,7 +115,7 @@ class ConversationsViewModel(
     private fun formatTimestamp(timestamp: Long): String {
         if (timestamp == 0L) return ""
 
-        val now = System.currentTimeMillis()
+        val now = Clock.System.now().toEpochMilliseconds()
         val diff = now - timestamp
 
         return when {

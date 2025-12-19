@@ -10,9 +10,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.ui.screens.auth.CreateAccountScreen
 import com.gettogether.app.ui.screens.auth.ImportAccountScreen
@@ -126,8 +128,11 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.ContactDetails.route) { backStackEntry ->
-            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
+        composable(
+            Screen.ContactDetails.route,
+            arguments = listOf(navArgument("contactId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val contactId = backStackEntry.extractArg("contactId")
             ContactDetailsScreen(
                 contactId = contactId,
                 onNavigateBack = {
@@ -163,8 +168,11 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.Chat.route) { backStackEntry ->
-            val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+        composable(
+            Screen.Chat.route,
+            arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val conversationId = backStackEntry.extractArg("conversationId")
             ChatScreen(
                 conversationId = conversationId,
                 onNavigateBack = {
@@ -173,9 +181,15 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.Call.route) { backStackEntry ->
-            val contactId = backStackEntry.arguments?.getString("contactId") ?: ""
-            val isVideo = backStackEntry.arguments?.getString("isVideo")?.toBoolean() ?: false
+        composable(
+            Screen.Call.route,
+            arguments = listOf(
+                navArgument("contactId") { type = NavType.StringType },
+                navArgument("isVideo") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val contactId = backStackEntry.extractArg("contactId")
+            val isVideo = backStackEntry.extractArg("isVideo").toBoolean()
             CallScreen(
                 contactId = contactId,
                 isVideo = isVideo,
@@ -185,15 +199,22 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.Conference.route) { backStackEntry ->
-            val participantIdsArg = backStackEntry.arguments?.getString("participantIds") ?: ""
+        composable(
+            Screen.Conference.route,
+            arguments = listOf(
+                navArgument("participantIds") { type = NavType.StringType },
+                navArgument("withVideo") { type = NavType.StringType },
+                navArgument("conferenceId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val participantIdsArg = backStackEntry.extractArg("participantIds")
             val participantIds = if (participantIdsArg.isNotEmpty()) {
                 participantIdsArg.split(",")
             } else {
                 emptyList()
             }
-            val withVideo = backStackEntry.arguments?.getString("withVideo")?.toBoolean() ?: false
-            val conferenceId = backStackEntry.arguments?.getString("conferenceId")?.takeIf { it != "null" }
+            val withVideo = backStackEntry.extractArg("withVideo").toBoolean()
+            val conferenceId = backStackEntry.extractArg("conferenceId").takeIf { it != "null" }
             ConferenceScreen(
                 participantIds = participantIds,
                 withVideo = withVideo,
@@ -203,6 +224,19 @@ fun AppNavigation() {
                 }
             )
         }
+    }
+}
+
+// Extension function to extract arguments in a KMP-compatible way
+private fun androidx.navigation.NavBackStackEntry.extractArg(key: String): String {
+    // Access argument using SavedStateHandle-style access
+    return try {
+        @Suppress("UNCHECKED_CAST")
+        (this.arguments as? Map<String, Any?>)?.get(key)?.toString()
+            ?: this.savedStateHandle.get<String>(key)
+            ?: ""
+    } catch (e: Exception) {
+        ""
     }
 }
 
