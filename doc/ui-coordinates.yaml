@@ -16,6 +16,9 @@ devices:
     resolution: [1080, 2400]
 
     screens:
+      # =====================
+      # Authentication Screens
+      # =====================
       welcome:
         create_account_button:
           bounds: [[84, 1176], [996, 1302]]
@@ -32,6 +35,9 @@ devices:
           bounds: [[84, 1306], [996, 1432]]
           tap: [540, 1369]
 
+      # =====================
+      # Main Navigation
+      # =====================
       home:
         bottom_nav:
           chats_tab:
@@ -47,6 +53,9 @@ devices:
           bounds: [[891, 1938], [1038, 2085]]
           tap: [965, 2012]
 
+      # =====================
+      # Chats Screen
+      # =====================
       chats:
         list_items:
           first:
@@ -59,6 +68,69 @@ devices:
             bounds: [[0, 824], [1080, 1034]]
             tap: [540, 929]
 
+      # =====================
+      # Contacts Screen
+      # =====================
+      contacts:
+        add_contact_button:
+          bounds: [[944, 258], [1070, 384]]
+          tap: [1007, 321]
+        list_items:
+          first:
+            bounds: [[0, 404], [1080, 614]]
+            tap: [540, 509]
+          second:
+            bounds: [[0, 614], [1080, 824]]
+            tap: [540, 719]
+
+      # =====================
+      # Settings Screen
+      # =====================
+      settings:
+        profile_section:
+          bounds: [[0, 404], [1080, 678]]
+          tap: [540, 541]
+        account_section:
+          bounds: [[0, 681], [1080, 870]]
+          tap: [540, 776]
+        notifications_section:
+          bounds: [[0, 870], [1080, 1059]]
+          tap: [540, 965]
+        privacy_section:
+          bounds: [[0, 1059], [1080, 1248]]
+          tap: [540, 1154]
+        about_section:
+          bounds: [[0, 1293], [1080, 1482]]
+          tap: [540, 1388]
+        sign_out_button:
+          bounds: [[0, 1482], [1080, 1671]]
+          tap: [540, 1577]
+
+      # =====================
+      # Add Contact Screen
+      # =====================
+      add_contact:
+        search_field:
+          bounds: [[84, 680], [996, 806]]
+          tap: [540, 743]
+        search_button:
+          bounds: [[84, 848], [996, 974]]
+          tap: [540, 911]
+
+      # =====================
+      # Chat Screen
+      # =====================
+      chat:
+        back_button:
+          bounds: [[21, 258], [147, 384]]
+          tap: [84, 321]
+        message_input:
+          bounds: [[84, 2040], [912, 2106]]
+          tap: [498, 2073]
+        send_button:
+          bounds: [[933, 2019], [1059, 2127]]
+          tap: [996, 2073]
+
 # =============================================================================
 # Template for adding new devices
 # =============================================================================
@@ -68,6 +140,10 @@ devices:
 # 3. Get resolution: adb shell wm size
 # 4. Capture UI: adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml
 # 5. Add section below with coordinates from ui.xml
+#
+# Calculate tap coordinates from bounds:
+#   tap_x = (x1 + x2) / 2
+#   tap_y = (y1 + y2) / 2
 #
 # Example:
 #   NEW_SERIAL_NUMBER:
