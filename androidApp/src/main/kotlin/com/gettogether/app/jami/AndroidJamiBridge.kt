@@ -515,6 +515,11 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
         return result
     }
 
+    override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) = withContext(Dispatchers.IO) {
+        if (!nativeLoaded) return@withContext
+        JamiService.subscribeBuddy(accountId, uri, flag)
+    }
+
     // Conversations
     override fun getConversations(accountId: String): List<String> {
         if (!nativeLoaded) return emptyList()

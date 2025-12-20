@@ -200,11 +200,35 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     private val presenceCallback = object : PresenceCallback() {
         override fun newBuddyNotification(accountId: String?, buddyUri: String?, status: Int, lineStatus: String?) {
+            Log.d(TAG, "=== newBuddyNotification (PRESENCE UPDATE) ===")
+            Log.d(TAG, "  AccountId: $accountId")
+            Log.d(TAG, "  BuddyUri: $buddyUri")
+            Log.d(TAG, "  Status: $status (${if (status > 0) "ONLINE" else "OFFLINE"})")
+            Log.d(TAG, "  LineStatus: $lineStatus")
+
             if (accountId != null && buddyUri != null) {
-                val event = JamiContactEvent.PresenceChanged(accountId, buddyUri, status > 0)
-                _contactEvents.tryEmit(event)
+                val isOnline = status > 0
+                Log.i(TAG, "→ Emitting PresenceChanged event: ${buddyUri.take(16)}... is ${if (isOnline) "ONLINE" else "OFFLINE"}")
+                val event = JamiContactEvent.PresenceChanged(accountId, buddyUri, isOnline)
+                val emitted = _contactEvents.tryEmit(event)
                 _events.tryEmit(event)
+                Log.i(TAG, "✓ PresenceChanged event emitted (success=$emitted)")
+            } else {
+                Log.w(TAG, "✗ Skipping presence event - null accountId or buddyUri")
             }
+        }
+
+        override fun nearbyPeerNotification(accountId: String?, buddyUri: String?, state: Int, displayName: String?) {
+            Log.d(TAG, "=== nearbyPeerNotification ===")
+            Log.d(TAG, "  AccountId: $accountId, BuddyUri: $buddyUri, State: $state, DisplayName: $displayName")
+        }
+
+        override fun newServerSubscriptionRequest(arg0: String?) {
+            Log.d(TAG, "=== newServerSubscriptionRequest: $arg0 ===")
+        }
+
+        override fun serverError(arg0: String?, arg1: String?, arg2: String?) {
+            Log.e(TAG, "=== Presence serverError: $arg0, $arg1, $arg2 ===")
         }
     }
 
@@ -269,12 +293,19 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         private var nativeLoaded = false
 
         init {
+            Log.d(TAG, "=== SwigJamiBridge: Attempting to load native library ===")
             try {
                 System.loadLibrary("jami-core-jni")
                 nativeLoaded = true
-                Log.i(TAG, "Loaded libjami-core-jni.so")
+                Log.i(TAG, "✓ Successfully loaded libjami-core-jni.so")
+                Log.i(TAG, "  Native library path: ${System.getProperty("java.library.path")}")
             } catch (e: UnsatisfiedLinkError) {
-                Log.e(TAG, "Failed to load libjami-core-jni.so: ${e.message}")
+                nativeLoaded = false
+                Log.e(TAG, "✗ FAILED to load libjami-core-jni.so")
+                Log.e(TAG, "  Error: ${e.message}")
+                Log.e(TAG, "  Library path: ${System.getProperty("java.library.path")}")
+                Log.e(TAG, "  This means the Jami daemon will NOT run and all contacts will appear offline!")
+                e.printStackTrace()
             }
         }
     }
@@ -360,25 +391,55 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     // =========================================================================
 
     override suspend fun initDaemon(dataPath: String) = withContext(Dispatchers.IO) {
+        Log.d(TAG, "=== initDaemon() called ===")
+        Log.d(TAG, "  Data path: $dataPath")
+        Log.d(TAG, "  Native loaded: $nativeLoaded")
+
         if (!nativeLoaded) {
-            Log.e(TAG, "Cannot init daemon: native library not loaded")
+            Log.e(TAG, "✗ Cannot init daemon: native library not loaded!")
+            Log.e(TAG, "  The daemon will NOT be initialized.")
+            Log.e(TAG, "  All Jami functionality will be unavailable.")
             return@withContext
         }
-        Log.i(TAG, "Initializing daemon with path: $dataPath")
-        JamiService.init(
-            configCallback,
-            callCallback,
-            presenceCallback,
-            dataTransferCallback,
-            videoCallback,
-            conversationCallback
-        )
+
+        try {
+            Log.i(TAG, "→ Calling JamiService.init() with callbacks...")
+            JamiService.init(
+                configCallback,
+                callCallback,
+                presenceCallback,
+                dataTransferCallback,
+                videoCallback,
+                conversationCallback
+            )
+            Log.i(TAG, "✓ JamiService.init() completed successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "✗ JamiService.init() FAILED with exception: ${e.message}")
+            e.printStackTrace()
+            throw e
+        }
     }
 
     override suspend fun startDaemon() = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext
-        _isDaemonRunning = true
-        Log.i(TAG, "Daemon started")
+        Log.d(TAG, "=== startDaemon() called ===")
+        Log.d(TAG, "  Native loaded: $nativeLoaded")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "✗ Cannot start daemon: native library not loaded!")
+            return@withContext
+        }
+
+        try {
+            Log.i(TAG, "→ Starting Jami daemon...")
+            _isDaemonRunning = true
+            Log.i(TAG, "✓ Daemon marked as running (isDaemonRunning=$_isDaemonRunning)")
+            Log.i(TAG, "  Note: Actual daemon start depends on JamiService implementation")
+        } catch (e: Exception) {
+            Log.e(TAG, "✗ startDaemon() FAILED: ${e.message}")
+            e.printStackTrace()
+            _isDaemonRunning = false
+            throw e
+        }
     }
 
     override suspend fun stopDaemon() = withContext(Dispatchers.IO) {
@@ -492,9 +553,20 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             Log.e(TAG, "addContact: native library not loaded")
             return@withContext
         }
-        Log.i(TAG, "addContact: accountId=$accountId, uri=$uri")
-        JamiService.addContact(accountId, uri)
-        Log.i(TAG, "addContact: call completed")
+        Log.i(TAG, "→ addContact: accountId=$accountId, uri=$uri")
+        try {
+            JamiService.addContact(accountId, uri)
+            Log.i(TAG, "✓ addContact completed")
+
+            // Subscribe to presence updates for this contact
+            Log.i(TAG, "→ Subscribing to presence for contact: ${uri.take(16)}...")
+            JamiService.subscribeBuddy(accountId, uri, true)
+            Log.i(TAG, "✓ Presence subscription requested")
+        } catch (e: Exception) {
+            Log.e(TAG, "✗ addContact failed: ${e.message}")
+            e.printStackTrace()
+            throw e
+        }
     }
 
     override suspend fun removeContact(accountId: String, uri: String, ban: Boolean) = withContext(Dispatchers.IO) {
@@ -505,6 +577,21 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     override fun getContactDetails(accountId: String, uri: String): Map<String, String> {
         if (!nativeLoaded) return emptyMap()
         return stringMapToKotlin(JamiService.getContactDetails(accountId, uri))
+    }
+
+    override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) = withContext(Dispatchers.IO) {
+        if (!nativeLoaded) {
+            Log.w(TAG, "subscribeBuddy: native library not loaded")
+            return@withContext
+        }
+        Log.d(TAG, "subscribeBuddy: accountId=$accountId, uri=${uri.take(16)}..., flag=$flag")
+        try {
+            JamiService.subscribeBuddy(accountId, uri, flag)
+            Log.i(TAG, "✓ subscribeBuddy completed")
+        } catch (e: Exception) {
+            Log.e(TAG, "✗ subscribeBuddy failed: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     override suspend fun acceptTrustRequest(accountId: String, uri: String) = withContext(Dispatchers.IO) {

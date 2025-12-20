@@ -6,6 +6,7 @@ data class ContactDetailsState(
     val error: String? = null,
     val showRemoveDialog: Boolean = false,
     val showBlockDialog: Boolean = false,
+    val showEditNameDialog: Boolean = false,
     val isRemoving: Boolean = false,
     val isBlocking: Boolean = false,
     val contactRemoved: Boolean = false,
@@ -15,6 +16,7 @@ data class ContactDetailsState(
 data class ContactDetails(
     val id: String,
     val displayName: String,
+    val customName: String? = null,  // User-defined custom name
     val username: String,
     val jamiId: String,
     val isOnline: Boolean,
@@ -22,4 +24,12 @@ data class ContactDetails(
     val isBlocked: Boolean,
     val addedDate: String,
     val lastSeen: String?
-)
+) {
+    /**
+     * Returns the effective display name for this contact.
+     * Priority: customName > displayName
+     */
+    fun getEffectiveName(): String {
+        return customName?.takeIf { it.isNotBlank() } ?: displayName
+    }
+}

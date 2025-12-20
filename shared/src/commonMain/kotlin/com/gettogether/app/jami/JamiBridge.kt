@@ -155,6 +155,14 @@ interface JamiBridge {
      */
     fun getTrustRequests(accountId: String): List<TrustRequest>
 
+    /**
+     * Subscribe to presence updates for a contact (buddy).
+     * @param accountId The account ID
+     * @param uri The contact URI
+     * @param flag true to subscribe, false to unsubscribe
+     */
+    suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean)
+
     // =========================================================================
     // Conversation Management
     // =========================================================================

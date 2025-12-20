@@ -10,4 +10,5 @@ interface ContactRepository {
     suspend fun removeContact(accountId: String, contactId: String): Result<Unit>
     suspend fun blockContact(accountId: String, contactId: String): Result<Unit>
     suspend fun unblockContact(accountId: String, contactId: String): Result<Unit>
+    suspend fun updateCustomName(accountId: String, contactId: String, customName: String): Result<Unit>
 }

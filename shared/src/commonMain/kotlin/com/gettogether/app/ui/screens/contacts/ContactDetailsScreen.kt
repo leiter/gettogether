@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,12 +39,15 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -142,6 +146,48 @@ fun ContactDetailsScreen(
         )
     }
 
+    // Edit name dialog
+    if (state.showEditNameDialog) {
+        var customName by remember { mutableStateOf(state.contact?.customName ?: "") }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.hideEditNameDialog() },
+            title = { Text("Edit Contact Name") },
+            text = {
+                Column {
+                    Text(
+                        text = "Set a custom name for ${state.contact?.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    TextField(
+                        value = customName,
+                        onValueChange = { customName = it },
+                        label = { Text("Custom Name") },
+                        placeholder = { Text(state.contact?.displayName ?: "") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.updateCustomName(customName)
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.hideEditNameDialog() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -192,7 +238,8 @@ fun ContactDetailsScreen(
                         onCallClick = { onNavigateToCall(contactId, false) },
                         onVideoCallClick = { onNavigateToCall(contactId, true) },
                         onBlockClick = { viewModel.showBlockDialog() },
-                        onRemoveClick = { viewModel.showRemoveDialog() }
+                        onRemoveClick = { viewModel.showRemoveDialog() },
+                        onEditNameClick = { viewModel.showEditNameDialog() }
                     )
                 }
                 else -> {
@@ -219,7 +266,8 @@ private fun ContactDetailsContent(
     onCallClick: () -> Unit,
     onVideoCallClick: () -> Unit,
     onBlockClick: () -> Unit,
-    onRemoveClick: () -> Unit
+    onRemoveClick: () -> Unit,
+    onEditNameClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -227,7 +275,10 @@ private fun ContactDetailsContent(
             .verticalScroll(rememberScrollState())
     ) {
         // Profile header
-        ProfileHeader(contact = contact)
+        ProfileHeader(
+            contact = contact,
+            onEditNameClick = onEditNameClick
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -257,7 +308,10 @@ private fun ContactDetailsContent(
 }
 
 @Composable
-private fun ProfileHeader(contact: ContactDetails) {
+private fun ProfileHeader(
+    contact: ContactDetails,
+    onEditNameClick: () -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -273,7 +327,7 @@ private fun ProfileHeader(contact: ContactDetails) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        text = contact.displayName.first().uppercase(),
+                        text = contact.getEffectiveName().first().uppercase(),
                         style = MaterialTheme.typography.displayMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
@@ -302,12 +356,35 @@ private fun ProfileHeader(contact: ContactDetails) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Name
-        Text(
-            text = contact.displayName,
-            style = MaterialTheme.typography.headlineMedium,
-            textAlign = TextAlign.Center
-        )
+        // Name with edit button
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = contact.getEffectiveName(),
+                style = MaterialTheme.typography.headlineMedium,
+                textAlign = TextAlign.Center
+            )
+            IconButton(onClick = onEditNameClick) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit name",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        // Show original name if custom name is set
+        if (contact.customName != null && contact.customName.isNotBlank()) {
+            Text(
+                text = "Original: ${contact.displayName}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        }
 
         // Username
         Text(

@@ -331,7 +331,7 @@ class ConversationRepositoryImpl(
         val title = info["title"] ?: run {
             // Find the OTHER participant (not the user) for 1-on-1 conversations
             val otherParticipant = participants.firstOrNull { it.uri != userJamiId }
-            otherParticipant?.displayName ?: "Conversation"
+            otherParticipant?.getEffectiveName() ?: "Conversation"
         }
 
         val isGroup = members.size > 2
