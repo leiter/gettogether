@@ -17,6 +17,7 @@ import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
 import com.gettogether.app.presentation.viewmodel.NewConversationViewModel
 import com.gettogether.app.presentation.viewmodel.SettingsViewModel
+import com.gettogether.app.presentation.viewmodel.TrustRequestsViewModel
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -27,7 +28,7 @@ val sharedModule = module {
 
     // Repositories
     single { AccountRepository(get()) }
-    single { ContactRepositoryImpl(get(), get()) }
+    single { ContactRepositoryImpl(get(), get(), get()) }
     single { ConversationRepositoryImpl(get(), get()) }
 
     // ViewModels
@@ -36,6 +37,7 @@ val sharedModule = module {
     viewModel { ChatViewModel(get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }
     viewModel { ContactsViewModel(get(), get()) }
+    viewModel { TrustRequestsViewModel(get(), get()) }
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }
     viewModel { SettingsViewModel(get(), get(), get()) }

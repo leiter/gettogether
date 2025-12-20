@@ -1,5 +1,8 @@
 package com.gettogether.app.di
 
+import com.gettogether.app.data.persistence.AndroidContactPersistence
+import com.gettogether.app.data.persistence.ContactPersistence
+import com.gettogether.app.data.persistence.setContactPersistence
 import com.gettogether.app.data.repository.AndroidSettingsRepository
 import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.data.repository.setSettingsRepository
@@ -21,6 +24,11 @@ actual val platformModule: Module = module {
     // Settings persistence
     single<SettingsRepository> {
         AndroidSettingsRepository(androidContext()).also { setSettingsRepository(it) }
+    }
+
+    // Contact persistence
+    single<ContactPersistence> {
+        AndroidContactPersistence(androidContext()).also { setContactPersistence(it) }
     }
 
     // Jami daemon bridge and lifecycle

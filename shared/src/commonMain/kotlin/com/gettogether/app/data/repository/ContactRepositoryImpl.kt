@@ -4,12 +4,17 @@ import com.gettogether.app.domain.model.Contact
 import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiContactEvent
+import com.gettogether.app.jami.TrustRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -17,7 +22,8 @@ import kotlinx.coroutines.launch
  */
 class ContactRepositoryImpl(
     private val jamiBridge: JamiBridge,
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val contactPersistence: com.gettogether.app.data.persistence.ContactPersistence
 ) : ContactRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -28,6 +34,9 @@ class ContactRepositoryImpl(
     // Cache for online status by contact URI
     private val _onlineStatusCache = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
+    // Cache for trust requests by account
+    private val _trustRequestsCache = MutableStateFlow<Map<String, List<TrustRequest>>>(emptyMap())
+
     init {
         // Listen for contact events
         scope.launch {
@@ -36,11 +45,24 @@ class ContactRepositoryImpl(
             }
         }
 
-        // Load contacts when account changes
+        // Load contacts and trust requests when account changes
         scope.launch {
             accountRepository.currentAccountId.collect { accountId ->
                 if (accountId != null) {
+                    // Load persisted contacts first
+                    loadPersistedContacts(accountId)
+                    // Then refresh from Jami to get latest
                     refreshContacts(accountId)
+                    refreshTrustRequests(accountId)
+                }
+            }
+        }
+
+        // Auto-save contacts when cache changes
+        scope.launch {
+            _contactsCache.collect { contactsMap ->
+                contactsMap.forEach { (accountId, contacts) ->
+                    contactPersistence.saveContacts(accountId, contacts)
                 }
             }
         }
@@ -152,6 +174,20 @@ class ContactRepositoryImpl(
     }
 
     /**
+     * Load persisted contacts from storage.
+     */
+    private suspend fun loadPersistedContacts(accountId: String) {
+        try {
+            val persistedContacts = contactPersistence.loadContacts(accountId)
+            if (persistedContacts.isNotEmpty()) {
+                _contactsCache.value = _contactsCache.value + (accountId to persistedContacts)
+            }
+        } catch (e: Exception) {
+            // Keep existing cache on error
+        }
+    }
+
+    /**
      * Refresh contacts from JamiBridge.
      */
     suspend fun refreshContacts(accountId: String) {
@@ -232,8 +268,95 @@ class ContactRepositoryImpl(
             }
 
             is JamiContactEvent.IncomingTrustRequest -> {
-                // Could be handled to show pending contact requests
+                if (event.accountId == accountId) {
+                    // Add trust request to cache
+                    val trustRequest = TrustRequest(
+                        from = event.from,
+                        conversationId = event.conversationId,
+                        payload = event.payload,
+                        received = event.received
+                    )
+
+                    val currentRequests = _trustRequestsCache.value[accountId] ?: emptyList()
+                    // Only add if not already in the list
+                    if (currentRequests.none { it.from == event.from }) {
+                        _trustRequestsCache.value = _trustRequestsCache.value +
+                            (accountId to (currentRequests + trustRequest))
+                    }
+                }
             }
+        }
+    }
+
+    /**
+     * Refresh trust requests from JamiBridge.
+     */
+    suspend fun refreshTrustRequests(accountId: String) {
+        try {
+            val requests = jamiBridge.getTrustRequests(accountId)
+            _trustRequestsCache.value = _trustRequestsCache.value + (accountId to requests)
+        } catch (e: Exception) {
+            // Keep existing cache on error
+        }
+    }
+
+    /**
+     * Accept an incoming trust request.
+     */
+    suspend fun acceptTrustRequest(accountId: String, contactUri: String): Result<Unit> {
+        return try {
+            jamiBridge.acceptTrustRequest(accountId, contactUri)
+
+            // Remove from trust requests cache
+            val currentRequests = _trustRequestsCache.value[accountId] ?: emptyList()
+            _trustRequestsCache.value = _trustRequestsCache.value +
+                (accountId to currentRequests.filter { it.from != contactUri })
+
+            // Refresh contacts to get the newly added contact
+            refreshContacts(accountId)
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Reject an incoming trust request.
+     */
+    suspend fun rejectTrustRequest(accountId: String, contactUri: String, block: Boolean = false): Result<Unit> {
+        return try {
+            if (block) {
+                // Block the contact (adds to ban list)
+                jamiBridge.removeContact(accountId, contactUri, ban = true)
+            } else {
+                // Just discard the request
+                jamiBridge.discardTrustRequest(accountId, contactUri)
+            }
+
+            // Remove from trust requests cache
+            val currentRequests = _trustRequestsCache.value[accountId] ?: emptyList()
+            _trustRequestsCache.value = _trustRequestsCache.value +
+                (accountId to currentRequests.filter { it.from != contactUri })
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Get trust requests for the current account.
+     */
+    fun getTrustRequests(accountId: String): Flow<List<TrustRequest>> {
+        // Trigger refresh if not cached
+        scope.launch {
+            if (_trustRequestsCache.value[accountId].isNullOrEmpty()) {
+                refreshTrustRequests(accountId)
+            }
+        }
+        return _trustRequestsCache.map { cache ->
+            cache[accountId] ?: emptyList()
         }
     }
 }

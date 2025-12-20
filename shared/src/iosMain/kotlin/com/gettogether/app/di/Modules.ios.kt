@@ -1,5 +1,8 @@
 package com.gettogether.app.di
 
+import com.gettogether.app.data.persistence.ContactPersistence
+import com.gettogether.app.data.persistence.IosContactPersistence
+import com.gettogether.app.data.persistence.setContactPersistence
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
 import com.gettogether.app.jami.IOSJamiBridge
@@ -13,6 +16,11 @@ actual val platformModule: Module = module {
     // iOS-specific dependencies
     single { CallServiceBridge() }
     single { NotificationHelper() }
+
+    // Contact persistence
+    single<ContactPersistence> {
+        IosContactPersistence().also { setContactPersistence(it) }
+    }
 
     // Jami daemon bridge and lifecycle
     single { DataPathProvider() }

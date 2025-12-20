@@ -89,7 +89,9 @@ class ConversationRepositoryImpl(
         content: String
     ): Result<Message> {
         return try {
+            println("ConversationRepository.sendMessage: accountId=$accountId, conversationId=$conversationId, content='$content'")
             jamiBridge.sendMessage(accountId, conversationId, content, null)
+            println("ConversationRepository.sendMessage: jamiBridge.sendMessage completed")
 
             val message = Message(
                 id = Clock.System.now().toEpochMilliseconds().toString(),
@@ -105,9 +107,11 @@ class ConversationRepositoryImpl(
             val key = "$accountId:$conversationId"
             val currentMessages = _messagesCache.value[key] ?: emptyList()
             _messagesCache.value = _messagesCache.value + (key to (currentMessages + message))
+            println("ConversationRepository.sendMessage: Message added to cache, total messages=${(currentMessages + message).size}")
 
             Result.success(message)
         } catch (e: Exception) {
+            println("ConversationRepository.sendMessage: Exception - ${e.message}")
             Result.failure(e)
         }
     }
@@ -246,10 +250,15 @@ class ConversationRepositoryImpl(
     }
 
     private fun handleConversationEvent(event: JamiConversationEvent) {
-        val accountId = accountRepository.currentAccountId.value ?: return
+        val accountId = accountRepository.currentAccountId.value
+        if (accountId == null) {
+            println("ConversationRepository.handleConversationEvent: No current account ID")
+            return
+        }
 
         when (event) {
             is JamiConversationEvent.MessageReceived -> {
+                println("ConversationRepository.handleConversationEvent: MessageReceived - accountId=$accountId, conversationId=${event.conversationId}, messageId=${event.message.id}, author=${event.message.author}, content=${event.message.body["body"]}")
                 val key = "$accountId:${event.conversationId}"
                 val message = Message(
                     id = event.message.id,
@@ -264,6 +273,9 @@ class ConversationRepositoryImpl(
                 val currentMessages = _messagesCache.value[key] ?: emptyList()
                 if (currentMessages.none { it.id == message.id }) {
                     _messagesCache.value = _messagesCache.value + (key to (currentMessages + message))
+                    println("ConversationRepository.handleConversationEvent: Message added to cache, key=$key, total messages=${(currentMessages + message).size}")
+                } else {
+                    println("ConversationRepository.handleConversationEvent: Message already in cache, skipping")
                 }
 
                 // Update conversation's last message
@@ -315,6 +327,70 @@ class ConversationRepositoryImpl(
             }
         }
         _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
+    }
+
+    /**
+     * Clear all messages from a conversation.
+     */
+    suspend fun clearMessages(accountId: String, conversationId: String) {
+        println("ConversationRepository.clearMessages: accountId=$accountId, conversationId=$conversationId")
+        val key = "$accountId:$conversationId"
+        _messagesCache.value = _messagesCache.value - key
+        println("ConversationRepository.clearMessages: Messages cleared from cache")
+    }
+
+    /**
+     * Clear all conversations for an account.
+     */
+    suspend fun clearAllConversations(accountId: String) {
+        println("ConversationRepository.clearAllConversations: Clearing all conversations for account $accountId")
+
+        // Get user's own Jami ID for logging purposes
+        val userJamiId = accountRepository.accountState.value.jamiId
+        println("ConversationRepository.clearAllConversations: User Jami ID: $userJamiId")
+
+        // Get current conversations to delete them from daemon
+        val conversations = _conversationsCache.value[accountId] ?: emptyList()
+        println("ConversationRepository.clearAllConversations: Found ${conversations.size} conversations to delete")
+
+        // First, remove all contacts to prevent conversations from being recreated
+        val contactsToRemove = mutableSetOf<String>()
+        conversations.forEach { conversation ->
+            conversation.participants.forEach { participant ->
+                // Don't try to remove/ban the user themselves
+                if (participant.uri != userJamiId) {
+                    contactsToRemove.add(participant.uri)
+                }
+            }
+        }
+
+        println("ConversationRepository.clearAllConversations: Removing ${contactsToRemove.size} contacts")
+        contactsToRemove.forEach { contactUri ->
+            try {
+                println("ConversationRepository.clearAllConversations: Removing contact $contactUri")
+                jamiBridge.removeContact(accountId, contactUri, ban = false)
+            } catch (e: Exception) {
+                println("ConversationRepository.clearAllConversations: Failed to remove contact $contactUri: ${e.message}")
+            }
+        }
+
+        // Then delete ALL conversations from Jami daemon (including self-conversations)
+        conversations.forEach { conversation ->
+            try {
+                println("ConversationRepository.clearAllConversations: Deleting conversation ${conversation.id}")
+                jamiBridge.removeConversation(accountId, conversation.id)
+            } catch (e: Exception) {
+                println("ConversationRepository.clearAllConversations: Failed to delete conversation ${conversation.id}: ${e.message}")
+            }
+        }
+
+        // Clear ALL conversations from cache
+        _conversationsCache.value = _conversationsCache.value - accountId
+
+        // Clear ALL messages for this account's conversations
+        _messagesCache.value = _messagesCache.value.filterKeys { !it.startsWith("$accountId:") }
+
+        println("ConversationRepository.clearAllConversations: All conversations, messages, and contacts cleared from cache and daemon")
     }
 
     /**

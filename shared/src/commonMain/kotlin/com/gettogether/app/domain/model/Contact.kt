@@ -1,5 +1,8 @@
 package com.gettogether.app.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class Contact(
     val id: String,
     val uri: String,
