@@ -24,7 +24,8 @@ import kotlinx.datetime.Instant
 class ConversationRepositoryImpl(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val conversationPersistence: com.gettogether.app.data.persistence.ConversationPersistence
+    private val conversationPersistence: com.gettogether.app.data.persistence.ConversationPersistence,
+    private val contactRepository: ContactRepositoryImpl
 ) : ConversationRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -308,23 +309,32 @@ class ConversationRepositoryImpl(
         // Get user's own Jami ID to exclude from title
         val userJamiId = accountRepository.accountState.value.jamiId
 
-        // Determine conversation title
-        val title = info["title"] ?: run {
-            // Find the OTHER participant (not the user) for 1-on-1 conversations
-            val otherMember = members.firstOrNull { it.uri != userJamiId }
-            otherMember?.uri ?: "Conversation"
-        }
-
-        val isGroup = members.size > 2
-
+        // Get contact display names for participants
         val participants = members.map { member ->
+            // Try to get display name from contact details
+            val displayName = try {
+                val details = jamiBridge.getContactDetails(accountId, member.uri)
+                details["displayName"]?.ifBlank { member.uri.take(8) } ?: member.uri.take(8)
+            } catch (e: Exception) {
+                member.uri.take(8)
+            }
+
             Contact(
                 id = member.uri,
                 uri = member.uri,
-                displayName = member.uri.take(8),
+                displayName = displayName,
                 isOnline = false
             )
         }
+
+        // Determine conversation title
+        val title = info["title"] ?: run {
+            // Find the OTHER participant (not the user) for 1-on-1 conversations
+            val otherParticipant = participants.firstOrNull { it.uri != userJamiId }
+            otherParticipant?.displayName ?: "Conversation"
+        }
+
+        val isGroup = members.size > 2
 
         return Conversation(
             id = conversationId,

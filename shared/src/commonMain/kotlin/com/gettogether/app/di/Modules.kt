@@ -30,7 +30,7 @@ val sharedModule = module {
     single { AccountRepository(get()) }
     single { ContactRepositoryImpl(get(), get(), get()) }
     single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }
-    single { ConversationRepositoryImpl(get(), get(), get()) }
+    single { ConversationRepositoryImpl(get(), get(), get(), get()) }
 
     // ViewModels
     viewModel { CreateAccountViewModel(get(), get()) }
