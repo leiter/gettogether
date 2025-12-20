@@ -305,7 +305,16 @@ class ConversationRepositoryImpl(
         val info = jamiBridge.getConversationInfo(accountId, conversationId)
         val members = jamiBridge.getConversationMembers(accountId, conversationId)
 
-        val title = info["title"] ?: members.firstOrNull()?.uri ?: "Conversation"
+        // Get user's own Jami ID to exclude from title
+        val userJamiId = accountRepository.accountState.value.jamiId
+
+        // Determine conversation title
+        val title = info["title"] ?: run {
+            // Find the OTHER participant (not the user) for 1-on-1 conversations
+            val otherMember = members.firstOrNull { it.uri != userJamiId }
+            otherMember?.uri ?: "Conversation"
+        }
+
         val isGroup = members.size > 2
 
         val participants = members.map { member ->
