@@ -78,6 +78,7 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
 
         override fun incomingTrustRequest(accountId: String?, conversationId: String?, from: String?, payload: Blob?, received: Long) {
+            Log.i(TAG, "incomingTrustRequest: accountId=$accountId, from=$from, conversationId=$conversationId")
             if (accountId != null && from != null) {
                 val payloadBytes = if (payload != null) {
                     ByteArray(payload.size) { i -> payload[i] }
@@ -85,7 +86,8 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                     ByteArray(0)
                 }
                 val event = JamiContactEvent.IncomingTrustRequest(accountId, conversationId ?: "", from, payloadBytes, received)
-                _contactEvents.tryEmit(event)
+                val emitted = _contactEvents.tryEmit(event)
+                Log.i(TAG, "incomingTrustRequest: event emitted=$emitted")
                 _events.tryEmit(event)
             }
         }
@@ -219,11 +221,16 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
 
         override fun swarmMessageReceived(accountId: String?, conversationId: String?, message: net.jami.daemon.SwarmMessage?) {
+            Log.i(TAG, "swarmMessageReceived: accountId=$accountId, conversationId=$conversationId, message=${message?.id}")
             if (accountId != null && conversationId != null && message != null) {
                 val swarmMsg = convertSwarmMessage(message)
+                Log.i(TAG, "swarmMessageReceived: Converted message - id=${swarmMsg.id}, author=${swarmMsg.author}, body=${swarmMsg.body}")
                 val event = JamiConversationEvent.MessageReceived(accountId, conversationId, swarmMsg)
-                _conversationEvents.tryEmit(event)
+                val emitted = _conversationEvents.tryEmit(event)
                 _events.tryEmit(event)
+                Log.i(TAG, "swarmMessageReceived: Event emitted=$emitted")
+            } else {
+                Log.w(TAG, "swarmMessageReceived: Null parameter - accountId=$accountId, conversationId=$conversationId, message=$message")
             }
         }
 
@@ -481,8 +488,13 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override suspend fun addContact(accountId: String, uri: String) = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext
+        if (!nativeLoaded) {
+            Log.e(TAG, "addContact: native library not loaded")
+            return@withContext
+        }
+        Log.i(TAG, "addContact: accountId=$accountId, uri=$uri")
         JamiService.addContact(accountId, uri)
+        Log.i(TAG, "addContact: call completed")
     }
 
     override suspend fun removeContact(accountId: String, uri: String, ban: Boolean) = withContext(Dispatchers.IO) {
@@ -604,8 +616,17 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     // Messaging
     override suspend fun sendMessage(accountId: String, conversationId: String, message: String, replyTo: String?): String = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext ""
-        JamiService.sendMessage(accountId, conversationId, message, replyTo ?: "", 0)
+        if (!nativeLoaded) {
+            Log.w(TAG, "sendMessage: Native library not loaded")
+            return@withContext ""
+        }
+        Log.i(TAG, "sendMessage: accountId=$accountId, conversationId=$conversationId, message='$message'")
+        try {
+            JamiService.sendMessage(accountId, conversationId, message, replyTo ?: "", 0)
+            Log.i(TAG, "sendMessage: JamiService.sendMessage called successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "sendMessage: Exception - ${e.message}", e)
+        }
         ""
     }
 

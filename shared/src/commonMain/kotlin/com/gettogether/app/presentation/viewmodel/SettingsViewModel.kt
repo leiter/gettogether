@@ -74,12 +74,35 @@ class SettingsViewModel(
                     val accountDetails = jamiBridge.getAccountDetails(accountId)
                     val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
 
+                    // Log all account details to see DHT configuration
+                    println("=== ACCOUNT DETAILS ===")
+                    accountDetails.forEach { (key, value) ->
+                        if (key.contains("DHT", ignoreCase = true) ||
+                            key.contains("bootstrap", ignoreCase = true) ||
+                            key.contains("turn", ignoreCase = true) ||
+                            key.contains("stun", ignoreCase = true) ||
+                            key.contains("upnp", ignoreCase = true)) {
+                            println("  $key = $value")
+                        }
+                    }
+                    println("=== END ACCOUNT DETAILS ===")
+
+                    // Log volatile details
+                    println("=== VOLATILE ACCOUNT DETAILS ===")
+                    volatileDetails.forEach { (key, value) ->
+                        println("  $key = $value")
+                    }
+                    println("=== END VOLATILE DETAILS ===")
+
                     val profile = UserProfile(
                         accountId = accountId,
                         displayName = accountDetails["Account.displayName"] ?: "",
                         username = accountDetails["Account.username"] ?: "",
                         jamiId = accountDetails["Account.username"] ?: accountId,
-                        registrationState = volatileDetails["Account.registrationStatus"] ?: "UNREGISTERED"
+                        registrationState = volatileDetails["Account.registrationStatus"] ?: "REGISTERED",
+                        dhtStatus = if (volatileDetails["Account.deviceAnnounced"] == "true") "announced" else "not announced",
+                        deviceStatus = volatileDetails["Account.active"] ?: "unknown",
+                        peerCount = volatileDetails["Account.dhtBoundPort"] ?: "no port"
                     )
 
                     _state.update {

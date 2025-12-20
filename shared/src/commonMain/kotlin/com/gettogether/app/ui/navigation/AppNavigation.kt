@@ -29,7 +29,7 @@ import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
 import org.koin.compose.koinInject
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(modifier: Modifier = Modifier) {
     val navController = rememberNavController()
     val accountRepository: AccountRepository = koinInject()
     val accountState by accountRepository.accountState.collectAsState()
@@ -56,7 +56,8 @@ fun AppNavigation() {
 
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        modifier = modifier
     ) {
         composable(Screen.Welcome.route) {
             WelcomeScreen(

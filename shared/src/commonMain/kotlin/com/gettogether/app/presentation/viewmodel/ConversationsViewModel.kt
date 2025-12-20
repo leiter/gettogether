@@ -96,6 +96,15 @@ class ConversationsViewModel(
         _state.update { it.copy(error = null) }
     }
 
+    fun clearAllConversations() {
+        val accountId = accountRepository.currentAccountId.value ?: return
+        viewModelScope.launch {
+            println("ConversationsViewModel.clearAllConversations: Clearing all conversations for account $accountId")
+            conversationRepository.clearAllConversations(accountId)
+            _state.update { it.copy(conversations = emptyList()) }
+        }
+    }
+
     private fun Conversation.toUiItem(): ConversationUiItem {
         val lastMessageText = lastMessage?.content ?: "No messages yet"
         val timeText = lastMessage?.timestamp?.let { formatTimestamp(it.toEpochMilliseconds()) }

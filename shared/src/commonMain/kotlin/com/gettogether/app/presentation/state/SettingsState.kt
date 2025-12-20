@@ -16,7 +16,10 @@ data class UserProfile(
     val displayName: String = "",
     val username: String = "",
     val jamiId: String = "",
-    val registrationState: String = ""
+    val registrationState: String = "",
+    val dhtStatus: String = "",
+    val deviceStatus: String = "",
+    val peerCount: String = "0"
 )
 
 data class NotificationSettings(

@@ -439,7 +439,13 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
         message: String,
         replyTo: String?
     ): String = withContext(Dispatchers.IO) {
-        nativeSendMessage(accountId, conversationId, message, replyTo ?: "", 0)
+        android.util.Log.i("JamiBridge.android", "sendMessage: accountId=$accountId, conversationId=$conversationId, message='$message'")
+        try {
+            nativeSendMessage(accountId, conversationId, message, replyTo ?: "", 0)
+            android.util.Log.i("JamiBridge.android", "sendMessage: nativeSendMessage called successfully")
+        } catch (e: Exception) {
+            android.util.Log.e("JamiBridge.android", "sendMessage: Exception - ${e.message}", e)
+        }
         "" // Message ID comes via callback
     }
 
@@ -796,6 +802,7 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
      */
     @Suppress("unused")
     private fun onSwarmMessageReceived(accountId: String, conversationId: String, message: Map<String, Any>) {
+        android.util.Log.i("JamiBridge.android", "onSwarmMessageReceived: accountId=$accountId, conversationId=$conversationId, message=$message")
         @Suppress("UNCHECKED_CAST")
         val swarmMessage = SwarmMessage(
             id = message["id"] as? String ?: "",
@@ -807,9 +814,11 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
             replyTo = message["replyTo"] as? String,
             status = (message["status"] as? Map<String, Int>) ?: emptyMap()
         )
+        android.util.Log.i("JamiBridge.android", "onSwarmMessageReceived: Converted message - id=${swarmMessage.id}, author=${swarmMessage.author}")
         val event = JamiConversationEvent.MessageReceived(accountId, conversationId, swarmMessage)
-        _conversationEvents.tryEmit(event)
-        _events.tryEmit(event)
+        val emitted1 = _conversationEvents.tryEmit(event)
+        val emitted2 = _events.tryEmit(event)
+        android.util.Log.i("JamiBridge.android", "onSwarmMessageReceived: Event emitted to conversationEvents=$emitted1, events=$emitted2")
     }
 
     /**

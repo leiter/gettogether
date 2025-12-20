@@ -207,11 +207,16 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
         }
 
         override fun swarmMessageReceived(accountId: String?, conversationId: String?, message: net.jami.daemon.SwarmMessage?) {
+            Log.i(TAG, "swarmMessageReceived: accountId=$accountId, conversationId=$conversationId, message=${message?.id}")
             if (accountId != null && conversationId != null && message != null) {
                 val swarmMsg = convertSwarmMessage(message)
+                Log.i(TAG, "swarmMessageReceived: Converted message - id=${swarmMsg.id}, author=${swarmMsg.author}, body=${swarmMsg.body}")
                 val event = JamiConversationEvent.MessageReceived(accountId, conversationId, swarmMsg)
-                _conversationEvents.tryEmit(event)
+                val emitted = _conversationEvents.tryEmit(event)
                 _events.tryEmit(event)
+                Log.i(TAG, "swarmMessageReceived: Event emitted=$emitted")
+            } else {
+                Log.w(TAG, "swarmMessageReceived: Null parameter - accountId=$accountId, conversationId=$conversationId, message=$message")
             }
         }
 
@@ -594,8 +599,17 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
 
     // Messaging
     override suspend fun sendMessage(accountId: String, conversationId: String, message: String, replyTo: String?): String = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext ""
-        JamiService.sendMessage(accountId, conversationId, message, replyTo ?: "", 0)
+        if (!nativeLoaded) {
+            Log.w(TAG, "sendMessage: Native library not loaded")
+            return@withContext ""
+        }
+        Log.i(TAG, "sendMessage: accountId=$accountId, conversationId=$conversationId, message='$message'")
+        try {
+            JamiService.sendMessage(accountId, conversationId, message, replyTo ?: "", 0)
+            Log.i(TAG, "sendMessage: JamiService.sendMessage called successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "sendMessage: Exception - ${e.message}", e)
+        }
         "" // Message ID returned via callback
     }
 

@@ -1,6 +1,8 @@
 package com.gettogether.app.ui.screens.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,6 +21,9 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -36,16 +41,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.gettogether.app.platform.provideClipboardManager
 import com.gettogether.app.presentation.state.UserProfile
 import com.gettogether.app.presentation.viewmodel.SettingsViewModel
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsTab(
     onSignedOut: () -> Unit,
@@ -53,6 +61,7 @@ fun SettingsTab(
 ) {
     val state by viewModel.state.collectAsState()
     var expandedSection by remember { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.signOutComplete) {
         if (state.signOutComplete) {
@@ -81,10 +90,11 @@ fun SettingsTab(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Settings") }
-        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = { Text("Settings") }
+            )
 
         if (state.isLoading || state.isSigningOut) {
             Box(
@@ -124,7 +134,7 @@ fun SettingsTab(
                 )
 
                 if (expandedSection == "account") {
-                    AccountDetails(profile = state.userProfile)
+                    AccountDetails(profile = state.userProfile, snackbarHostState = snackbarHostState)
                 }
 
                 // Notifications section
@@ -173,6 +183,18 @@ fun SettingsTab(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+                // Network Debug section
+                SettingsItem(
+                    icon = Icons.Default.Info,
+                    title = "Network Debug",
+                    subtitle = "DHT: ${state.userProfile.dhtStatus}, Peers: ${state.userProfile.peerCount}",
+                    onClick = { expandedSection = if (expandedSection == "network") null else "network" }
+                )
+
+                if (expandedSection == "network") {
+                    NetworkDebugSection(profile = state.userProfile)
+                }
+
                 // About section
                 SettingsItem(
                     icon = Icons.Default.Info,
@@ -207,6 +229,12 @@ fun SettingsTab(
                 )
             }
         }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
     }
 }
 
@@ -279,7 +307,20 @@ private fun ProfileSection(
 }
 
 @Composable
-private fun AccountDetails(profile: UserProfile) {
+private fun AccountDetails(profile: UserProfile, snackbarHostState: SnackbarHostState) {
+    val clipboardManager = remember { provideClipboardManager() }
+    val scope = rememberCoroutineScope()
+
+    val onCopy: (String, String) -> Unit = { label, text ->
+        clipboardManager.copyToClipboard(text)
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                message = "$label copied to clipboard",
+                duration = SnackbarDuration.Short
+            )
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         modifier = Modifier.fillMaxWidth()
@@ -289,17 +330,33 @@ private fun AccountDetails(profile: UserProfile) {
         ) {
             DetailRow("Display Name", profile.displayName)
             DetailRow("Username", profile.username)
-            DetailRow("Jami ID", profile.jamiId)
-            DetailRow("Account ID", profile.accountId)
+            DetailRow("Jami ID", profile.jamiId, copyable = true, onCopy = onCopy)
+            DetailRow("Account ID", profile.accountId, copyable = true, onCopy = onCopy)
         }
     }
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+private fun DetailRow(
+    label: String,
+    value: String,
+    copyable: Boolean = false,
+    onCopy: ((String, String) -> Unit)? = null
+) {
+    Column(
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .then(
+                if (copyable && onCopy != null) {
+                    Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = { onCopy(label, value) }
+                    )
+                } else Modifier
+            )
+    ) {
         Text(
-            text = label,
+            text = label + if (copyable) " (long-press to copy)" else "",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -392,6 +449,40 @@ private fun SettingsSwitchRow(
             onCheckedChange = onCheckedChange,
             enabled = enabled
         )
+    }
+}
+
+@Composable
+private fun NetworkDebugSection(profile: UserProfile) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 56.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "Network Status",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            DetailRow("DHT Status", profile.dhtStatus)
+            DetailRow("Device Status", profile.deviceStatus)
+            DetailRow("Connected Peers", profile.peerCount)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = if (profile.dhtStatus.contains("connected", ignoreCase = true)) {
+                    "✓ Network connected - trust requests should work"
+                } else {
+                    "⚠ Network issue detected - this may prevent trust requests from working"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (profile.dhtStatus.contains("connected", ignoreCase = true))
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 

@@ -33,23 +33,29 @@ class ChatViewModel(
     }
 
     fun loadConversation(conversationId: String) {
+        println("ChatViewModel.loadConversation: conversationId=$conversationId")
         viewModelScope.launch {
             _state.update { it.copy(conversationId = conversationId) }
 
             try {
                 val accountId = accountRepository.currentAccountId.value
+                val userJamiId = accountRepository.accountState.value.jamiId
+                println("ChatViewModel.loadConversation: accountId=$accountId, userJamiId=$userJamiId")
 
                 if (accountId != null) {
                     // Load conversation info
                     val convInfo = jamiBridge.getConversationInfo(accountId, conversationId)
                     val contactName = convInfo["title"] ?: "Conversation"
+                    println("ChatViewModel.loadConversation: contactName=$contactName, convInfo=$convInfo")
 
                     // Request messages to be loaded (results come via conversationEvents)
                     jamiBridge.loadConversationMessages(accountId, conversationId, "", 50)
+                    println("ChatViewModel.loadConversation: loadConversationMessages called")
 
                     _state.update {
                         it.copy(
-                            contactName = contactName
+                            contactName = contactName,
+                            userJamiId = userJamiId
                         )
                     }
                 } else {
@@ -81,28 +87,27 @@ class ChatViewModel(
 
     fun sendMessage() {
         val currentState = _state.value
-        if (!currentState.canSend) return
+        if (!currentState.canSend) {
+            println("ChatViewModel.sendMessage: canSend=false, skipping")
+            return
+        }
 
         val messageContent = currentState.messageInput.trim()
-        val newMessage = ChatMessage(
-            id = Clock.System.now().toEpochMilliseconds().toString(),
-            content = messageContent,
-            timestamp = "Just now",
-            isFromMe = true,
-            status = MessageStatus.Sending
-        )
+        println("ChatViewModel.sendMessage: content='$messageContent', conversationId=${currentState.conversationId}")
 
         viewModelScope.launch {
+            // Clear input and set sending state
             _state.update {
                 it.copy(
-                    messages = it.messages + newMessage,
                     messageInput = "",
                     isSending = true
                 )
             }
+            println("ChatViewModel.sendMessage: Cleared input, waiting for message callback")
 
             try {
                 val accountId = accountRepository.currentAccountId.value
+                println("ChatViewModel.sendMessage: accountId=$accountId")
                 if (accountId != null) {
                     jamiBridge.sendMessage(
                         accountId,
@@ -110,33 +115,18 @@ class ChatViewModel(
                         messageContent,
                         null
                     )
+                    println("ChatViewModel.sendMessage: jamiBridge.sendMessage called")
                 }
 
-                // Update message status to sent
+                // Message will appear via swarmMessageReceived callback
                 _state.update { state ->
-                    state.copy(
-                        isSending = false,
-                        messages = state.messages.map { msg ->
-                            if (msg.id == newMessage.id) {
-                                msg.copy(status = MessageStatus.Sent)
-                            } else {
-                                msg
-                            }
-                        }
-                    )
+                    state.copy(isSending = false)
                 }
             } catch (e: Exception) {
                 _state.update { state ->
                     state.copy(
                         isSending = false,
-                        error = e.message ?: "Failed to send message",
-                        messages = state.messages.map { msg ->
-                            if (msg.id == newMessage.id) {
-                                msg.copy(status = MessageStatus.Failed)
-                            } else {
-                                msg
-                            }
-                        }
+                        error = e.message ?: "Failed to send message"
                     )
                 }
             }
@@ -147,36 +137,77 @@ class ChatViewModel(
         _state.update { it.copy(error = null) }
     }
 
+    fun clearMessages() {
+        println("ChatViewModel.clearMessages: Clearing all messages from UI")
+        _state.update { it.copy(messages = emptyList()) }
+    }
+
+    fun deleteConversation() {
+        viewModelScope.launch {
+            try {
+                val accountId = accountRepository.currentAccountId.value
+                val conversationId = _state.value.conversationId
+                if (accountId != null && conversationId.isNotEmpty()) {
+                    println("ChatViewModel.deleteConversation: Deleting conversation - accountId=$accountId, conversationId=$conversationId")
+                    jamiBridge.removeConversation(accountId, conversationId)
+                    println("ChatViewModel.deleteConversation: Conversation deleted successfully")
+                }
+            } catch (e: Exception) {
+                println("ChatViewModel.deleteConversation: Error - ${e.message}")
+                _state.update { it.copy(error = "Failed to delete conversation: ${e.message}") }
+            }
+        }
+    }
+
     private fun handleConversationEvent(event: JamiConversationEvent) {
         when (event) {
             is JamiConversationEvent.MessageReceived -> {
+                println("ChatViewModel.handleConversationEvent: MessageReceived - conversationId=${event.conversationId}, currentConversationId=${_state.value.conversationId}, match=${event.conversationId == _state.value.conversationId}")
                 if (event.conversationId == _state.value.conversationId) {
-                    val accountId = accountRepository.currentAccountId.value
+                    // Get userJamiId from accountRepository instead of state (might not be set yet)
+                    val userJamiId = accountRepository.accountState.value.jamiId
                     val messageBody = event.message.body["body"] ?: ""
+
+                    // Check if message already exists (to avoid duplicates from optimistic UI)
+                    val messageExists = _state.value.messages.any { it.id == event.message.id }
+                    if (messageExists) {
+                        println("ChatViewModel.handleConversationEvent: Message already exists, skipping duplicate")
+                        return
+                    }
+
+                    println("ChatViewModel.handleConversationEvent: Adding message to UI - content='$messageBody', author=${event.message.author}, userJamiId=$userJamiId, isFromMe=${event.message.author == userJamiId}")
                     val newMessage = ChatMessage(
                         id = event.message.id,
                         content = messageBody,
                         timestamp = formatTimestamp(event.message.timestamp),
-                        isFromMe = event.message.author == accountId,
+                        isFromMe = event.message.author == userJamiId,
                         status = MessageStatus.Sent
                     )
                     _state.update { it.copy(messages = it.messages + newMessage) }
+                    println("ChatViewModel.handleConversationEvent: Message added, total messages=${_state.value.messages.size}")
+                } else {
+                    println("ChatViewModel.handleConversationEvent: Message ignored - not for current conversation")
                 }
             }
             is JamiConversationEvent.MessagesLoaded -> {
+                println("ChatViewModel.handleConversationEvent: MessagesLoaded - conversationId=${event.conversationId}, currentConversationId=${_state.value.conversationId}, messageCount=${event.messages.size}")
                 if (event.conversationId == _state.value.conversationId) {
-                    val accountId = accountRepository.currentAccountId.value
+                    // Get userJamiId from accountRepository instead of state
+                    val userJamiId = accountRepository.accountState.value.jamiId
                     val chatMessages = event.messages.mapNotNull { msg ->
                         val body = msg.body["body"] ?: return@mapNotNull null
                         ChatMessage(
                             id = msg.id,
                             content = body,
                             timestamp = formatTimestamp(msg.timestamp),
-                            isFromMe = msg.author == accountId,
+                            isFromMe = msg.author == userJamiId,
                             status = MessageStatus.Sent
                         )
                     }
                     _state.update { it.copy(messages = chatMessages) }
+                    println("ChatViewModel.handleConversationEvent: Messages loaded, total=${chatMessages.size}")
+                } else {
+                    println("ChatViewModel.handleConversationEvent: MessagesLoaded ignored - not for current conversation")
                 }
             }
             else -> { /* Handle other events */ }

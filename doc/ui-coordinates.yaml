@@ -157,6 +157,57 @@ devices:
             bounds: [[0, 620], [1080, 786]]
             tap: [540, 703]
 
+  # Pixel 2 Test Device
+  FA7AJ1A06417:
+    model: Pixel_2
+    product: walleye
+    resolution: [1080, 1920]
+
+    screens:
+      # =====================
+      # Main Navigation
+      # =====================
+      home:
+        bottom_nav:
+          chats_tab:
+            tap: [192, 1677]
+          contacts_tab:
+            tap: [559, 1709]
+          settings_tab:
+            tap: [932, 1692]
+        fab_new_conversation:
+          tap: [975, 945]
+
+      # =====================
+      # Common Elements
+      # =====================
+      common:
+        back_button:
+          tap: [50, 91]
+        top_right_action:
+          tap: [1010, 168]
+
+      # =====================
+      # Contacts Screen
+      # =====================
+      contacts:
+        add_contact_button:
+          tap: [1011, 118]
+        list_items:
+          first:
+            tap: [615, 540]
+          second:
+            tap: [584, 400]
+
+      # =====================
+      # Add Contact Screen
+      # =====================
+      add_contact:
+        search_button:
+          tap: [833, 729]
+        input_field:
+          tap: [683, 1725]
+
 # =============================================================================
 # Template for adding new devices
 # =============================================================================

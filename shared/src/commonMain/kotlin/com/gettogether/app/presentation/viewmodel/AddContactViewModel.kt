@@ -44,13 +44,17 @@ class AddContactViewModel(
                 val accountId = accountRepository.currentAccountId.value
 
                 if (accountId != null) {
-                    // Perform lookup via JamiBridge
-                    val result = jamiBridge.lookupName(accountId, currentState.contactId)
-                    if (result != null) {
+                    val query = currentState.contactId.trim()
+
+                    // Check if query is a 40-character hexadecimal Jami ID (DHT account)
+                    val isJamiId = query.length == 40 && query.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+
+                    if (isJamiId) {
+                        // Direct DHT account ID - skip name server lookup
                         val searchResult = ContactSearchResult(
-                            id = result.address,
-                            username = result.name,
-                            displayName = result.name,
+                            id = query,
+                            username = query.take(8), // Show first 8 chars as username
+                            displayName = query.take(8),
                             isAlreadyContact = false
                         )
                         _state.update {
@@ -61,11 +65,29 @@ class AddContactViewModel(
                             )
                         }
                     } else {
-                        _state.update {
-                            it.copy(
-                                isSearching = false,
-                                error = "User not found"
+                        // Username or short ID - perform name server lookup
+                        val result = jamiBridge.lookupName(accountId, query)
+                        if (result != null) {
+                            val searchResult = ContactSearchResult(
+                                id = result.address,
+                                username = result.name,
+                                displayName = result.name,
+                                isAlreadyContact = false
                             )
+                            _state.update {
+                                it.copy(
+                                    isSearching = false,
+                                    searchResult = searchResult,
+                                    error = null
+                                )
+                            }
+                        } else {
+                            _state.update {
+                                it.copy(
+                                    isSearching = false,
+                                    error = "User not found"
+                                )
+                            }
                         }
                     }
                 } else {
