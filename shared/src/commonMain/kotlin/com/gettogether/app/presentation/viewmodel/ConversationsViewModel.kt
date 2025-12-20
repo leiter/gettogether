@@ -16,7 +16,9 @@ data class ConversationsState(
     val conversations: List<ConversationUiItem> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
-    val hasAccount: Boolean = false
+    val hasAccount: Boolean = false,
+    val conversationToDelete: ConversationUiItem? = null,
+    val showDeleteDialog: Boolean = false
 )
 
 data class ConversationUiItem(
@@ -102,6 +104,35 @@ class ConversationsViewModel(
             println("ConversationsViewModel.clearAllConversations: Clearing all conversations for account $accountId")
             conversationRepository.clearAllConversations(accountId)
             _state.update { it.copy(conversations = emptyList()) }
+        }
+    }
+
+    fun showDeleteDialog(conversation: ConversationUiItem) {
+        _state.update {
+            it.copy(
+                conversationToDelete = conversation,
+                showDeleteDialog = true
+            )
+        }
+    }
+
+    fun hideDeleteDialog() {
+        _state.update {
+            it.copy(
+                conversationToDelete = null,
+                showDeleteDialog = false
+            )
+        }
+    }
+
+    fun deleteConversation() {
+        val accountId = accountRepository.currentAccountId.value ?: return
+        val conversation = _state.value.conversationToDelete ?: return
+
+        viewModelScope.launch {
+            println("ConversationsViewModel.deleteConversation: Deleting conversation ${conversation.id}")
+            conversationRepository.deleteConversation(accountId, conversation.id)
+            hideDeleteDialog()
         }
     }
 

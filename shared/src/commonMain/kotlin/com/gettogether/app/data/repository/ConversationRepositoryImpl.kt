@@ -257,30 +257,44 @@ class ConversationRepositoryImpl(
      */
     suspend fun refreshConversations(accountId: String) {
         try {
+            // Get user's own Jami ID to filter out self-conversations
+            val userJamiId = accountRepository.accountState.value.jamiId
+
             val conversationIds = jamiBridge.getConversations(accountId)
             val conversations = conversationIds.map { convId ->
                 loadConversation(accountId, convId)
             }
-            _conversationsCache.value = _conversationsCache.value + (accountId to conversations)
 
-            // Also load persisted messages for all conversations
-            println("ConversationRepository: Loading persisted messages for ${conversationIds.size} conversations")
-            conversationIds.forEach { convId ->
-                loadPersistedMessages(accountId, convId)
+            // Filter out self-conversations (where all participants are the user themselves)
+            val filteredConversations = conversations.filter { conversation ->
+                val hasOtherParticipants = conversation.participants.any { participant ->
+                    participant.uri != userJamiId
+                }
+                hasOtherParticipants
+            }
+
+            _conversationsCache.value = _conversationsCache.value + (accountId to filteredConversations)
+
+            // Also load persisted messages for filtered conversations only
+            println("ConversationRepository: Loading persisted messages for ${filteredConversations.size} conversations")
+            filteredConversations.forEach { conversation ->
+                loadPersistedMessages(accountId, conversation.id)
             }
 
             // Update conversations with lastMessage from loaded messages
-            val updatedConversations = conversations.map { conversation ->
+            // Also filter out empty conversations (with no messages)
+            val updatedConversations = filteredConversations.mapNotNull { conversation ->
                 val key = "$accountId:${conversation.id}"
                 val messages = _messagesCache.value[key] ?: emptyList()
                 if (messages.isNotEmpty()) {
                     val lastMsg = messages.last()
-                    println("ConversationRepository: Updating conversation ${conversation.id.take(16)}... with lastMessage: '${lastMsg.content}'")
                     conversation.copy(lastMessage = lastMsg)
                 } else {
-                    conversation
+                    null  // Filter out empty conversations
                 }
             }
+
+            println("ConversationRepository.refreshConversations: Loaded ${updatedConversations.size} conversations (filtered out ${conversations.size - updatedConversations.size} self/empty conversations)")
             _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
         } catch (e: Exception) {
             // Keep existing cache on error
@@ -480,6 +494,39 @@ class ConversationRepositoryImpl(
         }
 
         println("ConversationRepository.clearAllConversations: All conversations, messages, and contacts cleared from cache, daemon, and persistence")
+    }
+
+    suspend fun deleteConversation(accountId: String, conversationId: String) {
+        println("ConversationRepository.deleteConversation: Deleting conversation $conversationId")
+
+        try {
+            // Remove conversation from Jami daemon
+            jamiBridge.removeConversation(accountId, conversationId)
+            println("ConversationRepository.deleteConversation: ✓ Removed from daemon")
+
+            // Remove messages for this conversation from cache
+            val messageKey = "$accountId:$conversationId"
+            _messagesCache.value = _messagesCache.value - messageKey
+            println("ConversationRepository.deleteConversation: ✓ Removed messages from cache")
+
+            // Clear from persistence
+            try {
+                conversationPersistence.clearMessages(accountId, conversationId)
+                println("ConversationRepository.deleteConversation: ✓ Cleared messages from persistence")
+            } catch (e: Exception) {
+                println("ConversationRepository.deleteConversation: Failed to clear messages from persistence: ${e.message}")
+            }
+
+            // Refresh conversations from daemon to get updated list
+            // This ensures the UI updates properly
+            refreshConversations(accountId)
+            println("ConversationRepository.deleteConversation: ✓ Refreshed conversations")
+
+            println("ConversationRepository.deleteConversation: ✓ Conversation deleted successfully")
+        } catch (e: Exception) {
+            println("ConversationRepository.deleteConversation: ✗ Failed to delete conversation: ${e.message}")
+            throw e
+        }
     }
 
     /**

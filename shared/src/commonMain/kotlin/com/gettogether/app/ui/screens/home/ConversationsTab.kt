@@ -1,6 +1,7 @@
 package com.gettogether.app.ui.screens.home
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -22,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -36,13 +39,36 @@ import com.gettogether.app.presentation.viewmodel.ConversationUiItem
 import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationsTab(
     onConversationClick: (String) -> Unit,
     viewModel: ConversationsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+
+    // Delete confirmation dialog
+    if (state.showDeleteDialog && state.conversationToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.hideDeleteDialog() },
+            title = { Text("Delete Conversation") },
+            text = {
+                Text("Are you sure you want to permanently delete this conversation with ${state.conversationToDelete?.name}? This action cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.deleteConversation() }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.hideDeleteDialog() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -88,6 +114,10 @@ fun ConversationsTab(
                                 onClick = {
                                     println("ConversationsTab: Conversation clicked: ${conversation.id}")
                                     onConversationClick(conversation.id)
+                                },
+                                onLongClick = {
+                                    println("ConversationsTab: Conversation long pressed: ${conversation.id}")
+                                    viewModel.showDeleteDialog(conversation)
                                 }
                             )
                         }
@@ -101,15 +131,22 @@ fun ConversationsTab(
 @Composable
 private fun ConversationItem(
     conversation: ConversationUiItem,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = {
-                println("ConversationItem: Surface clicked for: ${conversation.name}")
-                onClick()
-            })
+            .combinedClickable(
+                onClick = {
+                    println("ConversationItem: Surface clicked for: ${conversation.name}")
+                    onClick()
+                },
+                onLongClick = {
+                    println("ConversationItem: Surface long clicked for: ${conversation.name}")
+                    onLongClick()
+                }
+            )
     ) {
         Row(
             modifier = Modifier
