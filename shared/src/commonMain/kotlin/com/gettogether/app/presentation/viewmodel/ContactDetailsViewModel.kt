@@ -39,6 +39,7 @@ class ContactDetailsViewModel(
                                 val contact = ContactDetails(
                                     id = contactId,
                                     displayName = domainContact.displayName,
+                                    customName = domainContact.customName,
                                     username = contactDetails["username"] ?: "",
                                     jamiId = contactId,
                                     isOnline = domainContact.isOnline, // Use online status from repository cache
@@ -250,5 +251,40 @@ class ContactDetailsViewModel(
             )
         )
         return demoContacts[contactId]
+    }
+
+    fun showEditNameDialog() {
+        _state.update { it.copy(showEditNameDialog = true) }
+    }
+
+    fun hideEditNameDialog() {
+        _state.update { it.copy(showEditNameDialog = false) }
+    }
+
+    fun updateCustomName(customName: String) {
+        val contact = _state.value.contact ?: return
+        val accountId = accountRepository.currentAccountId.value ?: return
+
+        viewModelScope.launch {
+            try {
+                // Update custom name in repository
+                contactRepository.updateCustomName(accountId, contact.id, customName)
+
+                // Update UI immediately
+                _state.update {
+                    it.copy(
+                        contact = contact.copy(customName = customName.takeIf { it.isNotBlank() }),
+                        showEditNameDialog = false
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        error = "Failed to update custom name: ${e.message}",
+                        showEditNameDialog = false
+                    )
+                }
+            }
+        }
     }
 }

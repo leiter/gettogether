@@ -7,7 +7,16 @@ data class Contact(
     val id: String,
     val uri: String,
     val displayName: String,
+    val customName: String? = null,  // User-defined custom name (takes priority over displayName)
     val avatarUri: String? = null,
     val isOnline: Boolean = false,
     val isBanned: Boolean = false
-)
+) {
+    /**
+     * Returns the effective display name for this contact.
+     * Priority: customName > displayName
+     */
+    fun getEffectiveName(): String {
+        return customName?.takeIf { it.isNotBlank() } ?: displayName
+    }
+}

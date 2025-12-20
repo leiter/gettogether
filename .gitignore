@@ -34,3 +34,4 @@ tmp/
 
 # Native libraries (built from jami-daemon)
 androidApp/src/main/jniLibs/
+jami-daemon-builds-backup-20251220.tar.gz

@@ -91,6 +91,7 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
     private external fun nativeAcceptTrustRequest(accountId: String, from: String)
     private external fun nativeDiscardTrustRequest(accountId: String, from: String)
     private external fun nativeGetTrustRequests(accountId: String): Array<Map<String, String>>
+    private external fun nativeSubscribeBuddy(accountId: String, uri: String, flag: Boolean)
 
     // Conversations
     private external fun nativeGetConversations(accountId: String): Array<String>
@@ -338,6 +339,14 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
             }
         } catch (e: UnsatisfiedLinkError) {
             emptyList()
+        }
+    }
+
+    override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean): Unit = withContext(Dispatchers.IO) {
+        try {
+            nativeSubscribeBuddy(accountId, uri, flag)
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w(TAG, "subscribeBuddy: native method not available")
         }
     }
 

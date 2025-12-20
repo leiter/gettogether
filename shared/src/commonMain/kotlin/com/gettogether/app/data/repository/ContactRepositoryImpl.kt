@@ -61,8 +61,15 @@ class ContactRepositoryImpl(
         // Auto-save contacts when cache changes
         scope.launch {
             _contactsCache.collect { contactsMap ->
+                println("ContactRepository: Auto-save triggered (${contactsMap.size} accounts)")
                 contactsMap.forEach { (accountId, contacts) ->
-                    contactPersistence.saveContacts(accountId, contacts)
+                    println("  → Saving ${contacts.size} contacts for account $accountId")
+                    try {
+                        contactPersistence.saveContacts(accountId, contacts)
+                        println("  ✓ Saved contacts for account $accountId")
+                    } catch (e: Exception) {
+                        println("  ✗ Failed to save contacts: ${e.message}")
+                    }
                 }
             }
         }
@@ -91,10 +98,17 @@ class ContactRepositoryImpl(
     }
 
     override suspend fun addContact(accountId: String, uri: String): Result<Contact> {
+        println("ContactRepository: addContact() called")
+        println("  AccountId: $accountId")
+        println("  URI: $uri")
+
         return try {
+            println("ContactRepository: → Calling jamiBridge.addContact()...")
             jamiBridge.addContact(accountId, uri)
+            println("ContactRepository: ✓ jamiBridge.addContact() completed")
 
             // Create a placeholder contact until we get the full details
+            println("ContactRepository: → Creating placeholder contact...")
             val contact = Contact(
                 id = uri,
                 uri = uri,
@@ -173,16 +187,49 @@ class ContactRepositoryImpl(
         }
     }
 
+    override suspend fun updateCustomName(accountId: String, contactId: String, customName: String): Result<Unit> {
+        return try {
+            // Update custom name in cache
+            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+            val updatedContacts = currentContacts.map { contact ->
+                if (contact.id == contactId || contact.uri == contactId) {
+                    contact.copy(customName = customName.takeIf { it.isNotBlank() })
+                } else {
+                    contact
+                }
+            }
+            _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
+
+            // Custom name is automatically saved to persistence via the auto-save flow in init{}
+            println("ContactRepository: ✓ Updated custom name for contact $contactId to: $customName")
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            println("ContactRepository: ✗ Failed to update custom name: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     /**
      * Load persisted contacts from storage.
      */
     private suspend fun loadPersistedContacts(accountId: String) {
+        println("ContactRepository: loadPersistedContacts() for account: $accountId")
         try {
             val persistedContacts = contactPersistence.loadContacts(accountId)
+            println("ContactRepository: ✓ Loaded ${persistedContacts.size} persisted contacts")
             if (persistedContacts.isNotEmpty()) {
+                persistedContacts.forEach { contact ->
+                    println("  - ${contact.displayName} (${contact.uri.take(16)}...)")
+                }
                 _contactsCache.value = _contactsCache.value + (accountId to persistedContacts)
+                println("ContactRepository: ✓ Added persisted contacts to cache")
+            } else {
+                println("ContactRepository: No persisted contacts found")
             }
         } catch (e: Exception) {
+            println("ContactRepository: ✗ Failed to load persisted contacts: ${e.message}")
+            e.printStackTrace()
             // Keep existing cache on error
         }
     }
@@ -191,9 +238,14 @@ class ContactRepositoryImpl(
      * Refresh contacts from JamiBridge.
      */
     suspend fun refreshContacts(accountId: String) {
+        println("ContactRepository: refreshContacts() for account: $accountId")
         try {
+            println("ContactRepository: → Calling jamiBridge.getContacts()...")
             val jamiContacts = jamiBridge.getContacts(accountId)
+            println("ContactRepository: ✓ Received ${jamiContacts.size} contacts from Jami")
+
             val contacts = jamiContacts.map { jamiContact ->
+                println("  - Mapping contact: ${jamiContact.displayName} (${jamiContact.uri.take(16)}...)")
                 Contact(
                     id = jamiContact.uri,
                     uri = jamiContact.uri,
@@ -204,7 +256,22 @@ class ContactRepositoryImpl(
                 )
             }
             _contactsCache.value = _contactsCache.value + (accountId to contacts)
+            println("ContactRepository: ✓ Updated cache with ${contacts.size} contacts")
+
+            // Subscribe to presence for all contacts
+            println("ContactRepository: → Subscribing to presence for all contacts...")
+            contacts.forEach { contact ->
+                try {
+                    println("  → Subscribing to: ${contact.uri.take(16)}...")
+                    jamiBridge.subscribeBuddy(accountId, contact.uri, true)
+                } catch (e: Exception) {
+                    println("  ✗ Failed to subscribe: ${e.message}")
+                }
+            }
+            println("ContactRepository: ✓ Presence subscriptions requested")
         } catch (e: Exception) {
+            println("ContactRepository: ✗ Failed to refresh contacts: ${e.message}")
+            e.printStackTrace()
             // Keep existing cache on error
         }
     }

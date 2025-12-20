@@ -34,23 +34,40 @@ class DaemonManager(
      * This should be called once when the app starts.
      */
     fun start() {
+        println("DaemonManager: start() called, current state=${_state.value}")
+
         if (_state.value != DaemonState.Uninitialized && _state.value != DaemonState.Stopped) {
+            println("DaemonManager: Skipping start - daemon already initialized/running (state=${_state.value})")
             return
         }
 
         scope.launch {
             try {
+                println("DaemonManager: → Changing state to Initializing")
                 _state.value = DaemonState.Initializing
                 _error.value = null
 
                 val dataPath = dataPathProvider.getDataPath()
+                println("DaemonManager: → Data path: $dataPath")
+                println("DaemonManager: → Calling bridge.initDaemon()...")
+
                 bridge.initDaemon(dataPath)
+                println("DaemonManager: ✓ bridge.initDaemon() completed")
 
+                println("DaemonManager: → Changing state to Starting")
                 _state.value = DaemonState.Starting
-                bridge.startDaemon()
 
+                println("DaemonManager: → Calling bridge.startDaemon()...")
+                bridge.startDaemon()
+                println("DaemonManager: ✓ bridge.startDaemon() completed")
+
+                println("DaemonManager: → Changing state to Running")
                 _state.value = DaemonState.Running
+                println("DaemonManager: ✓✓✓ Daemon is now RUNNING")
             } catch (e: Exception) {
+                println("DaemonManager: ✗✗✗ Daemon startup FAILED!")
+                println("DaemonManager:   Error: ${e.message}")
+                e.printStackTrace()
                 _state.value = DaemonState.Error
                 _error.value = DaemonError.StartupFailed(e.message ?: "Unknown error")
             }
