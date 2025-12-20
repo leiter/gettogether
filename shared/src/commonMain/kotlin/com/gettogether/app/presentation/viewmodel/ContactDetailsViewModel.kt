@@ -3,6 +3,7 @@ package com.gettogether.app.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.ContactDetails
 import com.gettogether.app.presentation.state.ContactDetailsState
@@ -14,7 +15,8 @@ import kotlinx.coroutines.launch
 
 class ContactDetailsViewModel(
     private val jamiBridge: JamiBridge,
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val contactRepository: ContactRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ContactDetailsState())
@@ -27,25 +29,41 @@ class ContactDetailsViewModel(
                 val accountId = accountRepository.currentAccountId.value
 
                 if (accountId != null) {
-                    val contactDetails = jamiBridge.getContactDetails(accountId, contactId)
+                    // Subscribe to contact updates from repository (includes online status from presence cache)
+                    viewModelScope.launch {
+                        contactRepository.getContactById(accountId, contactId).collect { domainContact ->
+                            if (domainContact != null) {
+                                // Get additional details from Jami
+                                val contactDetails = jamiBridge.getContactDetails(accountId, contactId)
 
-                    val contact = ContactDetails(
-                        id = contactId,
-                        displayName = contactDetails["displayName"] ?: contactDetails["username"] ?: contactId.take(8),
-                        username = contactDetails["username"] ?: "",
-                        jamiId = contactId,
-                        isOnline = contactDetails["presence"] == "1",
-                        isTrusted = contactDetails["confirmed"] == "true",
-                        isBlocked = contactDetails["banned"] == "true",
-                        addedDate = contactDetails["addedDate"] ?: "",
-                        lastSeen = if (contactDetails["presence"] == "1") null else contactDetails["lastSeen"]
-                    )
+                                val contact = ContactDetails(
+                                    id = contactId,
+                                    displayName = domainContact.displayName,
+                                    username = contactDetails["username"] ?: "",
+                                    jamiId = contactId,
+                                    isOnline = domainContact.isOnline, // Use online status from repository cache
+                                    isTrusted = contactDetails["confirmed"] == "true",
+                                    isBlocked = domainContact.isBanned,
+                                    addedDate = contactDetails["addedDate"] ?: "",
+                                    lastSeen = if (domainContact.isOnline) null else contactDetails["lastSeen"]
+                                )
 
-                    _state.update {
-                        it.copy(
-                            isLoading = false,
-                            contact = contact
-                        )
+                                _state.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        contact = contact
+                                    )
+                                }
+                            } else {
+                                // Contact not found in repository
+                                _state.update {
+                                    it.copy(
+                                        isLoading = false,
+                                        error = "Contact not found"
+                                    )
+                                }
+                            }
+                        }
                     }
                 } else {
                     // Demo contact data fallback

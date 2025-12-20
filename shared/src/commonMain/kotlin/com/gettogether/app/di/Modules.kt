@@ -29,6 +29,7 @@ val sharedModule = module {
     // Repositories
     single { AccountRepository(get()) }
     single { ContactRepositoryImpl(get(), get(), get()) }
+    single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }
     single { ConversationRepositoryImpl(get(), get(), get()) }
 
     // ViewModels
@@ -41,7 +42,7 @@ val sharedModule = module {
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }
     viewModel { SettingsViewModel(get(), get(), get()) }
-    viewModel { ContactDetailsViewModel(get(), get()) }
+    viewModel { ContactDetailsViewModel(get(), get(), get()) }
     viewModel { CallViewModel(get(), get(), getOrNull()) }
     viewModel { ConferenceViewModel(get(), get()) }
 }
