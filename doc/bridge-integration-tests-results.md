@@ -7,7 +7,7 @@
 ## Summary
 
 ✅ **BUILD SUCCESSFUL**
-**Tests:** 92 total | 89 passed | 3 skipped | 0 failed
+**Tests:** 111 total | 108 passed | 3 skipped | 0 failed
 
 ## Test Results
 
@@ -135,6 +135,42 @@ All tests passed, verifying call operations:
 - `testUnmuteConferenceParticipant` - Unmute participant
 - `testHangUpConferenceParticipant` - Remove participant from conference
 
+### ✅ JamiBridgeFileTransferTest (19 tests)
+All tests passed, verifying file transfer operations:
+
+**Send File Operations (7 tests):**
+- `testSendFile` - Send text file
+- `testSendFileWithCustomDisplayName` - Custom display name handling
+- `testSendLargeFile` - Send 100 KB file
+- `testSendMultipleFiles` - Multiple file transfers
+- `testSendFileWithSpecialCharactersInName` - Special characters in filename
+- `testSendFileWithUnicodeDisplayName` - Unicode filename support
+- `testSendEmptyFile` - Empty file handling
+
+**Accept File Transfer (2 tests):**
+- `testAcceptFileTransfer` - Accept incoming file
+- `testAcceptFileTransferWithDummyId` - Handle non-existent file acceptance
+
+**Cancel File Transfer (2 tests):**
+- `testCancelFileTransfer` - Cancel active transfer
+- `testCancelNonExistentFileTransfer` - Handle non-existent transfer cancellation
+
+**Get File Transfer Info (2 tests):**
+- `testGetFileTransferInfo` - Retrieve transfer information
+- `testGetFileTransferInfoForNonExistentFile` - Handle missing transfer info
+
+**File Transfer Workflows (2 tests):**
+- `testCompleteFileTransferWorkflow` - Full send-accept workflow
+- `testSendThenCancelWorkflow` - Send-cancel workflow
+
+**Multiple Conversations/Accounts (2 tests):**
+- `testFileTransferInMultipleConversations` - Cross-conversation transfers
+- `testFileTransferWithMultipleAccounts` - Multi-account support
+
+**Different File Types (2 tests):**
+- `testSendBinaryFile` - Binary file transfer (10 KB)
+- `testSendFileWithLongContent` - Large text file (50 KB)
+
 ## What Was Proven
 
 ### ✅ JNI Bridge Functionality
@@ -158,12 +194,19 @@ All tests passed, verifying call operations:
 11. **Call control** - Hold, unhold, mute audio/video
 12. **Conference calls** - Create, manage, and control conference calls
 13. **Multi-call scenarios** - Multiple simultaneous calls and accounts
+14. **File transfer** - Send, accept, cancel file transfers
+15. **File transfer info** - Retrieve transfer progress and details
+16. **Multi-file scenarios** - Multiple transfers across conversations and accounts
 
 ### ✅ Edge Cases Handled
 1. **Empty strings** - Handled correctly
 2. **Very long strings** - 10,000 character strings work
 3. **Special characters** - All special characters marshal correctly
 4. **Null handling** - Null values handled appropriately in Kotlin
+5. **Empty files** - Empty file transfers handled
+6. **Large files** - Files up to 100 KB tested successfully
+7. **Unicode filenames** - Full Unicode support in file display names
+8. **Special characters in filenames** - Special characters handled correctly
 
 ## Known Issues
 
@@ -216,6 +259,8 @@ All tests passed, verifying call operations:
 - **Messaging:** Send, load history, Unicode support, special characters
 - **Call operations:** Place, accept, refuse, hangup, hold, unhold, mute
 - **Conference calls:** Create, add participants, hangup, mute, get details
+- **File transfers:** Send, accept, cancel, get info, multiple files
+- **File edge cases:** Empty files, large files, Unicode/special char filenames
 
 ## Conclusion
 
@@ -226,7 +271,7 @@ The JamiBridge integration tests successfully verify that the Kotlin ↔ C++ bri
 - ✅ Daemon operations function properly
 - ✅ Account management works
 
-The 3 skipped tests are due to known bugs in the native Jami library (not the bridge layer), and do not impact the validity of the bridge implementation. The bridge correctly handles all operations including contacts, conversations, messaging, and calls.
+The 3 skipped tests are due to known bugs in the native Jami library (not the bridge layer), and do not impact the validity of the bridge implementation. The bridge correctly handles all operations including contacts, conversations, messaging, calls, and file transfers.
 
 ## Running the Tests
 
@@ -248,7 +293,8 @@ open androidApp/build/reports/androidTests/connected/index.html
 2. ✅ Contact operations tests complete
 3. ✅ Conversation and messaging tests complete
 4. ✅ Call and conference call tests complete
-5. Consider adding file transfer bridge tests
+5. ✅ File transfer tests complete
 6. Consider adding audio/video device management tests
-7. Monitor for fixes to native library bugs (updateProfile, setAccountDetails, setMessageDisplayed)
-8. Add CI/CD integration to run tests automatically
+7. Consider adding codec and video rendering tests
+8. Monitor for fixes to native library bugs (updateProfile, setAccountDetails, setMessageDisplayed)
+9. Add CI/CD integration to run tests automatically
