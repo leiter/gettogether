@@ -7,7 +7,7 @@
 ## Summary
 
 ✅ **BUILD SUCCESSFUL**
-**Tests:** 63 total | 60 passed | 3 skipped | 0 failed
+**Tests:** 92 total | 89 passed | 3 skipped | 0 failed
 
 ## Test Results
 
@@ -93,6 +93,48 @@ All tests passed, verifying contact management operations:
 **Skipped (1 test):**
 - `testSetMessageDisplayed` - Native crash in libjami (null pointer or state issue)
 
+### ✅ JamiBridgeCallOperationsTest (29 tests)
+All tests passed, verifying call operations:
+
+**Basic Call Operations (7 tests):**
+- `testPlaceCall` - Place audio call
+- `testPlaceVideoCall` - Place video call
+- `testAcceptCall` - Accept incoming call
+- `testAcceptCallWithVideo` - Accept call with video
+- `testRefuseCall` - Refuse incoming call
+- `testHangUp` - Hang up active call
+- `testHangUpNonExistentCall` - Handle non-existent call gracefully
+
+**Call Control Operations (8 tests):**
+- `testHoldCall` - Put call on hold
+- `testUnholdCall` - Resume held call
+- `testMuteAudio` - Mute audio in call
+- `testUnmuteAudio` - Unmute audio in call
+- `testMuteVideo` - Mute video in call
+- `testUnmuteVideo` - Unmute video in call
+
+**Call Information (4 tests):**
+- `testGetCallDetails` - Retrieve call information
+- `testGetCallDetailsForNonExistentCall` - Handle missing call details
+- `testGetActiveCalls` - Retrieve active calls list
+- `testGetActiveCallsReturnsEmptyForNewAccount` - Empty list handling
+
+**Multiple Calls (2 tests):**
+- `testMultipleCalls` - Multiple simultaneous calls
+- `testCallOperationsWithMultipleAccounts` - Multi-account call support
+
+**Conference Calls (10 tests):**
+- `testCreateConference` - Create conference call
+- `testCreateConferenceWithEmptyParticipants` - Empty conference handling
+- `testAddParticipantToConference` - Add participant to conference
+- `testHangUpConference` - End conference call
+- `testGetConferenceDetails` - Retrieve conference information
+- `testGetConferenceParticipants` - Get participant list
+- `testGetConferenceInfos` - Get detailed conference info
+- `testMuteConferenceParticipant` - Mute specific participant
+- `testUnmuteConferenceParticipant` - Unmute participant
+- `testHangUpConferenceParticipant` - Remove participant from conference
+
 ## What Was Proven
 
 ### ✅ JNI Bridge Functionality
@@ -112,6 +154,10 @@ All tests passed, verifying contact management operations:
 7. **Conversation management** - Create, retrieve, update, delete conversations
 8. **Messaging** - Send messages, load message history
 9. **Multi-conversation support** - Multiple conversations per account
+10. **Call operations** - Place, accept, refuse, hang up calls
+11. **Call control** - Hold, unhold, mute audio/video
+12. **Conference calls** - Create, manage, and control conference calls
+13. **Multi-call scenarios** - Multiple simultaneous calls and accounts
 
 ### ✅ Edge Cases Handled
 1. **Empty strings** - Handled correctly
@@ -168,6 +214,8 @@ All tests passed, verifying contact management operations:
 - **Contact operations:** Add, remove, ban, trust requests, presence
 - **Conversation operations:** Create, retrieve, update, delete, members
 - **Messaging:** Send, load history, Unicode support, special characters
+- **Call operations:** Place, accept, refuse, hangup, hold, unhold, mute
+- **Conference calls:** Create, add participants, hangup, mute, get details
 
 ## Conclusion
 
@@ -178,7 +226,7 @@ The JamiBridge integration tests successfully verify that the Kotlin ↔ C++ bri
 - ✅ Daemon operations function properly
 - ✅ Account management works
 
-The 3 skipped tests are due to known bugs in the native Jami library (not the bridge layer), and do not impact the validity of the bridge implementation. The bridge correctly handles all operations including contacts, conversations, and messaging.
+The 3 skipped tests are due to known bugs in the native Jami library (not the bridge layer), and do not impact the validity of the bridge implementation. The bridge correctly handles all operations including contacts, conversations, messaging, and calls.
 
 ## Running the Tests
 
@@ -199,7 +247,8 @@ open androidApp/build/reports/androidTests/connected/index.html
 1. ✅ Bridge integration tests are complete and passing
 2. ✅ Contact operations tests complete
 3. ✅ Conversation and messaging tests complete
-4. Consider adding call-related bridge tests
+4. ✅ Call and conference call tests complete
 5. Consider adding file transfer bridge tests
-6. Monitor for fixes to native library bugs (updateProfile, setAccountDetails, setMessageDisplayed)
-7. Add CI/CD integration to run tests automatically
+6. Consider adding audio/video device management tests
+7. Monitor for fixes to native library bugs (updateProfile, setAccountDetails, setMessageDisplayed)
+8. Add CI/CD integration to run tests automatically
