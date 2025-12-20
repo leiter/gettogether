@@ -29,12 +29,12 @@ val sharedModule = module {
     // Repositories
     single { AccountRepository(get()) }
     single { ContactRepositoryImpl(get(), get(), get()) }
-    single { ConversationRepositoryImpl(get(), get()) }
+    single { ConversationRepositoryImpl(get(), get(), get()) }
 
     // ViewModels
     viewModel { CreateAccountViewModel(get(), get()) }
     viewModel { ImportAccountViewModel(get(), get()) }
-    viewModel { ChatViewModel(get(), get()) }
+    viewModel { ChatViewModel(get(), get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }
     viewModel { ContactsViewModel(get(), get()) }
     viewModel { TrustRequestsViewModel(get(), get()) }

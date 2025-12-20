@@ -23,7 +23,8 @@ import kotlinx.datetime.Instant
  */
 class ConversationRepositoryImpl(
     private val jamiBridge: JamiBridge,
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val conversationPersistence: com.gettogether.app.data.persistence.ConversationPersistence
 ) : ConversationRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -46,7 +47,58 @@ class ConversationRepositoryImpl(
         scope.launch {
             accountRepository.currentAccountId.collect { accountId ->
                 if (accountId != null) {
+                    // Load persisted conversations first
+                    loadPersistedConversations(accountId)
+                    // Then refresh from Jami
                     refreshConversations(accountId)
+                }
+            }
+        }
+
+        // Auto-save conversations when cache changes
+        scope.launch {
+            _conversationsCache.collect { conversationsMap ->
+                println("ConversationRepository: Auto-save conversations triggered (${conversationsMap.size} accounts)")
+                conversationsMap.forEach { (accountId, conversations) ->
+                    println("  → Saving ${conversations.size} conversations for account $accountId")
+                    try {
+                        conversationPersistence.saveConversations(accountId, conversations)
+                        println("  ✓ Saved conversations for account $accountId")
+                    } catch (e: Exception) {
+                        println("  ✗ Failed to save conversations: ${e.message}")
+                    }
+                }
+            }
+        }
+
+        // Auto-save messages when cache changes
+        scope.launch {
+            _messagesCache.collect { messagesMap ->
+                println("ConversationRepository: Auto-save messages triggered (${messagesMap.size} conversations)")
+                if (messagesMap.isEmpty()) {
+                    println("ConversationRepository: No messages to save (cache is empty)")
+                }
+                messagesMap.forEach { (key, messages) ->
+                    println("ConversationRepository: Processing key='$key', messages=${messages.size}")
+                    val parts = key.split(":")
+                    if (parts.size == 2) {
+                        val accountId = parts[0]
+                        val conversationId = parts[1]
+                        if (messages.isNotEmpty()) {
+                            println("  → Saving ${messages.size} messages for conversation $conversationId")
+                            try {
+                                conversationPersistence.saveMessages(accountId, conversationId, messages)
+                                println("  ✓ Saved messages for conversation $conversationId")
+                            } catch (e: Exception) {
+                                println("  ✗ Failed to save messages: ${e.message}")
+                                e.printStackTrace()
+                            }
+                        } else {
+                            println("  → Conversation $conversationId has 0 messages, skipping save")
+                        }
+                    } else {
+                        println("  ✗ Invalid key format: '$key' (expected 'accountId:conversationId')")
+                    }
                 }
             }
         }
@@ -75,6 +127,9 @@ class ConversationRepositoryImpl(
         scope.launch {
             val key = "$accountId:$conversationId"
             if (_messagesCache.value[key].isNullOrEmpty()) {
+                // Load persisted messages first
+                loadPersistedMessages(accountId, conversationId)
+                // Then load from Jami
                 loadMessages(accountId, conversationId)
             }
         }
@@ -207,6 +262,26 @@ class ConversationRepositoryImpl(
                 loadConversation(accountId, convId)
             }
             _conversationsCache.value = _conversationsCache.value + (accountId to conversations)
+
+            // Also load persisted messages for all conversations
+            println("ConversationRepository: Loading persisted messages for ${conversationIds.size} conversations")
+            conversationIds.forEach { convId ->
+                loadPersistedMessages(accountId, convId)
+            }
+
+            // Update conversations with lastMessage from loaded messages
+            val updatedConversations = conversations.map { conversation ->
+                val key = "$accountId:${conversation.id}"
+                val messages = _messagesCache.value[key] ?: emptyList()
+                if (messages.isNotEmpty()) {
+                    val lastMsg = messages.last()
+                    println("ConversationRepository: Updating conversation ${conversation.id.take(16)}... with lastMessage: '${lastMsg.content}'")
+                    conversation.copy(lastMessage = lastMsg)
+                } else {
+                    conversation
+                }
+            }
+            _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
         } catch (e: Exception) {
             // Keep existing cache on error
         }
@@ -260,12 +335,18 @@ class ConversationRepositoryImpl(
             is JamiConversationEvent.MessageReceived -> {
                 println("ConversationRepository.handleConversationEvent: MessageReceived - accountId=$accountId, conversationId=${event.conversationId}, messageId=${event.message.id}, author=${event.message.author}, content=${event.message.body["body"]}")
                 val key = "$accountId:${event.conversationId}"
+                // Jami timestamps are in seconds, convert to milliseconds
+                val timestampMillis = if (event.message.timestamp < 100000000000) {
+                    event.message.timestamp * 1000  // Convert seconds to milliseconds
+                } else {
+                    event.message.timestamp  // Already in milliseconds
+                }
                 val message = Message(
                     id = event.message.id,
                     conversationId = event.conversationId,
                     authorId = event.message.author,
                     content = event.message.body["body"] ?: "",
-                    timestamp = Instant.fromEpochMilliseconds(event.message.timestamp),
+                    timestamp = Instant.fromEpochMilliseconds(timestampMillis),
                     status = MessageStatus.DELIVERED,
                     type = MessageType.TEXT
                 )
@@ -390,7 +471,15 @@ class ConversationRepositoryImpl(
         // Clear ALL messages for this account's conversations
         _messagesCache.value = _messagesCache.value.filterKeys { !it.startsWith("$accountId:") }
 
-        println("ConversationRepository.clearAllConversations: All conversations, messages, and contacts cleared from cache and daemon")
+        // Clear from persistence
+        try {
+            conversationPersistence.clearConversations(accountId)
+            println("ConversationRepository.clearAllConversations: Cleared conversations from persistence")
+        } catch (e: Exception) {
+            println("ConversationRepository.clearAllConversations: Failed to clear persistence: ${e.message}")
+        }
+
+        println("ConversationRepository.clearAllConversations: All conversations, messages, and contacts cleared from cache, daemon, and persistence")
     }
 
     /**
@@ -419,6 +508,50 @@ class ConversationRepositoryImpl(
             _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
         } catch (e: Exception) {
             // Handle error silently
+        }
+    }
+
+    /**
+     * Load persisted conversations from storage.
+     */
+    private suspend fun loadPersistedConversations(accountId: String) {
+        println("ConversationRepository: loadPersistedConversations() for account: $accountId")
+        try {
+            val persistedConversations = conversationPersistence.loadConversations(accountId)
+            println("ConversationRepository: ✓ Loaded ${persistedConversations.size} persisted conversations")
+            if (persistedConversations.isNotEmpty()) {
+                persistedConversations.forEach { conversation ->
+                    println("  - ${conversation.title} (${conversation.id.take(16)}...)")
+                }
+                _conversationsCache.value = _conversationsCache.value + (accountId to persistedConversations)
+                println("ConversationRepository: ✓ Added persisted conversations to cache")
+            } else {
+                println("ConversationRepository: No persisted conversations found")
+            }
+        } catch (e: Exception) {
+            println("ConversationRepository: ✗ Failed to load persisted conversations: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * Load persisted messages from storage.
+     */
+    private suspend fun loadPersistedMessages(accountId: String, conversationId: String) {
+        println("ConversationRepository: loadPersistedMessages() for conversation: $conversationId")
+        try {
+            val persistedMessages = conversationPersistence.loadMessages(accountId, conversationId)
+            println("ConversationRepository: ✓ Loaded ${persistedMessages.size} persisted messages")
+            if (persistedMessages.isNotEmpty()) {
+                val key = "$accountId:$conversationId"
+                _messagesCache.value = _messagesCache.value + (key to persistedMessages)
+                println("ConversationRepository: ✓ Added persisted messages to cache")
+            } else {
+                println("ConversationRepository: No persisted messages found")
+            }
+        } catch (e: Exception) {
+            println("ConversationRepository: ✗ Failed to load persisted messages: ${e.message}")
+            e.printStackTrace()
         }
     }
 }

@@ -3,6 +3,7 @@ package com.gettogether.app.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.data.repository.ConversationRepositoryImpl
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiConversationEvent
 import com.gettogether.app.presentation.state.ChatMessage
@@ -17,7 +18,8 @@ import kotlinx.datetime.Clock
 
 class ChatViewModel(
     private val jamiBridge: JamiBridge,
-    private val accountRepository: AccountRepository
+    private val accountRepository: AccountRepository,
+    private val conversationRepository: ConversationRepositoryImpl
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -47,6 +49,24 @@ class ChatViewModel(
                     val convInfo = jamiBridge.getConversationInfo(accountId, conversationId)
                     val contactName = convInfo["title"] ?: "Conversation"
                     println("ChatViewModel.loadConversation: contactName=$contactName, convInfo=$convInfo")
+
+                    // Subscribe to messages from ConversationRepository (includes persisted messages)
+                    viewModelScope.launch {
+                        conversationRepository.getMessages(accountId, conversationId).collect { messages ->
+                            println("ChatViewModel: Received ${messages.size} messages from repository")
+                            val chatMessages = messages.map { msg ->
+                                ChatMessage(
+                                    id = msg.id,
+                                    content = msg.content,
+                                    timestamp = formatTimestamp(msg.timestamp.toEpochMilliseconds()),
+                                    isFromMe = msg.authorId == accountId || msg.authorId == userJamiId,
+                                    status = MessageStatus.Sent
+                                )
+                            }
+                            _state.update { it.copy(messages = chatMessages) }
+                            println("ChatViewModel: Updated state with ${chatMessages.size} messages")
+                        }
+                    }
 
                     // Request messages to be loaded (results come via conversationEvents)
                     jamiBridge.loadConversationMessages(accountId, conversationId, "", 50)

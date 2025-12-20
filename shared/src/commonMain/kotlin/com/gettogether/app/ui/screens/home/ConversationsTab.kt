@@ -85,7 +85,10 @@ fun ConversationsTab(
                         items(state.conversations, key = { it.id }) { conversation ->
                             ConversationItem(
                                 conversation = conversation,
-                                onClick = { onConversationClick(conversation.id) }
+                                onClick = {
+                                    println("ConversationsTab: Conversation clicked: ${conversation.id}")
+                                    onConversationClick(conversation.id)
+                                }
                             )
                         }
                     }
@@ -103,7 +106,10 @@ private fun ConversationItem(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(onClick = {
+                println("ConversationItem: Surface clicked for: ${conversation.name}")
+                onClick()
+            })
     ) {
         Row(
             modifier = Modifier
@@ -131,13 +137,18 @@ private fun ConversationItem(
             Column(modifier = Modifier.weight(1f)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = conversation.name,
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
+                        fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = conversation.time,
                         style = MaterialTheme.typography.bodySmall,

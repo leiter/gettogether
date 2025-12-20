@@ -1,7 +1,9 @@
 package com.gettogether.app.di
 
 import com.gettogether.app.data.persistence.AndroidContactPersistence
+import com.gettogether.app.data.persistence.AndroidConversationPersistence
 import com.gettogether.app.data.persistence.ContactPersistence
+import com.gettogether.app.data.persistence.ConversationPersistence
 import com.gettogether.app.data.persistence.setContactPersistence
 import com.gettogether.app.data.repository.AndroidSettingsRepository
 import com.gettogether.app.data.repository.SettingsRepository
@@ -29,6 +31,11 @@ actual val platformModule: Module = module {
     // Contact persistence
     single<ContactPersistence> {
         AndroidContactPersistence(androidContext()).also { setContactPersistence(it) }
+    }
+
+    // Conversation persistence
+    single<ConversationPersistence> {
+        AndroidConversationPersistence(androidContext())
     }
 
     // Jami daemon bridge and lifecycle
