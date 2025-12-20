@@ -244,12 +244,22 @@ class ContactRepositoryImpl(
             val jamiContacts = jamiBridge.getContacts(accountId)
             println("ContactRepository: ✓ Received ${jamiContacts.size} contacts from Jami")
 
+            // Get existing contacts to preserve custom names
+            val existingContacts = _contactsCache.value[accountId] ?: emptyList()
+            val existingContactsMap = existingContacts.associateBy { it.uri }
+
             val contacts = jamiContacts.map { jamiContact ->
                 println("  - Mapping contact: ${jamiContact.displayName} (${jamiContact.uri.take(16)}...)")
+
+                // Preserve customName from existing contact if available
+                val existingContact = existingContactsMap[jamiContact.uri]
+                val customName = existingContact?.customName
+
                 Contact(
                     id = jamiContact.uri,
                     uri = jamiContact.uri,
                     displayName = jamiContact.displayName.ifBlank { jamiContact.uri.take(8) },
+                    customName = customName,
                     avatarUri = jamiContact.avatarPath,
                     isOnline = _onlineStatusCache.value[jamiContact.uri] ?: false,
                     isBanned = jamiContact.isBanned

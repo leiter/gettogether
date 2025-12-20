@@ -104,12 +104,13 @@ class ContactsViewModel(
     }
 
     private fun Contact.toUiItem(): ContactUiItem {
-        val initial = displayName.firstOrNull()?.uppercase() ?: uri.firstOrNull()?.uppercase() ?: "?"
+        val effectiveName = getEffectiveName()
+        val initial = effectiveName.firstOrNull()?.uppercase() ?: uri.firstOrNull()?.uppercase() ?: "?"
 
         return ContactUiItem(
             id = id,
             uri = uri,
-            name = displayName,
+            name = effectiveName,
             isOnline = isOnline,
             isBanned = isBanned,
             avatarInitial = initial
