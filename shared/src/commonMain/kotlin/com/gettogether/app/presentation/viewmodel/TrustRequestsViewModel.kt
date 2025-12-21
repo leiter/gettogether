@@ -175,7 +175,13 @@ class TrustRequestsViewModel(
         val accountId = accountRepository.currentAccountId.value ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            contactRepository.refreshTrustRequests(accountId)
+            try {
+                contactRepository.refreshTrustRequests(accountId)
+                // Force wait for flow emission to complete
+                kotlinx.coroutines.delay(100)
+            } finally {
+                _state.update { it.copy(isLoading = false) }
+            }
         }
     }
 
