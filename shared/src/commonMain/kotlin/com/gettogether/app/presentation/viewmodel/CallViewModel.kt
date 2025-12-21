@@ -7,6 +7,7 @@ import com.gettogether.app.jami.CallState as JamiCallState
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
 import com.gettogether.app.platform.CallServiceBridge
+import com.gettogether.app.platform.PermissionManager
 import com.gettogether.app.presentation.state.CallState
 import com.gettogether.app.presentation.state.CallStatus
 import kotlinx.coroutines.Job
@@ -21,7 +22,8 @@ import kotlinx.coroutines.launch
 class CallViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val callServiceBridge: CallServiceBridge? = null
+    private val callServiceBridge: CallServiceBridge? = null,
+    private val permissionManager: PermissionManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CallState())
@@ -39,6 +41,19 @@ class CallViewModel(
     }
 
     fun initializeOutgoingCall(contactId: String, withVideo: Boolean) {
+        // Check permissions before initiating call
+        if (!permissionManager.hasRequiredPermissions()) {
+            _state.update {
+                it.copy(
+                    contactId = contactId,
+                    isVideo = withVideo,
+                    callStatus = CallStatus.Failed,
+                    error = "Required permissions not granted. Please grant microphone and camera permissions in settings."
+                )
+            }
+            return
+        }
+
         _state.update {
             it.copy(
                 contactId = contactId,
@@ -103,6 +118,17 @@ class CallViewModel(
     }
 
     fun acceptCall() {
+        // Check permissions before accepting call
+        if (!permissionManager.hasRequiredPermissions()) {
+            _state.update {
+                it.copy(
+                    callStatus = CallStatus.Failed,
+                    error = "Required permissions not granted. Please grant microphone and camera permissions in settings."
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _state.update { it.copy(callStatus = CallStatus.Connecting) }
 

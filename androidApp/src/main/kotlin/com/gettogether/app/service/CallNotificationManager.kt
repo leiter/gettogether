@@ -11,6 +11,15 @@ import androidx.core.app.NotificationCompat
 import com.gettogether.app.MainActivity
 import com.gettogether.app.R
 
+/**
+ * @deprecated Use NotificationHelper from shared/platform instead for consistency across the app.
+ * This class will be removed in a future version.
+ */
+@Deprecated(
+    message = "Use NotificationHelper instead for consistency across the app",
+    replaceWith = ReplaceWith("NotificationHelper", "com.gettogether.app.platform.NotificationHelper"),
+    level = DeprecationLevel.WARNING
+)
 class CallNotificationManager(private val context: Context) {
 
     companion object {

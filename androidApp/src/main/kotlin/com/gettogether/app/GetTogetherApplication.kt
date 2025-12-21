@@ -5,14 +5,23 @@ import com.gettogether.app.di.jamiBridgeModule
 import com.gettogether.app.di.platformModule
 import com.gettogether.app.di.sharedModule
 import com.gettogether.app.jami.DaemonManager
+import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.jami.JamiCallEvent
 import com.gettogether.app.platform.NotificationHelper
 import com.gettogether.app.service.CallNotificationManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
 
 class GetTogetherApplication : Application() {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+
     override fun onCreate() {
         super.onCreate()
         android.util.Log.d("GetTogetherApp", "=== Application onCreate() ===")
@@ -42,6 +51,63 @@ class GetTogetherApplication : Application() {
         val daemonManager: DaemonManager by inject()
         daemonManager.start()
         android.util.Log.i("GetTogetherApp", "✓ Daemon start initiated (check DaemonManager logs for status)")
+
+        // Setup global incoming call listener
+        android.util.Log.d("GetTogetherApp", "→ Setting up incoming call listener...")
+        setupIncomingCallListener()
+        android.util.Log.i("GetTogetherApp", "✓ Incoming call listener setup")
+
         android.util.Log.d("GetTogetherApp", "=== Application onCreate() completed ===")
+    }
+
+    /**
+     * Sets up a global listener for incoming calls.
+     * This is the critical connection between JamiBridge events and notification display.
+     */
+    private fun setupIncomingCallListener() {
+        scope.launch {
+            val jamiBridge: JamiBridge by inject()
+            jamiBridge.callEvents.collect { event ->
+                when (event) {
+                    is JamiCallEvent.IncomingCall -> {
+                        handleIncomingCall(
+                            callId = event.callId,
+                            contactId = event.peerId,
+                            contactName = event.peerDisplayName.ifEmpty { event.peerId.take(8) },
+                            isVideo = event.hasVideo
+                        )
+                    }
+                    else -> { /* Ignore other call events */ }
+                }
+            }
+        }
+    }
+
+    /**
+     * Handles incoming call by displaying a notification.
+     */
+    private fun handleIncomingCall(
+        callId: String,
+        contactId: String,
+        contactName: String,
+        isVideo: Boolean
+    ) {
+        android.util.Log.i(
+            "GetTogetherApp",
+            "Incoming call from $contactName (callId: $callId, isVideo: $isVideo)"
+        )
+
+        val notificationHelper: NotificationHelper by inject()
+        notificationHelper.showIncomingCallNotification(
+            callId = callId,
+            contactId = contactId,
+            contactName = contactName,
+            isVideo = isVideo
+        )
+    }
+
+    override fun onTerminate() {
+        scope.cancel()
+        super.onTerminate()
     }
 }
