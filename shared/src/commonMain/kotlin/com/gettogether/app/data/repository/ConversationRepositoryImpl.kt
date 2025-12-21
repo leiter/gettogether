@@ -286,15 +286,16 @@ class ConversationRepositoryImpl(
             }
 
             // Update conversations with lastMessage from loaded messages
-            // Also filter out empty conversations (with no messages)
-            val updatedConversations = filteredConversations.mapNotNull { conversation ->
+            // Keep conversations even if they have no messages yet (for new accepted conversations)
+            val updatedConversations = filteredConversations.map { conversation ->
                 val key = "$accountId:${conversation.id}"
                 val messages = _messagesCache.value[key] ?: emptyList()
                 if (messages.isNotEmpty()) {
                     val lastMsg = messages.last()
                     conversation.copy(lastMessage = lastMsg)
                 } else {
-                    null  // Filter out empty conversations
+                    // Keep conversation with null lastMessage - UI will show "No messages yet"
+                    conversation.copy(lastMessage = null)
                 }
             }
 
@@ -331,21 +332,34 @@ class ConversationRepositoryImpl(
         // Get user's own Jami ID to exclude from title
         val userJamiId = accountRepository.accountState.value.jamiId
 
+        // Get cached contacts for proper display names and custom names
+        val cachedContacts = contactRepository._contactsCache.value[accountId] ?: emptyList()
+        val contactsMap = cachedContacts.associateBy { it.uri }
+
         // Get contact display names for participants
         val participants = members.map { member ->
-            // Try to get display name from contact details
-            val displayName = try {
-                val details = jamiBridge.getContactDetails(accountId, member.uri)
-                details["displayName"]?.ifBlank { member.uri.take(8) } ?: member.uri.take(8)
-            } catch (e: Exception) {
-                member.uri.take(8)
+            // First try to get contact from cache (has custom names and proper display names)
+            val cachedContact = contactsMap[member.uri]
+
+            val displayName = if (cachedContact != null) {
+                // Use cached contact's display name
+                cachedContact.displayName
+            } else {
+                // Fall back to getting from bridge
+                try {
+                    val details = jamiBridge.getContactDetails(accountId, member.uri)
+                    details["displayName"]?.takeIf { it.isNotBlank() } ?: member.uri.take(8)
+                } catch (e: Exception) {
+                    member.uri.take(8)
+                }
             }
 
             Contact(
                 id = member.uri,
                 uri = member.uri,
                 displayName = displayName,
-                isOnline = false
+                customName = cachedContact?.customName,
+                isOnline = cachedContact?.isOnline ?: false
             )
         }
 
@@ -389,6 +403,14 @@ class ConversationRepositoryImpl(
         when (event) {
             is JamiConversationEvent.MessageReceived -> {
                 println("ConversationRepository.handleConversationEvent: MessageReceived - accountId=$accountId, conversationId=${event.conversationId}, messageId=${event.message.id}, author=${event.message.author}, content=${event.message.body["body"]}")
+
+                // Skip system messages that don't have a body (conversation created, member joined, etc.)
+                val messageBody = event.message.body["body"]
+                if (messageBody.isNullOrBlank()) {
+                    println("ConversationRepository: Skipping system message without body")
+                    return
+                }
+
                 val key = "$accountId:${event.conversationId}"
                 // Jami timestamps are in seconds, convert to milliseconds
                 val timestampMillis = if (event.message.timestamp < 100000000000) {
@@ -400,7 +422,7 @@ class ConversationRepositoryImpl(
                     id = event.message.id,
                     conversationId = event.conversationId,
                     authorId = event.message.author,
-                    content = event.message.body["body"] ?: "",
+                    content = messageBody,
                     timestamp = Instant.fromEpochMilliseconds(timestampMillis),
                     status = MessageStatus.DELIVERED,
                     type = MessageType.TEXT
