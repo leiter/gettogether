@@ -7,6 +7,7 @@ import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlin.time.Clock
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -347,7 +348,7 @@ class ContactRepositoryImpl(
                     _onlineStatusCache.value = _onlineStatusCache.value + (event.uri to event.isOnline)
 
                     // Update last presence timestamp
-                    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    val now = Clock.System.now().toEpochMilliseconds()
                     _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
 
                     // Update contact in cache
@@ -462,7 +463,7 @@ class ContactRepositoryImpl(
      */
     private fun checkPresenceTimeouts() {
         val accountId = accountRepository.currentAccountId.value ?: return
-        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val currentTimestamps = _lastPresenceTimestamp.value
         val currentOnlineStatus = _onlineStatusCache.value
         val currentContacts = _contactsCache.value[accountId] ?: return

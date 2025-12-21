@@ -1,0 +1,38 @@
+appId: com.gettogether.app
+name: iOS - Settings Flow
+---
+# Launch app and create account first
+- launchApp:
+    clearState: true
+
+# Create account to get to Home screen
+- tapOn: "Create Account"
+- waitForAnimationToEnd
+- tapOn: "Display Name"
+- inputText: "Test User"
+- tapOn:
+    text: "Create Account"
+    index: 1
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 10000
+
+# Navigate to Settings tab
+- tapOn: "Settings"
+- extendedWaitUntil:
+    visible: "Settings"
+    timeout: 5000
+
+# Verify Settings screen sections are visible
+- assertVisible: "Notifications"
+- assertVisible: "Privacy & Security"
+
+# Verify Sign Out is visible
+- assertVisible: "Sign Out"
+
+# Verify About section
+- assertVisible: "About"
+
+# Navigate back to Chats to confirm navigation works
+- tapOn: "Chats"
+- assertVisible: "Chats"

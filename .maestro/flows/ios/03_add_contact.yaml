@@ -1,0 +1,53 @@
+appId: com.gettogether.app
+name: iOS - Add Contact Flow
+---
+# Launch app and create account first
+- launchApp:
+    clearState: true
+
+# Create account to get to Home screen
+- tapOn: "Create Account"
+- waitForAnimationToEnd
+- tapOn: "Display Name"
+- inputText: "Test User"
+- tapOn:
+    text: "Create Account"
+    index: 1
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 10000
+
+# Navigate to Contacts tab
+- tapOn: "Contacts"
+- extendedWaitUntil:
+    visible: "Contacts"
+    timeout: 5000
+
+# Look for add contact button
+- tapOn:
+    text: ".*[Aa]dd.*"
+    optional: true
+
+# If we're on the Add Contact screen
+- runFlow:
+    when:
+      visible: "Add Contact"
+    commands:
+      # Enter a username to search
+      - tapOn:
+          text: ".*[Ss]earch.*|.*[Uu]sername.*"
+          optional: true
+      - inputText: "testuser123"
+
+      # Tap search button if available
+      - tapOn:
+          text: "Search"
+          optional: true
+
+# Navigate back
+- tapOn:
+    text: ".*[Bb]ack.*|.*[Cc]ancel.*"
+    optional: true
+
+# Verify we're back on Contacts screen
+- assertVisible: "Contacts"

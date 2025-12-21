@@ -1,0 +1,14 @@
+appId: com.gettogether.app
+name: iOS - Welcome Screen Test
+---
+# Launch app
+- launchApp
+
+# Welcome Screen - verify we're on the welcome screen
+- assertVisible: "Get-Together"
+- assertVisible: "Secure, decentralized communication"
+- assertVisible: "Create Account"
+- assertVisible: "Import Existing Account"
+# Check platform info (partial match)
+- assertVisible:
+    text: ".*Running on iOS.*"
