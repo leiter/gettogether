@@ -1,0 +1,37 @@
+appId: com.gettogether.app
+name: iOS - Create Account Flow
+---
+# Launch app
+- launchApp
+
+# Welcome Screen - verify we're on the welcome screen
+- assertVisible: "Create Account"
+- assertVisible: "Import Existing Account"
+
+# Navigate to Create Account
+- tapOn: "Create Account"
+
+# Wait for navigation animation to complete
+- waitForAnimationToEnd
+
+# Verify Create Account Screen
+- assertVisible: "Choose a display name"
+
+# Tap the text input field and enter name
+- tapOn: "Display Name"
+- inputText: "Test User"
+
+# Submit the form
+- tapOn:
+    text: "Create Account"
+    index: 1
+
+# Wait for account creation and navigation to Home
+- extendedWaitUntil:
+    visible: "Chats"
+    timeout: 10000
+
+# Verify Home screen with bottom navigation
+- assertVisible: "Chats"
+- assertVisible: "Contacts"
+- assertVisible: "Settings"

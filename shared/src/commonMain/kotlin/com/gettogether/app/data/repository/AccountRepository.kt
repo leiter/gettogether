@@ -28,15 +28,23 @@ class AccountRepository(
 
     init {
         // Listen to account events
-        scope.launch {
-            jamiBridge.accountEvents.collect { event ->
-                handleAccountEvent(event)
+        try {
+            scope.launch {
+                jamiBridge.accountEvents.collect { event ->
+                    handleAccountEvent(event)
+                }
             }
+        } catch (e: Exception) {
+            println("AccountRepository: Failed to start account events collection: ${e.message}")
         }
 
         // Load existing accounts on startup
-        scope.launch {
-            loadAccounts()
+        try {
+            scope.launch {
+                loadAccounts()
+            }
+        } catch (e: Exception) {
+            println("AccountRepository: Failed to start account loading: ${e.message}")
         }
     }
 

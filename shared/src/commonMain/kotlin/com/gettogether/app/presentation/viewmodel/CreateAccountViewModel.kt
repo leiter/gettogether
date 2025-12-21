@@ -16,6 +16,10 @@ class CreateAccountViewModel(
     private val accountRepository: AccountRepository
 ) : ViewModel() {
 
+    init {
+        println("CreateAccountViewModel: initialized")
+    }
+
     private val _state = MutableStateFlow(CreateAccountState())
     val state: StateFlow<CreateAccountState> = _state.asStateFlow()
 

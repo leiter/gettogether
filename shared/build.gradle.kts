@@ -12,6 +12,12 @@ plugins {
 }
 
 kotlin {
+    // Opt-in to ExperimentalTime for kotlin.time.Instant and Clock
+    @OptIn(ExperimentalKotlinGradlePluginApi::class)
+    compilerOptions {
+        freeCompilerArgs.add("-opt-in=kotlin.time.ExperimentalTime")
+    }
+
     androidTarget {
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {

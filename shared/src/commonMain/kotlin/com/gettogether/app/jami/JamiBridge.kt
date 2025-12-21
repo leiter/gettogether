@@ -1,7 +1,7 @@
 package com.gettogether.app.jami
 
 import kotlinx.coroutines.flow.SharedFlow
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * JamiBridge provides the platform-specific implementation to interface with
