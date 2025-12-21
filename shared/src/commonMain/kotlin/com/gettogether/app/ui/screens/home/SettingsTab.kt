@@ -3,6 +3,7 @@ package com.gettogether.app.ui.screens.home
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
@@ -30,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -48,9 +51,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.gettogether.app.platform.ImagePickerResult
 import com.gettogether.app.platform.provideClipboardManager
+import com.gettogether.app.platform.provideImagePicker
 import com.gettogether.app.presentation.state.UserProfile
 import com.gettogether.app.presentation.viewmodel.SettingsViewModel
+import com.gettogether.app.ui.components.AvatarImage
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -66,6 +73,15 @@ fun SettingsTab(
     LaunchedEffect(state.signOutComplete) {
         if (state.signOutComplete) {
             onSignedOut()
+        }
+    }
+
+    LaunchedEffect(state.profileUpdateSuccess) {
+        state.profileUpdateSuccess?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Short
+            )
         }
     }
 
@@ -87,6 +103,34 @@ fun SettingsTab(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // Edit profile dialog
+    if (state.showEditProfileDialog) {
+        val imagePicker = provideImagePicker()
+
+        EditProfileDialog(
+            currentDisplayName = state.userProfile.displayName,
+            currentAvatarUri = state.userProfile.avatarUri,
+            selectedAvatarUri = state.selectedAvatarUri,
+            isUpdating = state.isUpdatingProfile,
+            isProcessingAvatar = state.isProcessingAvatar,
+            error = state.error,
+            onDismiss = { viewModel.hideEditProfileDialog() },
+            onConfirm = { displayName, avatarUri ->
+                viewModel.updateProfileWithAvatar(displayName, avatarUri)
+            },
+            onSelectAvatar = {
+                imagePicker.pickImage { result ->
+                    when (result) {
+                        is ImagePickerResult.Success -> viewModel.selectAvatar(result.uri)
+                        is ImagePickerResult.Error -> viewModel.clearError() // Error will be shown by picker
+                        ImagePickerResult.Cancelled -> { /* Do nothing */ }
+                    }
+                }
+            },
+            onClearAvatar = { viewModel.clearSelectedAvatar() }
         )
     }
 
@@ -120,7 +164,7 @@ fun SettingsTab(
                 // Profile section
                 ProfileSection(
                     profile = state.userProfile,
-                    onClick = { expandedSection = if (expandedSection == "profile") null else "profile" }
+                    onClick = { viewModel.showEditProfileDialog() }
                 )
 
                 HorizontalDivider()
@@ -255,19 +299,11 @@ private fun ProfileSection(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Avatar
-            Surface(
-                modifier = Modifier.size(64.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = profile.displayName.firstOrNull()?.uppercase() ?: "?",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+            AvatarImage(
+                avatarUri = profile.avatarUri,
+                displayName = profile.displayName,
+                size = 64.dp
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 
@@ -570,4 +606,131 @@ private fun SettingsItem(
             }
         }
     }
+}
+
+@Composable
+private fun EditProfileDialog(
+    currentDisplayName: String,
+    currentAvatarUri: String?,
+    selectedAvatarUri: String?,
+    isUpdating: Boolean,
+    isProcessingAvatar: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onConfirm: (String, String?) -> Unit,
+    onSelectAvatar: () -> Unit,
+    onClearAvatar: () -> Unit
+) {
+    var displayName by remember { mutableStateOf(currentDisplayName) }
+    val avatarToShow = selectedAvatarUri ?: currentAvatarUri
+
+    AlertDialog(
+        onDismissRequest = { if (!isUpdating) onDismiss() },
+        title = { Text("Edit Profile") },
+        text = {
+            Column {
+                // Avatar selection
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(contentAlignment = Alignment.BottomEnd) {
+                        AvatarImage(
+                            avatarUri = avatarToShow,
+                            displayName = displayName.ifEmpty { "?" },
+                            size = 80.dp
+                        )
+
+                        // Edit button overlay
+                        Surface(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clickable(enabled = !isUpdating) { onSelectAvatar() },
+                            shape = MaterialTheme.shapes.small,
+                            color = MaterialTheme.colorScheme.primary
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Change avatar",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                    }
+
+                    if (selectedAvatarUri != null || currentAvatarUri != null) {
+                        Spacer(modifier = Modifier.width(16.dp))
+                        TextButton(
+                            onClick = onClearAvatar,
+                            enabled = !isUpdating
+                        ) {
+                            Text("Remove")
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = displayName,
+                    onValueChange = { displayName = it },
+                    label = { Text("Display Name") },
+                    enabled = !isUpdating,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = error,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (isUpdating || isProcessingAvatar) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (isProcessingAvatar) "Processing image..." else "Updating...",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Note: Profile update may fail due to a known Jami library issue. A fallback method will be used if needed.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(displayName, selectedAvatarUri) },
+                enabled = !isUpdating && displayName.isNotBlank()
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                enabled = !isUpdating
+            ) {
+                Text("Cancel")
+            }
+        }
+    )
 }

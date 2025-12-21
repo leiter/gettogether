@@ -3,6 +3,7 @@ package com.gettogether.app.ui.screens.home
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import com.gettogether.app.ui.components.AvatarImage
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -192,19 +193,11 @@ private fun ConversationItem(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Avatar
-            Surface(
-                modifier = Modifier.size(48.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = conversation.avatarInitial,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+            AvatarImage(
+                avatarUri = conversation.avatarUri,
+                displayName = conversation.name,
+                size = 48.dp
+            )
 
             Spacer(modifier = Modifier.width(16.dp))
 

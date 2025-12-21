@@ -54,6 +54,82 @@ Online/offline status updates work differently depending on network configuratio
 
 ---
 
+## 2. Avatar Feature Issues
+
+**Status:** In Progress
+**Priority:** High
+**Affected Components:** ImagePicker, SettingsTab, Avatar display across app
+
+### Description
+Avatar feature implementation completed but experiencing issues during testing. App no longer crashes when clicking Settings, but functionality needs verification.
+
+### Implementation Status
+- ✅ Image picker (Android) with gallery selection
+- ✅ Image processor with EXIF correction, resize to 256x256px, ~100KB compression
+- ✅ AvatarImage and ContactAvatarImage reusable components
+- ✅ Settings UI with avatar selection dialog
+- ✅ Avatar display in Contacts tab
+- ✅ Avatar display in Conversations tab
+- ✅ Fixed crash: "LifecycleOwner attempting to register while RESUMED"
+  - Solution: Used `rememberLauncherForActivityResult` instead of constructor registration
+
+### Known Issues
+**User reported: "Doesn't crash anymore but still has issues"**
+
+Specific issues to investigate:
+- [ ] Test image selection from gallery
+- [ ] Verify image compression to ~100KB works correctly
+- [ ] Test avatar upload to Jami daemon
+- [ ] Verify avatar displays in Settings profile section
+- [ ] Verify avatar displays in Contacts list
+- [ ] Verify avatar displays in Conversations list
+- [ ] Test "Remove avatar" functionality
+- [ ] Test cancel picker behavior
+- [ ] Test with various image sizes and formats
+- [ ] Verify persistent URI permissions work correctly
+
+### Potential Issues
+1. **Image picker may not launch:** Permissions issue or launcher not properly initialized
+2. **Image not processing:** ImageProcessor may fail on certain image formats/sizes
+3. **Avatar not uploading:** Jami daemon updateProfile() may crash (known issue with fallback)
+4. **Avatar not displaying:** Coil image loading may fail, URI access issues
+5. **Avatar not persisting:** Database may not store avatarUri correctly
+
+### Related Files
+- `shared/src/commonMain/kotlin/com/gettogether/app/platform/ImagePicker.kt`
+- `shared/src/androidMain/kotlin/com/gettogether/app/platform/ImagePicker.android.kt` (lines 20-62)
+- `shared/src/androidMain/kotlin/com/gettogether/app/platform/ImageProcessor.android.kt`
+- `shared/src/commonMain/kotlin/com/gettogether/app/ui/components/AvatarImage.kt`
+- `shared/src/commonMain/kotlin/com/gettogether/app/ui/screens/home/SettingsTab.kt` (lines 110-135, 612-736)
+- `shared/src/commonMain/kotlin/com/gettogether/app/presentation/viewmodel/SettingsViewModel.kt` (updateProfileWithAvatar method)
+
+### Testing Needed
+1. **Manual Testing:**
+   - Open Settings
+   - Click edit profile button
+   - Click avatar edit button
+   - Select image from gallery
+   - Verify preview shows selected image
+   - Click confirm
+   - Verify avatar appears in Settings
+   - Navigate to Contacts - verify avatar shows there
+   - Navigate to Conversations - verify avatar shows there
+
+2. **Error Scenarios:**
+   - Cancel image picker (should not crash)
+   - Select very large image (>10MB)
+   - Select unsupported format
+   - Test with no storage permission
+   - Test remove avatar button
+
+### Next Steps
+1. Get specific error details from user about what isn't working
+2. Check logcat for errors during avatar selection/upload
+3. Add debug logging to ImagePicker and ImageProcessor
+4. Test on both devices (Pixel 2 and Pixel 7a)
+
+---
+
 ## Future Tasks
 
 ### Performance Optimization
@@ -67,5 +143,5 @@ Online/offline status updates work differently depending on network configuratio
 
 ---
 
-**Last Updated:** 2025-12-21
+**Last Updated:** 2025-12-21 16:00
 **Document Created By:** Claude Code

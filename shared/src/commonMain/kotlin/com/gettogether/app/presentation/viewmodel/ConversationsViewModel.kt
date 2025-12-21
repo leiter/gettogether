@@ -27,7 +27,8 @@ data class ConversationUiItem(
     val lastMessage: String,
     val time: String,
     val unreadCount: Int,
-    val avatarInitial: String
+    val avatarInitial: String,
+    val avatarUri: String?
 )
 
 class ConversationsViewModel(
@@ -148,13 +149,22 @@ class ConversationsViewModel(
             ?: ""
         val initial = title.firstOrNull()?.uppercase() ?: "?"
 
+        // For one-to-one conversations, use the participant's avatar
+        // For group conversations, avatarUri will be null (use initial fallback)
+        val conversationAvatar = if (!isGroup && participants.isNotEmpty()) {
+            participants.first().avatarUri
+        } else {
+            null
+        }
+
         return ConversationUiItem(
             id = id,
             name = title,
             lastMessage = lastMessageText,
             time = timeText,
             unreadCount = unreadCount,
-            avatarInitial = initial
+            avatarInitial = initial,
+            avatarUri = conversationAvatar
         )
     }
 

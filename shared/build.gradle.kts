@@ -74,6 +74,9 @@ kotlin {
             // Date/Time
             implementation(libs.kotlinx.datetime)
 
+            // Image Loading
+            implementation(libs.coil.compose)
+
             // Logging
             implementation(libs.kermit)
         }
@@ -82,6 +85,7 @@ kotlin {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.ktx)
+            implementation(libs.androidx.exifinterface)
             implementation(libs.ktor.client.android)
             implementation(libs.koin.android)
         }

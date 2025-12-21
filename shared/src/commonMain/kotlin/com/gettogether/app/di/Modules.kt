@@ -53,7 +53,7 @@ val sharedModule = module {
     viewModel { TrustRequestsViewModel(get(), get()) }
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }
-    viewModel { SettingsViewModel(get(), get(), get()) }
+    viewModel { SettingsViewModel(get(), get(), get(), get()) }
     viewModel { ContactDetailsViewModel(get(), get(), get()) }
     viewModel { CallViewModel(get(), get(), getOrNull()) }
     viewModel { ConferenceViewModel(get(), get()) }

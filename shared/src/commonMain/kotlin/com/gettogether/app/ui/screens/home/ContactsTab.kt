@@ -1,6 +1,7 @@
 package com.gettogether.app.ui.screens.home
 
 import androidx.compose.foundation.clickable
+import com.gettogether.app.ui.components.ContactAvatarImage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -160,19 +161,11 @@ private fun ContactItem(
         ) {
             // Avatar with online indicator
             Box {
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = contact.avatarInitial,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                }
+                ContactAvatarImage(
+                    avatarUri = contact.avatarUri,
+                    displayName = contact.name,
+                    size = 48.dp
+                )
                 // Online indicator
                 if (contact.isOnline) {
                     Surface(
@@ -314,19 +307,11 @@ private fun TrustRequestItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Avatar
-                Surface(
-                    modifier = Modifier.size(48.dp),
-                    shape = MaterialTheme.shapes.extraLarge,
-                    color = MaterialTheme.colorScheme.tertiaryContainer
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = request.displayName.firstOrNull()?.uppercase() ?: "?",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                    }
-                }
+                ContactAvatarImage(
+                    avatarUri = null,  // Trust requests don't have avatars yet
+                    displayName = request.displayName,
+                    size = 48.dp
+                )
 
                 Spacer(modifier = Modifier.width(16.dp))
 

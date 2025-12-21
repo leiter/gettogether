@@ -13,6 +13,7 @@ import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.platform.CallServiceBridge
+import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationHelper
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
@@ -22,6 +23,9 @@ actual val platformModule: Module = module {
     // Android-specific dependencies
     single { CallServiceBridge(androidContext()) }
     single { NotificationHelper(androidContext()) }
+
+    // Image handling
+    single { ImageProcessor(androidContext()) }
 
     // Settings persistence
     single<SettingsRepository> {

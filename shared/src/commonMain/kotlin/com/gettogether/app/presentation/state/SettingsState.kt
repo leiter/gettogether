@@ -8,7 +8,12 @@ data class SettingsState(
     val isSigningOut: Boolean = false,
     val signOutComplete: Boolean = false,
     val error: String? = null,
-    val showSignOutDialog: Boolean = false
+    val showSignOutDialog: Boolean = false,
+    val showEditProfileDialog: Boolean = false,
+    val isUpdatingProfile: Boolean = false,
+    val profileUpdateSuccess: String? = null,
+    val selectedAvatarUri: String? = null,
+    val isProcessingAvatar: Boolean = false
 )
 
 data class UserProfile(
@@ -19,7 +24,8 @@ data class UserProfile(
     val registrationState: String = "",
     val dhtStatus: String = "",
     val deviceStatus: String = "",
-    val peerCount: String = "0"
+    val peerCount: String = "0",
+    val avatarUri: String? = null
 )
 
 data class NotificationSettings(
