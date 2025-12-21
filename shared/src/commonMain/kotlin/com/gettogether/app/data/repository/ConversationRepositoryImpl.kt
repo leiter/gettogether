@@ -36,6 +36,9 @@ class ConversationRepositoryImpl(
     // Cache for messages by conversation
     private val _messagesCache = MutableStateFlow<Map<String, List<Message>>>(emptyMap())
 
+    // Cache for conversation requests by account
+    private val _conversationRequestsCache = MutableStateFlow<Map<String, List<com.gettogether.app.jami.ConversationRequest>>>(emptyMap())
+
     init {
         // Listen for conversation events
         scope.launch {
@@ -52,6 +55,8 @@ class ConversationRepositoryImpl(
                     loadPersistedConversations(accountId)
                     // Then refresh from Jami
                     refreshConversations(accountId)
+                    // Also refresh conversation requests
+                    refreshConversationRequests(accountId)
                 }
             }
         }
@@ -441,7 +446,11 @@ class ConversationRepositoryImpl(
             }
 
             is JamiConversationEvent.ConversationRequestReceived -> {
-                // Could notify about new conversation request
+                println("ConversationRepository: New conversation request received for conversation ${event.conversationId}")
+                // Refresh conversation requests from daemon to get the complete request info
+                scope.launch {
+                    refreshConversationRequests(accountId)
+                }
             }
 
             else -> { /* Handle other events */ }
@@ -658,14 +667,31 @@ class ConversationRepositoryImpl(
     }
 
     /**
-     * Get pending conversation requests.
+     * Get pending conversation requests as a reactive Flow.
      */
-    suspend fun getConversationRequests(accountId: String): List<com.gettogether.app.jami.ConversationRequest> {
-        return try {
-            jamiBridge.getConversationRequests(accountId)
+    fun getConversationRequests(accountId: String): Flow<List<com.gettogether.app.jami.ConversationRequest>> {
+        // Trigger refresh if not cached
+        scope.launch {
+            if (_conversationRequestsCache.value[accountId].isNullOrEmpty()) {
+                refreshConversationRequests(accountId)
+            }
+        }
+        return _conversationRequestsCache.map { cache ->
+            cache[accountId] ?: emptyList()
+        }
+    }
+
+    /**
+     * Refresh conversation requests from JamiBridge.
+     */
+    suspend fun refreshConversationRequests(accountId: String) {
+        try {
+            val requests = jamiBridge.getConversationRequests(accountId)
+            _conversationRequestsCache.value = _conversationRequestsCache.value + (accountId to requests)
+            println("ConversationRepository: Loaded ${requests.size} conversation requests")
         } catch (e: Exception) {
-            println("ConversationRepository: Failed to get conversation requests: ${e.message}")
-            emptyList()
+            println("ConversationRepository: Failed to refresh conversation requests: ${e.message}")
+            // Keep existing cache on error
         }
     }
 
@@ -676,6 +702,12 @@ class ConversationRepositoryImpl(
         try {
             println("ConversationRepository: Accepting conversation request $conversationId")
             jamiBridge.acceptConversationRequest(accountId, conversationId)
+
+            // Remove from conversation requests cache
+            val currentRequests = _conversationRequestsCache.value[accountId] ?: emptyList()
+            _conversationRequestsCache.value = _conversationRequestsCache.value +
+                (accountId to currentRequests.filter { it.conversationId != conversationId })
+
             // Refresh conversations after accepting
             refreshConversations(accountId)
         } catch (e: Exception) {
@@ -691,6 +723,11 @@ class ConversationRepositoryImpl(
         try {
             println("ConversationRepository: Declining conversation request $conversationId")
             jamiBridge.declineConversationRequest(accountId, conversationId)
+
+            // Remove from conversation requests cache
+            val currentRequests = _conversationRequestsCache.value[accountId] ?: emptyList()
+            _conversationRequestsCache.value = _conversationRequestsCache.value +
+                (accountId to currentRequests.filter { it.conversationId != conversationId })
         } catch (e: Exception) {
             println("ConversationRepository: Failed to decline conversation request: ${e.message}")
             throw e

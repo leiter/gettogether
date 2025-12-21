@@ -32,11 +32,11 @@ class ConversationRequestsViewModel(
     val state: StateFlow<ConversationRequestsState> = _state.asStateFlow()
 
     init {
-        // Load conversation requests when account changes
+        // Observe conversation requests reactively
         viewModelScope.launch {
             accountRepository.currentAccountId.collect { accountId ->
                 if (accountId != null) {
-                    loadConversationRequests(accountId)
+                    observeConversationRequests(accountId)
                 } else {
                     _state.update {
                         it.copy(
@@ -49,25 +49,26 @@ class ConversationRequestsViewModel(
         }
     }
 
-    private fun loadConversationRequests(accountId: String) {
+    private fun observeConversationRequests(accountId: String) {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
 
             try {
-                val requests = conversationRepository.getConversationRequests(accountId)
-                val uiItems = requests.map { request ->
-                    ConversationRequestUiItem(
-                        conversationId = request.conversationId,
-                        from = request.from,
-                        fromShort = request.from.take(8)
-                    )
-                }
+                conversationRepository.getConversationRequests(accountId).collect { requests ->
+                    val uiItems = requests.map { request ->
+                        ConversationRequestUiItem(
+                            conversationId = request.conversationId,
+                            from = request.from,
+                            fromShort = request.from.take(8)
+                        )
+                    }
 
-                _state.update {
-                    it.copy(
-                        requests = uiItems,
-                        isLoading = false
-                    )
+                    _state.update {
+                        it.copy(
+                            requests = uiItems,
+                            isLoading = false
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _state.update {
@@ -170,7 +171,9 @@ class ConversationRequestsViewModel(
 
     fun refresh() {
         val accountId = accountRepository.currentAccountId.value ?: return
-        loadConversationRequests(accountId)
+        viewModelScope.launch {
+            conversationRepository.refreshConversationRequests(accountId)
+        }
     }
 
     fun clearError() {
