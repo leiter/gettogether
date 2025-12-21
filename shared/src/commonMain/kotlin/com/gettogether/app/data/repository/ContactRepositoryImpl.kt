@@ -34,8 +34,15 @@ class ContactRepositoryImpl(
     // Cache for online status by contact URI
     private val _onlineStatusCache = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
+    // Cache for last presence update timestamp by contact URI
+    private val _lastPresenceTimestamp = MutableStateFlow<Map<String, Long>>(emptyMap())
+
     // Cache for trust requests by account
     private val _trustRequestsCache = MutableStateFlow<Map<String, List<TrustRequest>>>(emptyMap())
+
+    companion object {
+        private const val PRESENCE_TIMEOUT_MS = 60_000L // 60 seconds
+    }
 
     init {
         // Listen for contact events
@@ -55,6 +62,14 @@ class ContactRepositoryImpl(
                     refreshContacts(accountId)
                     refreshTrustRequests(accountId)
                 }
+            }
+        }
+
+        // Periodic presence timeout checker
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(10_000) // Check every 10 seconds
+                checkPresenceTimeouts()
             }
         }
 
@@ -331,6 +346,10 @@ class ContactRepositoryImpl(
                     // Update online status cache
                     _onlineStatusCache.value = _onlineStatusCache.value + (event.uri to event.isOnline)
 
+                    // Update last presence timestamp
+                    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
+
                     // Update contact in cache
                     val currentContacts = _contactsCache.value[accountId] ?: emptyList()
                     val updatedContacts = currentContacts.map { contact ->
@@ -434,6 +453,47 @@ class ContactRepositoryImpl(
         }
         return _trustRequestsCache.map { cache ->
             cache[accountId] ?: emptyList()
+        }
+    }
+
+    /**
+     * Check for presence timeouts and mark contacts as offline if they haven't sent
+     * a presence update within the timeout period.
+     */
+    private fun checkPresenceTimeouts() {
+        val accountId = accountRepository.currentAccountId.value ?: return
+        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        val currentTimestamps = _lastPresenceTimestamp.value
+        val currentOnlineStatus = _onlineStatusCache.value
+        val currentContacts = _contactsCache.value[accountId] ?: return
+
+        var statusChanged = false
+        val updatedOnlineStatus = currentOnlineStatus.toMutableMap()
+        val updatedContacts = mutableListOf<Contact>()
+
+        currentContacts.forEach { contact ->
+            val lastPresence = currentTimestamps[contact.uri] ?: 0L
+            val timeSinceLastPresence = now - lastPresence
+            val isCurrentlyOnline = currentOnlineStatus[contact.uri] ?: false
+
+            // If marked online but no recent presence update, mark as offline
+            if (isCurrentlyOnline && timeSinceLastPresence > PRESENCE_TIMEOUT_MS) {
+                println("ContactRepository: Presence timeout for ${contact.uri.take(16)}... (${timeSinceLastPresence}ms since last update)")
+                updatedOnlineStatus[contact.uri] = false
+                updatedContacts.add(contact.copy(isOnline = false))
+                statusChanged = true
+            } else {
+                updatedContacts.add(contact)
+            }
+        }
+
+        if (statusChanged) {
+            println("ContactRepository: Updating caches after presence timeout")
+            _onlineStatusCache.value = updatedOnlineStatus
+            val newCache = _contactsCache.value.toMutableMap()
+            newCache[accountId] = updatedContacts
+            _contactsCache.value = newCache
+            println("ContactRepository: Cache updated, flow should emit now")
         }
     }
 }
