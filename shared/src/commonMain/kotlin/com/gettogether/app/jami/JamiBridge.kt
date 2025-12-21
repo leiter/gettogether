@@ -485,7 +485,21 @@ interface JamiBridge {
 
     /**
      * Get available audio input devices.
+     *
+     * **⚠️ WARNING: This method crashes with SIGSEGV on both emulator and hardware.**
+     *
+     * Native library bug in libjami-core.so's getAudioInputDeviceList function.
+     * Tested on Pixel 7a (2025-12-21) - confirmed crash with null pointer dereference.
+     *
+     * **DO NOT USE** - Use [useDefaultAudioInputDevice] instead.
+     *
+     * @throws UnsupportedOperationException Always throws to prevent crashes
+     * @see useDefaultAudioInputDevice
      */
+    @Deprecated(
+        message = "Crashes with SIGSEGV. Use useDefaultAudioInputDevice() instead.",
+        level = DeprecationLevel.ERROR
+    )
     fun getAudioInputDevices(): List<String>
 
     /**
@@ -494,9 +508,33 @@ interface JamiBridge {
     suspend fun setAudioOutputDevice(index: Int)
 
     /**
-     * Set audio input device.
+     * Set audio input device by index.
+     *
+     * **✅ WORKS on Pixel 7a** - Tested and confirmed (2025-12-21)
+     *
+     * This method works when called directly without enumerating devices first.
+     * Use index 0 for default microphone.
+     *
+     * **Note:** Cannot enumerate available devices due to native library bug.
+     * Use fixed indices (0 = default, 1 = secondary, etc.)
+     *
+     * @param index Device index (0 = default microphone)
      */
     suspend fun setAudioInputDevice(index: Int)
+
+    /**
+     * Use the default audio input device (microphone).
+     *
+     * **✅ SAFE** - Workaround for getAudioInputDevices() crash
+     *
+     * This is equivalent to calling `setAudioInputDevice(0)` but with a clearer intent.
+     * Use this method instead of enumerating and selecting devices.
+     *
+     * **Tested on:** Pixel 7a hardware (2025-12-21) - Works correctly
+     */
+    suspend fun useDefaultAudioInputDevice() {
+        setAudioInputDevice(0)
+    }
 
     // =========================================================================
     // Events (Observable streams)

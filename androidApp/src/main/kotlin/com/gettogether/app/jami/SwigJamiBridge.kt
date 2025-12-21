@@ -953,8 +953,16 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override fun getAudioInputDevices(): List<String> {
-        if (!nativeLoaded) return emptyList()
-        return stringVectToList(JamiService.getAudioInputDeviceList())
+        // ⚠️ CRASH PREVENTION: This native call causes SIGSEGV
+        // See: doc/audio-input-crash-analysis-pixel7a.md
+        throw UnsupportedOperationException(
+            "getAudioInputDevices() crashes with SIGSEGV in native library. " +
+            "Use useDefaultAudioInputDevice() instead. " +
+            "See doc/audio-input-crash-analysis-pixel7a.md for details."
+        )
+        // Original implementation (DO NOT UNCOMMENT):
+        // if (!nativeLoaded) return emptyList()
+        // return stringVectToList(JamiService.getAudioInputDeviceList())
     }
 
     override suspend fun setAudioOutputDevice(index: Int) = withContext(Dispatchers.IO) {

@@ -687,10 +687,18 @@ class IOSJamiBridge : JamiBridge {
     }
 
     override fun getAudioInputDevices(): List<String> {
-        // Standard iOS audio inputs
-        val devices = listOf("Built-in Microphone")
-        NSLog("$TAG: getAudioInputDevices: $devices")
-        return devices
+        // ⚠️ CRASH PREVENTION: Android implementation crashes with SIGSEGV
+        // iOS should also throw for API consistency
+        // See: doc/audio-input-crash-analysis-pixel7a.md
+        throw UnsupportedOperationException(
+            "getAudioInputDevices() crashes with SIGSEGV on Android. " +
+            "Use useDefaultAudioInputDevice() instead. " +
+            "See doc/audio-input-crash-analysis-pixel7a.md for details."
+        )
+        // Original mock implementation (DO NOT UNCOMMENT):
+        // val devices = listOf("Built-in Microphone")
+        // NSLog("$TAG: getAudioInputDevices: $devices")
+        // return devices
     }
 
     override suspend fun setAudioOutputDevice(index: Int) {
