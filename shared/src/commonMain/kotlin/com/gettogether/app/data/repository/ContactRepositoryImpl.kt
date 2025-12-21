@@ -29,7 +29,7 @@ class ContactRepositoryImpl(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     // Cache for contacts by account
-    private val _contactsCache = MutableStateFlow<Map<String, List<Contact>>>(emptyMap())
+    internal val _contactsCache = MutableStateFlow<Map<String, List<Contact>>>(emptyMap())
 
     // Cache for online status by contact URI
     private val _onlineStatusCache = MutableStateFlow<Map<String, Boolean>>(emptyMap())

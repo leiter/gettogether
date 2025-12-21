@@ -89,9 +89,15 @@ class ContactsViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             try {
-                contactRepository.refreshContacts(accountId)
-                // Force wait for flow emission to complete
-                kotlinx.coroutines.delay(100)
+                kotlinx.coroutines.withTimeout(5000) {
+                    contactRepository.refreshContacts(accountId)
+                    // Force wait for flow emission to complete
+                    kotlinx.coroutines.delay(100)
+                }
+            } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
+                println("ContactsViewModel: Refresh timed out after 5 seconds")
+            } catch (e: Exception) {
+                println("ContactsViewModel: Refresh failed: ${e.message}")
             } finally {
                 _state.update { it.copy(isLoading = false) }
             }
