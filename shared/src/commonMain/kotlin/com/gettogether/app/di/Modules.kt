@@ -12,6 +12,7 @@ import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
 import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
 import com.gettogether.app.presentation.viewmodel.ContactsViewModel
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
+import com.gettogether.app.presentation.viewmodel.ConversationRequestsViewModel
 import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
@@ -37,6 +38,7 @@ val sharedModule = module {
     viewModel { ImportAccountViewModel(get(), get()) }
     viewModel { ChatViewModel(get(), get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }
+    viewModel { ConversationRequestsViewModel(get(), get()) }
     viewModel { ContactsViewModel(get(), get()) }
     viewModel { TrustRequestsViewModel(get(), get()) }
     viewModel { NewConversationViewModel(get(), get()) }

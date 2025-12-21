@@ -90,7 +90,13 @@ class ConversationsViewModel(
         val accountId = accountRepository.currentAccountId.value ?: return
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
-            conversationRepository.refreshConversations(accountId)
+            try {
+                conversationRepository.refreshConversations(accountId)
+                // Force wait for flow emission to complete
+                kotlinx.coroutines.delay(100)
+            } finally {
+                _state.update { it.copy(isLoading = false) }
+            }
         }
     }
 
