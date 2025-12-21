@@ -274,9 +274,7 @@ class ConversationRepositoryImpl(
                 hasOtherParticipants
             }
 
-            _conversationsCache.value = _conversationsCache.value + (accountId to filteredConversations)
-
-            // Also load persisted messages for filtered conversations only
+            // Load persisted messages for filtered conversations only
             println("ConversationRepository: Loading persisted messages for ${filteredConversations.size} conversations")
             filteredConversations.forEach { conversation ->
                 loadPersistedMessages(accountId, conversation.id)
@@ -295,8 +293,27 @@ class ConversationRepositoryImpl(
                 }
             }
 
-            println("ConversationRepository.refreshConversations: Loaded ${updatedConversations.size} conversations (filtered out ${conversations.size - updatedConversations.size} self/empty conversations)")
-            _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
+            // Deduplicate conversations with the same participants
+            // Group by participant URIs and keep only the most recent conversation for each group
+            val deduplicatedConversations = updatedConversations
+                .groupBy { conversation ->
+                    // Create a key from sorted participant URIs (excluding the user)
+                    conversation.participants
+                        .map { it.uri }
+                        .filter { it != userJamiId }
+                        .sorted()
+                        .joinToString(",")
+                }
+                .mapNotNull { (_, conversationsGroup) ->
+                    // Keep the conversation with the most recent message
+                    conversationsGroup.maxByOrNull { conversation ->
+                        conversation.lastMessage?.timestamp?.toEpochMilliseconds() ?: 0
+                    }
+                }
+
+            val duplicatesRemoved = updatedConversations.size - deduplicatedConversations.size
+            println("ConversationRepository.refreshConversations: Loaded ${deduplicatedConversations.size} conversations (filtered out ${conversations.size - updatedConversations.size} self/empty, removed $duplicatesRemoved duplicates)")
+            _conversationsCache.value = _conversationsCache.value + (accountId to deduplicatedConversations)
         } catch (e: Exception) {
             // Keep existing cache on error
         }
@@ -432,15 +449,34 @@ class ConversationRepositoryImpl(
     }
 
     private fun updateConversationLastMessage(accountId: String, conversationId: String, message: Message) {
-        val currentConversations = _conversationsCache.value[accountId] ?: return
-        val updatedConversations = currentConversations.map { conv ->
-            if (conv.id == conversationId) {
-                conv.copy(lastMessage = message)
-            } else {
-                conv
+        val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
+
+        // Check if conversation exists in cache
+        val conversationExists = currentConversations.any { it.id == conversationId }
+
+        if (!conversationExists) {
+            // Conversation not in cache - load it and add it
+            println("ConversationRepository.updateConversationLastMessage: Conversation $conversationId not in cache, loading it")
+            try {
+                val conversation = loadConversation(accountId, conversationId)
+                val conversationWithMessage = conversation.copy(lastMessage = message)
+                _conversationsCache.value = _conversationsCache.value +
+                    (accountId to (currentConversations + conversationWithMessage))
+                println("ConversationRepository.updateConversationLastMessage: Added new conversation to cache with message")
+            } catch (e: Exception) {
+                println("ConversationRepository.updateConversationLastMessage: Failed to load conversation: ${e.message}")
             }
+        } else {
+            // Conversation exists - update it
+            val updatedConversations = currentConversations.map { conv ->
+                if (conv.id == conversationId) {
+                    conv.copy(lastMessage = message)
+                } else {
+                    conv
+                }
+            }
+            _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
         }
-        _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
     }
 
     /**
@@ -618,6 +654,46 @@ class ConversationRepositoryImpl(
         } catch (e: Exception) {
             println("ConversationRepository: ✗ Failed to load persisted messages: ${e.message}")
             e.printStackTrace()
+        }
+    }
+
+    /**
+     * Get pending conversation requests.
+     */
+    suspend fun getConversationRequests(accountId: String): List<com.gettogether.app.jami.ConversationRequest> {
+        return try {
+            jamiBridge.getConversationRequests(accountId)
+        } catch (e: Exception) {
+            println("ConversationRepository: Failed to get conversation requests: ${e.message}")
+            emptyList()
+        }
+    }
+
+    /**
+     * Accept a conversation request.
+     */
+    suspend fun acceptConversationRequest(accountId: String, conversationId: String) {
+        try {
+            println("ConversationRepository: Accepting conversation request $conversationId")
+            jamiBridge.acceptConversationRequest(accountId, conversationId)
+            // Refresh conversations after accepting
+            refreshConversations(accountId)
+        } catch (e: Exception) {
+            println("ConversationRepository: Failed to accept conversation request: ${e.message}")
+            throw e
+        }
+    }
+
+    /**
+     * Decline a conversation request.
+     */
+    suspend fun declineConversationRequest(accountId: String, conversationId: String) {
+        try {
+            println("ConversationRepository: Declining conversation request $conversationId")
+            jamiBridge.declineConversationRequest(accountId, conversationId)
+        } catch (e: Exception) {
+            println("ConversationRepository: Failed to decline conversation request: ${e.message}")
+            throw e
         }
     }
 }
