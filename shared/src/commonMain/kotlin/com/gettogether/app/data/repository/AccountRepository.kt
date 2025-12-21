@@ -134,6 +134,16 @@ class AccountRepository(
     }
 
     /**
+     * Update the profile (display name and avatar) for the current account.
+     */
+    suspend fun updateProfile(displayName: String, avatarPath: String? = null) {
+        val accountId = _currentAccountId.value ?: return
+        jamiBridge.updateProfile(accountId, displayName, avatarPath)
+
+        _accountState.value = _accountState.value.copy(displayName = displayName)
+    }
+
+    /**
      * Check if an account exists.
      */
     fun hasAccount(): Boolean = _currentAccountId.value != null

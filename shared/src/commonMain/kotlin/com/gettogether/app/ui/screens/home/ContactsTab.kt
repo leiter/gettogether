@@ -79,10 +79,19 @@ fun ContactsTab(
             state.contacts.isEmpty() -> {
                 PullToRefreshBox(
                     isRefreshing = state.isLoading,
-                    onRefresh = { viewModel.refresh() },
+                    onRefresh = {
+                        viewModel.refresh()
+                        trustRequestsViewModel.refresh()
+                    },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    EmptyContactsPlaceholder()
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        item {
+                            EmptyContactsPlaceholder()
+                        }
+                    }
                 }
             }
             else -> {
@@ -240,7 +249,9 @@ private fun NoAccountPlaceholder() {
 @Composable
 private fun EmptyContactsPlaceholder() {
     Box(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(600.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
