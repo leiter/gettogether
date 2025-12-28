@@ -18,6 +18,7 @@ import platform.AVFAudio.AVAudioSessionPortOverrideNone
 import platform.AVFAudio.AVAudioSessionPortOverrideSpeaker
 import platform.Foundation.NSDate
 import platform.Foundation.NSLog
+import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSUUID
 import platform.Foundation.timeIntervalSince1970
 
@@ -70,11 +71,69 @@ class IOSJamiBridge : JamiBridge {
         // Video device IDs
         private const val VIDEO_DEVICE_FRONT = "front"
         private const val VIDEO_DEVICE_BACK = "back"
+
+        // UserDefaults keys for persistence
+        private const val KEY_ACCOUNTS = "jami_mock_accounts"
+        private const val KEY_ACCOUNT_DETAILS_PREFIX = "jami_mock_account_details_"
     }
+
+    private val userDefaults = NSUserDefaults.standardUserDefaults
 
     init {
         NSLog("$TAG: IOSJamiBridge initialized")
+        // Load persisted accounts
+        loadPersistedAccounts()
         // Don't configure audio session in init - do it lazily when needed
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun loadPersistedAccounts() {
+        try {
+            val accountIdsArray = userDefaults.arrayForKey(KEY_ACCOUNTS) as? List<*>
+            if (accountIdsArray != null) {
+                mockAccounts.clear()
+                for (item in accountIdsArray) {
+                    val accountId = item as? String
+                    if (accountId != null) {
+                        mockAccounts.add(accountId)
+
+                        // Load account details
+                        val detailsDict = userDefaults.dictionaryForKey("$KEY_ACCOUNT_DETAILS_PREFIX$accountId") as? Map<*, *>
+                        if (detailsDict != null) {
+                            val details = mutableMapOf<String, String>()
+                            for ((key, value) in detailsDict) {
+                                if (key is String && value is String) {
+                                    details[key] = value
+                                }
+                            }
+                            mockAccountDetails[accountId] = details
+                        }
+
+                        // Initialize empty contacts/conversations
+                        mockContacts[accountId] = mutableListOf()
+                        mockConversations[accountId] = mutableListOf()
+                    }
+                }
+            }
+            NSLog("$TAG: Loaded ${mockAccounts.size} persisted accounts")
+        } catch (e: Exception) {
+            NSLog("$TAG: Failed to load persisted accounts: ${e.message}")
+        }
+    }
+
+    private fun persistAccounts() {
+        try {
+            userDefaults.setObject(mockAccounts.toList(), KEY_ACCOUNTS)
+            for (accountId in mockAccounts) {
+                mockAccountDetails[accountId]?.let { details ->
+                    userDefaults.setObject(details.toMap(), "$KEY_ACCOUNT_DETAILS_PREFIX$accountId")
+                }
+            }
+            userDefaults.synchronize()
+            NSLog("$TAG: Persisted ${mockAccounts.size} accounts")
+        } catch (e: Exception) {
+            NSLog("$TAG: Failed to persist accounts: ${e.message}")
+        }
     }
 
     private fun configureAudioSessionIfNeeded() {
@@ -138,6 +197,9 @@ class IOSJamiBridge : JamiBridge {
         mockContacts[accountId] = mutableListOf()
         mockConversations[accountId] = mutableListOf()
 
+        // Persist to UserDefaults
+        persistAccounts()
+
         // Emit registration events
         _accountEvents.tryEmit(JamiAccountEvent.RegistrationStateChanged(
             accountId, RegistrationState.TRYING, 0, ""
@@ -167,6 +229,10 @@ class IOSJamiBridge : JamiBridge {
             mockAccountDetails.remove(accountId)
             mockContacts.remove(accountId)
             mockConversations.remove(accountId)
+
+            // Remove persisted details and update accounts list
+            userDefaults.removeObjectForKey("$KEY_ACCOUNT_DETAILS_PREFIX$accountId")
+            persistAccounts()
         }
     }
 
@@ -293,6 +359,16 @@ class IOSJamiBridge : JamiBridge {
     }
 
     override fun getTrustRequests(accountId: String): List<TrustRequest> = emptyList()
+
+    override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: subscribeBuddy: $uri, flag=$flag")
+            // Emit a presence event for UI testing
+            if (flag) {
+                _contactEvents.tryEmit(JamiContactEvent.PresenceChanged(accountId, uri, false))
+            }
+        }
+    }
 
     // =========================================================================
     // Conversation Management

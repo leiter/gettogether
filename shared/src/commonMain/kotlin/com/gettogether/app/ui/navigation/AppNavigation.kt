@@ -16,6 +16,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
 import com.gettogether.app.ui.screens.auth.CreateAccountScreen
 import com.gettogether.app.ui.screens.auth.ImportAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
@@ -27,6 +28,7 @@ import com.gettogether.app.ui.screens.contacts.ContactDetailsScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
 import org.koin.compose.koinInject
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun AppNavigation(modifier: Modifier = Modifier) {
@@ -84,7 +86,9 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         }
 
         composable(Screen.CreateAccount.route) {
+            val createAccountViewModel: CreateAccountViewModel = koinViewModel()
             CreateAccountScreen(
+                viewModel = createAccountViewModel,
                 onNavigateBack = {
                     navController.popBackStack()
                 },
