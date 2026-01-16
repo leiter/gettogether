@@ -87,6 +87,23 @@ class AccountRepository(
                     println("[ACCOUNT-RESTORE] ✓ DHT proxy enabled")
                 }
 
+                // Disable UPnP - it fails in emulators and causes unnecessary connection attempts and instability
+                val upnpEnabled = details["Account.upnpEnabled"]
+                if (upnpEnabled == "true") {
+                    println("[ACCOUNT-RESTORE] Disabling UPnP for better stability...")
+                    jamiBridge.setAccountDetails(accountId, mapOf("Account.upnpEnabled" to "false"))
+                    println("[ACCOUNT-RESTORE] ✓ UPnP disabled")
+                }
+
+                // Disable TURN - IPv6 TURN resolution fails in emulators, causes connection instability
+                // DHT proxy is sufficient for messaging
+                val turnEnabled = details["TURN.enable"]
+                if (turnEnabled == "true") {
+                    println("[ACCOUNT-RESTORE] Disabling TURN to avoid IPv6 resolution failures...")
+                    jamiBridge.setAccountDetails(accountId, mapOf("TURN.enable" to "false"))
+                    println("[ACCOUNT-RESTORE] ✓ TURN disabled")
+                }
+
                 println("[ACCOUNT-RESTORE] Loading volatile details for: $accountId")
                 val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
                 val regStatus = volatileDetails["Account.registrationStatus"]

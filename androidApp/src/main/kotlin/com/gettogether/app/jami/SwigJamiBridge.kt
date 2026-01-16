@@ -479,7 +479,11 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             "Account.archivePassword" to password,
             // Enable DHT proxy to allow communication through Jami's relay servers
             // This is essential for devices behind NAT (like emulators) that can't establish direct P2P connections
-            "Account.proxyEnabled" to "true"
+            "Account.proxyEnabled" to "true",
+            // Disable UPnP - it always fails in emulators and causes unnecessary connection attempts
+            "Account.upnpEnabled" to "false",
+            // Disable TURN - IPv6 TURN resolution fails in emulators, DHT proxy is sufficient for messaging
+            "TURN.enable" to "false"
         )
         Log.i(TAG, "[ACCOUNT-CREATE] Account details map: $detailsMap")
 
