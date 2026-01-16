@@ -96,13 +96,13 @@ fun ConversationsTab(
         )
 
         when {
-            state.isLoading && state.conversations.isEmpty() -> {
+            state.isLoading && state.conversations.isEmpty() && requestsState.requests.isEmpty() -> {
                 LoadingPlaceholder()
             }
             !state.hasAccount -> {
                 NoAccountPlaceholder()
             }
-            state.conversations.isEmpty() -> {
+            state.conversations.isEmpty() && requestsState.requests.isEmpty() -> {
                 PullToRefreshBox(
                     isRefreshing = state.isLoading,
                     onRefresh = { viewModel.refresh() },

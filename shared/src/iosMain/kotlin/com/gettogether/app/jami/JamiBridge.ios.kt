@@ -307,7 +307,11 @@ class IOSJamiBridge : JamiBridge {
 
     override suspend fun addContact(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: addContact: $uri")
+            NSLog("$TAG: ⚠️ [MOCK WARNING] addContact() - NO NETWORK REQUEST SENT")
+            NSLog("$TAG: ⚠️ This is a MOCK implementation. No contact request is sent over the Jami network.")
+            NSLog("$TAG: ⚠️ Real cross-platform contact requests require native iOS Jami daemon integration.")
+            NSLog("$TAG: addContact: accountId=$accountId, uri=$uri")
+
             val contact = JamiContact(
                 uri = uri,
                 displayName = "Contact ${uri.take(8)}",
@@ -317,6 +321,7 @@ class IOSJamiBridge : JamiBridge {
             )
             mockContacts[accountId]?.add(contact)
             _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, false))
+            NSLog("$TAG: ✓ Mock contact added locally (not sent to network)")
         }
     }
 
@@ -342,23 +347,38 @@ class IOSJamiBridge : JamiBridge {
 
     override suspend fun acceptTrustRequest(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: acceptTrustRequest from: $uri")
+            NSLog("$TAG: ⚠️ [MOCK WARNING] acceptTrustRequest() - MOCK-ONLY OPERATION")
+            NSLog("$TAG: ⚠️ This is a MOCK implementation. No acceptance is sent over the Jami network.")
+            NSLog("$TAG: ⚠️ Real trust request acceptance requires native iOS Jami daemon integration.")
+            NSLog("$TAG: acceptTrustRequest: accountId=$accountId, from=$uri")
+
             mockContacts[accountId]?.find { it.uri == uri }?.let {
                 val updated = it.copy(isConfirmed = true)
                 mockContacts[accountId]?.remove(it)
                 mockContacts[accountId]?.add(updated)
             }
             _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, true))
+            NSLog("$TAG: ✓ Mock trust request accepted locally (not sent to network)")
         }
     }
 
     override suspend fun discardTrustRequest(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: discardTrustRequest from: $uri")
+            NSLog("$TAG: ⚠️ [MOCK WARNING] discardTrustRequest() - MOCK-ONLY OPERATION")
+            NSLog("$TAG: ⚠️ This is a MOCK implementation. No discard is sent over the Jami network.")
+            NSLog("$TAG: ⚠️ Real trust request discard requires native iOS Jami daemon integration.")
+            NSLog("$TAG: discardTrustRequest: accountId=$accountId, from=$uri")
+            NSLog("$TAG: ✓ Mock trust request discarded locally (not sent to network)")
         }
     }
 
-    override fun getTrustRequests(accountId: String): List<TrustRequest> = emptyList()
+    override fun getTrustRequests(accountId: String): List<TrustRequest> {
+        NSLog("$TAG: ⚠️ [MOCK WARNING] getTrustRequests() - ALWAYS RETURNS EMPTY LIST")
+        NSLog("$TAG: ⚠️ This is a MOCK implementation. Real trust requests are not fetched from the network.")
+        NSLog("$TAG: ⚠️ Cross-platform contact requests will NOT appear here until native iOS integration is complete.")
+        NSLog("$TAG: getTrustRequests: accountId=$accountId, returning empty list")
+        return emptyList()
+    }
 
     override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) {
         withContext(Dispatchers.Default) {

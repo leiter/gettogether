@@ -476,7 +476,10 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             "Account.type" to "RING",
             "Account.alias" to displayName,
             "Account.displayName" to displayName,
-            "Account.archivePassword" to password
+            "Account.archivePassword" to password,
+            // Enable DHT proxy to allow communication through Jami's relay servers
+            // This is essential for devices behind NAT (like emulators) that can't establish direct P2P connections
+            "Account.proxyEnabled" to "true"
         )
         Log.i(TAG, "[ACCOUNT-CREATE] Account details map: $detailsMap")
 

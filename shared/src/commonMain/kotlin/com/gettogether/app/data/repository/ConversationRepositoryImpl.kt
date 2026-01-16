@@ -786,8 +786,12 @@ class ConversationRepositoryImpl(
         }
 
         // Don't notify for own messages
-        // Note: We could check if authorId == currentAccountId, but Jami already filters these out in the event
-        // so this is just a safety check
+        // Check if the message author is the current user (by comparing with the user's Jami ID)
+        val currentUserJamiId = accountRepository.accountState.value.jamiId
+        if (authorId == currentUserJamiId || authorId == accountId) {
+            println("ConversationRepository: Skipping notification for own message (author=$authorId, currentUser=$currentUserJamiId)")
+            return
+        }
 
         try {
             // Get contact details for the author to get their display name
