@@ -13,7 +13,16 @@ data class SettingsState(
     val isUpdatingProfile: Boolean = false,
     val profileUpdateSuccess: String? = null,
     val selectedAvatarUri: String? = null,
-    val isProcessingAvatar: Boolean = false
+    val isProcessingAvatar: Boolean = false,
+    // Export account
+    val showExportDialog: Boolean = false,
+    val isExporting: Boolean = false,
+    val exportSuccess: String? = null,
+    val exportError: String? = null,
+    // Logout options
+    val showLogoutOptionsDialog: Boolean = false,
+    val isLoggingOut: Boolean = false,
+    val logoutComplete: Boolean = false
 )
 
 data class UserProfile(

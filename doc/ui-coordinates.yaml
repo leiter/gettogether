@@ -208,6 +208,69 @@ devices:
         input_field:
           tap: [683, 1725]
 
+  # Android Emulator - Medium Phone API 36
+  emulator-5554:
+    model: sdk_gphone64_arm64
+    product: sdk_gphone64_arm64
+    resolution: [1080, 2400]
+
+    screens:
+      # =====================
+      # Authentication Screens
+      # =====================
+      welcome:
+        create_account_button:
+          bounds: [[84, 1176], [996, 1302]]
+          tap: [540, 1239]
+        import_account_button:
+          bounds: [[84, 1344], [996, 1470]]
+          tap: [540, 1407]
+
+      create_account:
+        display_name_field:
+          bounds: [[84, 599], [996, 767]]
+          tap: [540, 683]
+        create_button:
+          bounds: [[84, 852], [996, 978]]
+          tap: [540, 915]
+        back_button:
+          bounds: [[12, 85], [138, 211]]
+          tap: [75, 148]
+
+      # =====================
+      # Main Navigation
+      # =====================
+      home:
+        bottom_nav:
+          chats_tab:
+            tap: [115, 2325]
+          contacts_tab:
+            tap: [360, 2325]
+          settings_tab:
+            tap: [600, 2325]
+
+      # =====================
+      # Permission Dialogs (Android 36)
+      # =====================
+      permission_dialog:
+        while_using_app:
+          bounds: [[133, 1176], [947, 1281]]
+          tap: [540, 1228]
+        only_this_time:
+          bounds: [[133, 1324], [947, 1429]]
+          tap: [540, 1376]
+        dont_allow:
+          bounds: [[133, 1472], [947, 1577]]
+          tap: [540, 1524]
+
+      notification_permission:
+        allow:
+          bounds: [[133, 1250], [947, 1355]]
+          tap: [540, 1302]
+        dont_allow:
+          bounds: [[133, 1398], [947, 1503]]
+          tap: [540, 1450]
+
 # =============================================================================
 # Template for adding new devices
 # =============================================================================

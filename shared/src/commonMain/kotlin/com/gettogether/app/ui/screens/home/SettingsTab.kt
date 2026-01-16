@@ -18,11 +18,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -83,6 +86,50 @@ fun SettingsTab(
                 duration = SnackbarDuration.Short
             )
         }
+    }
+
+    // Handle logout completion (different from signOutComplete which deletes account)
+    LaunchedEffect(state.logoutComplete) {
+        if (state.logoutComplete) {
+            onSignedOut()
+        }
+    }
+
+    // Handle export success
+    LaunchedEffect(state.exportSuccess) {
+        state.exportSuccess?.let { message ->
+            snackbarHostState.showSnackbar(
+                message = message,
+                duration = SnackbarDuration.Long
+            )
+            viewModel.clearExportSuccess()
+        }
+    }
+
+    // Export account dialog
+    if (state.showExportDialog) {
+        ExportAccountDialog(
+            isExporting = state.isExporting,
+            error = state.exportError,
+            onDismiss = { viewModel.hideExportDialog() },
+            onExport = { password -> viewModel.exportAccount(password) }
+        )
+    }
+
+    // Logout options dialog
+    if (state.showLogoutOptionsDialog) {
+        LogoutOptionsDialog(
+            onDismiss = { viewModel.hideLogoutOptionsDialog() },
+            onLogoutKeepData = { viewModel.logoutKeepData() },
+            onDeleteAccount = {
+                viewModel.hideLogoutOptionsDialog()
+                viewModel.showSignOutDialog()
+            },
+            onExportFirst = {
+                viewModel.hideLogoutOptionsDialog()
+                viewModel.showExportDialog()
+            }
+        )
     }
 
     // Sign out confirmation dialog
@@ -251,12 +298,22 @@ fun SettingsTab(
                     AboutSection()
                 }
 
-                // Sign out
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // Export account
+                SettingsItem(
+                    icon = Icons.Default.Share,
+                    title = "Export Account",
+                    subtitle = "Backup your account to a file",
+                    onClick = { viewModel.showExportDialog() }
+                )
+
+                // Sign out (shows options dialog)
                 SettingsItem(
                     icon = Icons.AutoMirrored.Filled.ExitToApp,
                     title = "Sign Out",
-                    subtitle = "Sign out of your account",
-                    onClick = { viewModel.showSignOutDialog() },
+                    subtitle = "Logout or delete your account",
+                    onClick = { viewModel.showLogoutOptionsDialog() },
                     isDestructive = true
                 )
 
@@ -729,6 +786,154 @@ private fun EditProfileDialog(
                 onClick = onDismiss,
                 enabled = !isUpdating
             ) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ExportAccountDialog(
+    isExporting: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onExport: (String) -> Unit
+) {
+    var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = { if (!isExporting) onDismiss() },
+        title = { Text("Export Account") },
+        text = {
+            Column {
+                Text(
+                    text = "Create a backup of your account. You can use this to restore your account on another device.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password (optional)") },
+                    placeholder = { Text("Encrypt backup with password") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                    enabled = !isExporting,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (password.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = { Text("Confirm Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        enabled = !isExporting,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
+                if (isExporting) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Exporting...")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onExport(password) },
+                enabled = !isExporting && (password.isEmpty() || password == confirmPassword)
+            ) {
+                Text("Export")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !isExporting) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun LogoutOptionsDialog(
+    onDismiss: () -> Unit,
+    onLogoutKeepData: () -> Unit,
+    onDeleteAccount: () -> Unit,
+    onExportFirst: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Sign Out Options") },
+        text = {
+            Column {
+                Text(
+                    text = "Choose how you want to sign out:",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Logout option (keep data)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onLogoutKeepData() },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text("Logout (Keep Data)", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            text = "Your account stays on this device. You can relogin later.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Delete account option
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDeleteAccount() },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.errorContainer
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Delete Account",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "Permanently remove account from this device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                TextButton(onClick = onExportFirst) {
+                    Text("Export backup first")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
                 Text("Cancel")
             }
         }

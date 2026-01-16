@@ -28,24 +28,37 @@ class CreateAccountViewModel(
     }
 
     fun createAccount() {
+        println("[ACCOUNT-CREATE] CreateAccountViewModel.createAccount() called")
         val currentState = _state.value
+        println("[ACCOUNT-CREATE] Current state: displayName='${currentState.displayName}', isValid=${currentState.isValid}")
+
         if (!currentState.isValid) {
+            println("[ACCOUNT-CREATE] Validation failed: displayName too short (min 2 chars)")
             _state.update { it.copy(error = "Display name must be at least 2 characters") }
             return
         }
 
+        println("[ACCOUNT-CREATE] Validation passed, starting account creation...")
         viewModelScope.launch {
             _state.update { it.copy(isCreating = true, error = null) }
+            println("[ACCOUNT-CREATE] State updated to isCreating=true")
+
             try {
+                println("[ACCOUNT-CREATE] Calling accountRepository.createAccount('${currentState.displayName}')...")
                 accountRepository.createAccount(currentState.displayName)
+                println("[ACCOUNT-CREATE] ✓ Account creation succeeded")
                 _state.update { it.copy(isCreating = false, isAccountCreated = true) }
+                println("[ACCOUNT-CREATE] State updated: isCreating=false, isAccountCreated=true")
             } catch (e: Exception) {
+                println("[ACCOUNT-CREATE] ✗ Account creation FAILED: ${e.message}")
+                e.printStackTrace()
                 _state.update {
                     it.copy(
                         isCreating = false,
                         error = e.message ?: "Failed to create account"
                     )
                 }
+                println("[ACCOUNT-CREATE] State updated with error: ${e.message}")
             }
         }
     }

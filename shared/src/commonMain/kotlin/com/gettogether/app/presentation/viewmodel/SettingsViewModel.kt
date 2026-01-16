@@ -6,8 +6,10 @@ import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.RegistrationState
+import com.gettogether.app.platform.ExportPathProvider
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.ImageProcessingResult
+import com.gettogether.app.platform.generateExportFilename
 import com.gettogether.app.presentation.state.NotificationSettings
 import com.gettogether.app.presentation.state.PrivacySettings
 import com.gettogether.app.presentation.state.SettingsState
@@ -22,7 +24,8 @@ class SettingsViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
     private val settingsRepository: SettingsRepository,
-    private val imageProcessor: ImageProcessor
+    private val imageProcessor: ImageProcessor,
+    private val exportPathProvider: ExportPathProvider
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -384,6 +387,88 @@ class SettingsViewModel(
                             error = "Failed to update profile: ${fallbackError.message}"
                         )
                     }
+                }
+            }
+        }
+    }
+
+    // ========== Export Account ==========
+
+    fun showExportDialog() {
+        _state.update { it.copy(showExportDialog = true, exportError = null, exportSuccess = null) }
+    }
+
+    fun hideExportDialog() {
+        _state.update { it.copy(showExportDialog = false, exportError = null) }
+    }
+
+    fun exportAccount(password: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(isExporting = true, exportError = null) }
+            try {
+                val exportDir = exportPathProvider.getExportDirectory()
+                val filename = generateExportFilename()
+                val destinationPath = "$exportDir/$filename"
+
+                val success = accountRepository.exportAccount(destinationPath, password)
+
+                if (success) {
+                    _state.update {
+                        it.copy(
+                            isExporting = false,
+                            showExportDialog = false,
+                            exportSuccess = "Account exported to: $filename"
+                        )
+                    }
+                } else {
+                    _state.update {
+                        it.copy(
+                            isExporting = false,
+                            exportError = "Export failed. Please try again."
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isExporting = false,
+                        exportError = e.message ?: "Export failed"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearExportSuccess() {
+        _state.update { it.copy(exportSuccess = null) }
+    }
+
+    // ========== Logout Options ==========
+
+    fun showLogoutOptionsDialog() {
+        _state.update { it.copy(showLogoutOptionsDialog = true) }
+    }
+
+    fun hideLogoutOptionsDialog() {
+        _state.update { it.copy(showLogoutOptionsDialog = false) }
+    }
+
+    /**
+     * Logout while preserving account data.
+     * The account can be relogged into later.
+     */
+    fun logoutKeepData() {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoggingOut = true, showLogoutOptionsDialog = false) }
+            try {
+                accountRepository.logoutCurrentAccount()
+                _state.update { it.copy(isLoggingOut = false, logoutComplete = true) }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isLoggingOut = false,
+                        error = e.message ?: "Logout failed"
+                    )
                 }
             }
         }

@@ -37,26 +37,37 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     // SWIG Callback implementations
     private val configCallback = object : ConfigurationCallback() {
         override fun registrationStateChanged(accountId: String?, state: String?, code: Int, detail: String?) {
+            Log.i(TAG, "[ACCOUNT-EVENT] registrationStateChanged: accountId=$accountId, state=$state, code=$code, detail=$detail")
             val regState = parseRegistrationState(state ?: "")
+            Log.i(TAG, "[ACCOUNT-EVENT] Parsed registration state: $regState")
             val event = JamiAccountEvent.RegistrationStateChanged(
                 accountId ?: "",
                 regState,
                 code,
                 detail ?: ""
             )
-            _accountEvents.tryEmit(event)
+            val emitted = _accountEvents.tryEmit(event)
+            Log.i(TAG, "[ACCOUNT-EVENT] RegistrationStateChanged event emitted: $emitted")
             _events.tryEmit(event)
         }
 
         override fun accountsChanged() {
-            Log.d(TAG, "Accounts changed")
+            Log.i(TAG, "[ACCOUNT-EVENT] accountsChanged callback triggered")
+            Log.i(TAG, "[ACCOUNT-EVENT] This indicates accounts list was modified (add/remove)")
         }
 
         override fun accountDetailsChanged(accountId: String?, details: StringMap?) {
+            Log.i(TAG, "[ACCOUNT-EVENT] accountDetailsChanged: accountId=$accountId")
             if (accountId != null && details != null) {
                 val detailsMap = stringMapToKotlin(details)
+                Log.i(TAG, "[ACCOUNT-EVENT] Changed details count: ${detailsMap.size}")
+                detailsMap.forEach { (key, value) ->
+                    val safeValue = if (key.contains("password", ignoreCase = true)) "***" else value
+                    Log.i(TAG, "[ACCOUNT-EVENT]   $key = $safeValue")
+                }
                 val event = JamiAccountEvent.AccountDetailsChanged(accountId, detailsMap)
-                _accountEvents.tryEmit(event)
+                val emitted = _accountEvents.tryEmit(event)
+                Log.i(TAG, "[ACCOUNT-EVENT] AccountDetailsChanged event emitted: $emitted")
                 _events.tryEmit(event)
             }
         }
@@ -453,14 +464,29 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     // Account Management
     override suspend fun createAccount(displayName: String, password: String): String = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext ""
-        val details = kotlinToStringMap(mapOf(
+        Log.i(TAG, "[ACCOUNT-CREATE] === createAccount() called ===")
+        Log.i(TAG, "[ACCOUNT-CREATE] displayName='$displayName', password.length=${password.length}")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-CREATE] FAILED: Native library not loaded!")
+            return@withContext ""
+        }
+
+        val detailsMap = mapOf(
             "Account.type" to "RING",
             "Account.alias" to displayName,
             "Account.displayName" to displayName,
             "Account.archivePassword" to password
-        ))
-        JamiService.addAccount(details)
+        )
+        Log.i(TAG, "[ACCOUNT-CREATE] Account details map: $detailsMap")
+
+        val details = kotlinToStringMap(detailsMap)
+        Log.i(TAG, "[ACCOUNT-CREATE] Calling JamiService.addAccount()...")
+
+        val result = JamiService.addAccount(details)
+        Log.i(TAG, "[ACCOUNT-CREATE] JamiService.addAccount() returned: '$result'")
+        Log.i(TAG, "[ACCOUNT-CREATE] Note: Registration events will follow asynchronously")
+        result
     }
 
     override suspend fun importAccount(archivePath: String, password: String): String = withContext(Dispatchers.IO) {
@@ -484,18 +510,44 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override fun getAccountIds(): List<String> {
-        if (!nativeLoaded) return emptyList()
-        return stringVectToList(JamiService.getAccountList())
+        Log.i(TAG, "[ACCOUNT-PERSIST] getAccountIds() called")
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getAccountIds() FAILED: Native not loaded")
+            return emptyList()
+        }
+        val accountIds = stringVectToList(JamiService.getAccountList())
+        Log.i(TAG, "[ACCOUNT-PERSIST] Found ${accountIds.size} accounts: $accountIds")
+        return accountIds
     }
 
     override fun getAccountDetails(accountId: String): Map<String, String> {
-        if (!nativeLoaded) return emptyMap()
-        return stringMapToKotlin(JamiService.getAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] getAccountDetails() called for accountId=$accountId")
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getAccountDetails() FAILED: Native not loaded")
+            return emptyMap()
+        }
+        val details = stringMapToKotlin(JamiService.getAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] Account details for $accountId:")
+        details.forEach { (key, value) ->
+            // Don't log sensitive values
+            val safeValue = if (key.contains("password", ignoreCase = true) || key.contains("secret", ignoreCase = true)) "***" else value
+            Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $safeValue")
+        }
+        return details
     }
 
     override fun getVolatileAccountDetails(accountId: String): Map<String, String> {
-        if (!nativeLoaded) return emptyMap()
-        return stringMapToKotlin(JamiService.getVolatileAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() called for accountId=$accountId")
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() FAILED: Native not loaded")
+            return emptyMap()
+        }
+        val details = stringMapToKotlin(JamiService.getVolatileAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] Volatile details for $accountId:")
+        details.forEach { (key, value) ->
+            Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $value")
+        }
+        return details
     }
 
     override suspend fun setAccountDetails(accountId: String, details: Map<String, String>) = withContext(Dispatchers.IO) {
