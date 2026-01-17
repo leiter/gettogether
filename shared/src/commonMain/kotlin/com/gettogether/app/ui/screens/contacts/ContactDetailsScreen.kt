@@ -54,6 +54,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.ContactDetails
 import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
+import com.gettogether.app.ui.components.ContactAvatarImage
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -320,19 +321,11 @@ private fun ProfileHeader(
     ) {
         // Avatar
         Box {
-            Surface(
-                modifier = Modifier.size(120.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = contact.getEffectiveName().first().uppercase(),
-                        style = MaterialTheme.typography.displayMedium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                }
-            }
+            ContactAvatarImage(
+                avatarUri = contact.avatarUri,
+                displayName = contact.getEffectiveName(),
+                size = 120.dp
+            )
             // Online indicator
             Surface(
                 modifier = Modifier

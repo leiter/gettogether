@@ -899,6 +899,20 @@ sealed class JamiContactEvent : JamiEvent() {
         val isOnline: Boolean,
         override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiContactEvent()
+
+    /**
+     * Emitted when a contact's profile (vCard) is received or updated.
+     * This happens when:
+     * - Initial contact profile is fetched after adding contact
+     * - Contact updates their display name or avatar
+     */
+    data class ContactProfileReceived(
+        val accountId: String,
+        val contactUri: String,
+        val displayName: String?,
+        val avatarBase64: String?,
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
+    ) : JamiContactEvent()
 }
 
 // =============================================================================

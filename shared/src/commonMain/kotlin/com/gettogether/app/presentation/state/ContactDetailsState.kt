@@ -17,6 +17,7 @@ data class ContactDetails(
     val id: String,
     val displayName: String,
     val customName: String? = null,  // User-defined custom name
+    val avatarUri: String? = null,
     val username: String,
     val jamiId: String,
     val isOnline: Boolean,

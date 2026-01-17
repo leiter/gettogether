@@ -1,6 +1,7 @@
 package com.gettogether.app.ui.screens.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import com.gettogether.app.ui.components.AvatarImage
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.CircularProgressIndicator
@@ -192,12 +194,33 @@ private fun ConversationItem(
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Avatar
-            AvatarImage(
-                avatarUri = conversation.avatarUri,
-                displayName = conversation.name,
-                size = 48.dp
-            )
+            // Avatar - show group icon for group chats, contact avatar for 1:1
+            if (conversation.isGroup) {
+                // Group chat - show group icon
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            MaterialTheme.colorScheme.tertiaryContainer,
+                            MaterialTheme.shapes.extraLarge
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Groups,
+                        contentDescription = "Group chat",
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            } else {
+                // 1:1 chat - show contact avatar
+                AvatarImage(
+                    avatarUri = conversation.avatarUri,
+                    displayName = conversation.name,
+                    size = 48.dp
+                )
+            }
 
             Spacer(modifier = Modifier.width(16.dp))
 

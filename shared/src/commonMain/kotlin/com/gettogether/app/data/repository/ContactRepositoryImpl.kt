@@ -5,6 +5,7 @@ import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
+import com.gettogether.app.platform.ContactAvatarStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlin.time.Clock
@@ -24,7 +25,8 @@ import kotlinx.coroutines.launch
 class ContactRepositoryImpl(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val contactPersistence: com.gettogether.app.data.persistence.ContactPersistence
+    private val contactPersistence: com.gettogether.app.data.persistence.ContactPersistence,
+    private val avatarStorage: ContactAvatarStorage? = null
 ) : ContactRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -267,16 +269,27 @@ class ContactRepositoryImpl(
             val contacts = jamiContacts.map { jamiContact ->
                 println("  - Mapping contact: ${jamiContact.displayName} (${jamiContact.uri.take(16)}...)")
 
-                // Preserve customName from existing contact if available
+                // Preserve data from existing contact if available (from profile events or persistence)
                 val existingContact = existingContactsMap[jamiContact.uri]
                 val customName = existingContact?.customName
+
+                // Preserve displayName from existing contact if daemon returns blank
+                // (profile events update displayName with actual contact name)
+                val displayName = if (jamiContact.displayName.isNotBlank()) {
+                    jamiContact.displayName
+                } else {
+                    existingContact?.displayName ?: jamiContact.uri.take(8)
+                }
+
+                // Preserve avatarUri from existing contact (profile events save avatar locally)
+                val avatarUri = existingContact?.avatarUri ?: jamiContact.avatarPath
 
                 Contact(
                     id = jamiContact.uri,
                     uri = jamiContact.uri,
-                    displayName = jamiContact.displayName.ifBlank { jamiContact.uri.take(8) },
+                    displayName = displayName,
                     customName = customName,
-                    avatarUri = jamiContact.avatarPath,
+                    avatarUri = avatarUri,
                     isOnline = _onlineStatusCache.value[jamiContact.uri] ?: false,
                     isBanned = jamiContact.isBanned
                 )
@@ -412,6 +425,62 @@ class ContactRepositoryImpl(
                         println("[CONTACT-EVENT]   Total pending requests: ${currentRequests.size + 1}")
                     } else {
                         println("[CONTACT-EVENT]   Trust request already in cache, skipping")
+                    }
+                }
+            }
+
+            is JamiContactEvent.ContactProfileReceived -> {
+                println("[CONTACT-EVENT] ContactProfileReceived received")
+                println("[CONTACT-EVENT]   Event Account ID: ${event.accountId}")
+                println("[CONTACT-EVENT]   Contact URI: ${event.contactUri}")
+                println("[CONTACT-EVENT]   Display Name: ${event.displayName}")
+                println("[CONTACT-EVENT]   Has Avatar: ${event.avatarBase64 != null}")
+
+                // Skip if this is our own profile (daemon sometimes sends own profile through this callback)
+                val userJamiId = accountRepository.accountState.value.jamiId
+                if (event.contactUri == userJamiId || event.contactUri == accountId) {
+                    println("[CONTACT-EVENT]   Skipping own profile (not a contact)")
+                    return
+                }
+
+                if (event.accountId == accountId) {
+                    scope.launch {
+                        // Save avatar if present
+                        var avatarPath: String? = null
+                        if (event.avatarBase64 != null && avatarStorage != null) {
+                            avatarPath = avatarStorage.saveContactAvatar(event.contactUri, event.avatarBase64)
+                            println("[CONTACT-EVENT]   Avatar saved to: $avatarPath")
+                        }
+
+                        // Update contact in cache with new profile info
+                        val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+                        val existingContact = currentContacts.find { it.uri == event.contactUri }
+
+                        if (existingContact != null) {
+                            // Update existing contact
+                            val updatedContact = existingContact.copy(
+                                displayName = event.displayName ?: existingContact.displayName,
+                                avatarUri = avatarPath ?: existingContact.avatarUri
+                            )
+                            val updatedContacts = currentContacts.map { contact ->
+                                if (contact.uri == event.contactUri) updatedContact else contact
+                            }
+                            _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
+                            println("[CONTACT-EVENT] ✓ Contact profile updated: ${event.contactUri}")
+                        } else {
+                            // Contact not in cache yet, create new entry
+                            val newContact = Contact(
+                                id = event.contactUri,
+                                uri = event.contactUri,
+                                displayName = event.displayName ?: event.contactUri.take(8),
+                                avatarUri = avatarPath,
+                                isOnline = _onlineStatusCache.value[event.contactUri] ?: false,
+                                isBanned = false
+                            )
+                            _contactsCache.value = _contactsCache.value +
+                                (accountId to (currentContacts + newContact))
+                            println("[CONTACT-EVENT] ✓ New contact created from profile: ${event.contactUri}")
+                        }
                     }
                 }
             }

@@ -364,6 +364,7 @@ class ConversationRepositoryImpl(
                 uri = member.uri,
                 displayName = displayName,
                 customName = cachedContact?.customName,
+                avatarUri = cachedContact?.avatarUri,
                 isOnline = cachedContact?.isOnline ?: false
             )
         }

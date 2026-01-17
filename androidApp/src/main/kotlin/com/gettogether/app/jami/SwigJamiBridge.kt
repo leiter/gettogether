@@ -2,6 +2,7 @@ package com.gettogether.app.jami
 
 import android.content.Context
 import android.util.Log
+import com.gettogether.app.data.util.VCardParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,14 +75,48 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
 
         override fun profileReceived(accountId: String?, from: String?, vcardPath: String?) {
-            // NOTE: This callback is for CONTACT profiles (when we receive a contact's vCard),
-            // NOT for the account's own profile. The parameters are:
+            // This callback is for CONTACT profiles (when we receive a contact's vCard)
+            // Parameters:
             //   - accountId: our account
             //   - from: the contact's URI whose profile we received
             //   - vcardPath: path to the contact's vCard file
-            // Do NOT emit an account profile event here - that would incorrectly
-            // update our display name to the contact's name!
-            Log.d(TAG, "profileReceived: accountId=$accountId, from=$from, vcardPath=$vcardPath (contact profile, ignored for account state)")
+            Log.d(TAG, "profileReceived: accountId=$accountId, from=$from, vcardPath=$vcardPath")
+
+            if (accountId == null || from == null || vcardPath.isNullOrBlank()) {
+                Log.w(TAG, "profileReceived: Missing required parameters")
+                return
+            }
+
+            try {
+                // Read and parse the vCard file
+                val vcardFile = java.io.File(vcardPath)
+                if (!vcardFile.exists()) {
+                    Log.w(TAG, "profileReceived: vCard file not found: $vcardPath")
+                    return
+                }
+
+                val vcardBytes = vcardFile.readBytes()
+                val profile = VCardParser.parse(vcardBytes)
+
+                if (profile != null) {
+                    Log.i(TAG, "profileReceived: Parsed contact profile - displayName='${profile.displayName}', hasPhoto=${profile.photoBase64 != null}")
+
+                    // Emit contact profile event
+                    val event = JamiContactEvent.ContactProfileReceived(
+                        accountId = accountId,
+                        contactUri = from,
+                        displayName = profile.displayName,
+                        avatarBase64 = profile.photoBase64
+                    )
+                    val emitted = _contactEvents.tryEmit(event)
+                    Log.i(TAG, "profileReceived: ContactProfileReceived event emitted=$emitted")
+                    _events.tryEmit(event)
+                } else {
+                    Log.w(TAG, "profileReceived: Failed to parse vCard from $vcardPath")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "profileReceived: Error reading/parsing vCard: ${e.message}", e)
+            }
         }
 
         override fun nameRegistrationEnded(accountId: String?, state: Int, name: String?) {

@@ -28,7 +28,8 @@ data class ConversationUiItem(
     val time: String,
     val unreadCount: Int,
     val avatarInitial: String,
-    val avatarUri: String?
+    val avatarUri: String?,
+    val isGroup: Boolean = false
 )
 
 class ConversationsViewModel(
@@ -164,7 +165,8 @@ class ConversationsViewModel(
             time = timeText,
             unreadCount = unreadCount,
             avatarInitial = initial,
-            avatarUri = conversationAvatar
+            avatarUri = conversationAvatar,
+            isGroup = isGroup
         )
     }
 

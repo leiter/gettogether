@@ -35,7 +35,7 @@ val sharedModule = module {
         println("Koin: Creating AccountRepository")
         AccountRepository(get()).also { println("Koin: AccountRepository created") }
     }
-    single { ContactRepositoryImpl(get(), get(), get()) }
+    single { ContactRepositoryImpl(get(), get(), get(), getOrNull()) }
     single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }
     single { ConversationRepositoryImpl(get(), get(), get(), get(), getOrNull(), getOrNull()) }
 
@@ -46,7 +46,7 @@ val sharedModule = module {
         CreateAccountViewModel(get(), get()).also { println("Koin: CreateAccountViewModel created") }
     }
     viewModel { ImportAccountViewModel(get(), get()) }
-    viewModel { ChatViewModel(get(), get(), get()) }
+    viewModel { ChatViewModel(get(), get(), get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }
     viewModel { ConversationRequestsViewModel(get(), get()) }
     viewModel { ContactsViewModel(get(), get()) }

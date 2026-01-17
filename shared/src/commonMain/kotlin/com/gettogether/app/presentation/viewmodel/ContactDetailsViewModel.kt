@@ -40,6 +40,7 @@ class ContactDetailsViewModel(
                                     id = contactId,
                                     displayName = domainContact.displayName,
                                     customName = domainContact.customName,
+                                    avatarUri = domainContact.avatarUri,
                                     username = contactDetails["username"] ?: "",
                                     jamiId = contactId,
                                     isOnline = domainContact.isOnline, // Use online status from repository cache

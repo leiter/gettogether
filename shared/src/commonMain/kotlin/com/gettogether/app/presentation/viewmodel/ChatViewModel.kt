@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.ConversationRepositoryImpl
+import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiConversationEvent
 import com.gettogether.app.presentation.state.ChatMessage
@@ -12,6 +13,7 @@ import com.gettogether.app.presentation.state.MessageStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -19,7 +21,8 @@ import kotlin.time.Clock
 class ChatViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val conversationRepository: ConversationRepositoryImpl
+    private val conversationRepository: ConversationRepositoryImpl,
+    private val contactRepository: ContactRepository
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -58,18 +61,27 @@ class ChatViewModel(
                         // Find the member that is not the current user
                         val otherMember = members.find { it.uri != userJamiId && it.uri != accountId }
                         if (otherMember != null) {
-                            // Use member URI as display name if title is empty
-                            if (contactName.isBlank()) {
-                                // Truncate long Jami IDs for display
-                                contactName = if (otherMember.uri.length > 8) {
-                                    otherMember.uri.take(8)
-                                } else {
-                                    otherMember.uri
+                            // Get contact info from ContactRepository (has profile data from profileReceived)
+                            val contact = contactRepository.getContactById(accountId, otherMember.uri).firstOrNull()
+                            if (contact != null) {
+                                // Use contact's effective name (customName > displayName)
+                                val effectiveName = contact.getEffectiveName()
+                                if (contactName.isBlank() && effectiveName.isNotBlank()) {
+                                    contactName = effectiveName
                                 }
+                                contactAvatarUri = contact.avatarUri
+                                println("ChatViewModel.loadConversation: Contact from repo - name: ${contact.displayName}, customName: ${contact.customName}, avatar: $contactAvatarUri")
+                            } else {
+                                // Fallback: Use member URI if title is empty
+                                if (contactName.isBlank()) {
+                                    contactName = if (otherMember.uri.length > 8) {
+                                        otherMember.uri.take(8)
+                                    } else {
+                                        otherMember.uri
+                                    }
+                                }
+                                println("ChatViewModel.loadConversation: Contact not in repo, using fallback name: $contactName")
                             }
-                            val contactDetails = jamiBridge.getContactDetails(accountId, otherMember.uri)
-                            contactAvatarUri = contactDetails["avatar"]
-                            println("ChatViewModel.loadConversation: Contact name: $contactName, avatar: $contactAvatarUri")
                         }
                     } catch (e: Exception) {
                         println("ChatViewModel.loadConversation: Failed to get contact info: ${e.message}")
