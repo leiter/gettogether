@@ -1,15 +1,20 @@
 package com.gettogether.app.data.repository
 
+import com.gettogether.app.domain.model.ExistingAccount
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiAccountEvent
 import com.gettogether.app.jami.RegistrationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * Repository for managing the current Jami account.
@@ -27,16 +32,30 @@ class AccountRepository(
     val accountState: StateFlow<AccountState> = _accountState.asStateFlow()
 
     init {
+        println("[ACCOUNT-RESTORE] AccountRepository initializing...")
+
         // Listen to account events
-        scope.launch {
-            jamiBridge.accountEvents.collect { event ->
-                handleAccountEvent(event)
+        try {
+            scope.launch {
+                println("[ACCOUNT-RESTORE] Starting account events collection...")
+                jamiBridge.accountEvents.collect { event ->
+                    handleAccountEvent(event)
+                }
             }
+            println("[ACCOUNT-RESTORE] Account events collection started successfully")
+        } catch (e: Exception) {
+            println("[ACCOUNT-RESTORE] ERROR: Failed to start account events collection: ${e.message}")
         }
 
         // Load existing accounts on startup
-        scope.launch {
-            loadAccounts()
+        try {
+            scope.launch {
+                println("[ACCOUNT-RESTORE] Starting account loading...")
+                loadAccounts()
+            }
+            println("[ACCOUNT-RESTORE] Account loading initiated")
+        } catch (e: Exception) {
+            println("[ACCOUNT-RESTORE] ERROR: Failed to start account loading: ${e.message}")
         }
     }
 
@@ -44,28 +63,79 @@ class AccountRepository(
      * Load existing accounts and set the first one as current.
      */
     suspend fun loadAccounts() {
+        println("[ACCOUNT-RESTORE] === loadAccounts() called ===")
         try {
+            println("[ACCOUNT-RESTORE] Calling jamiBridge.getAccountIds()...")
             val accountIds = jamiBridge.getAccountIds()
+            println("[ACCOUNT-RESTORE] Found ${accountIds.size} accounts: $accountIds")
+
             if (accountIds.isNotEmpty()) {
                 val accountId = accountIds.first()
+                println("[ACCOUNT-RESTORE] Setting current account to: $accountId")
                 _currentAccountId.value = accountId
 
                 // Load account details
+                println("[ACCOUNT-RESTORE] Loading account details for: $accountId")
                 val details = jamiBridge.getAccountDetails(accountId)
+                println("[ACCOUNT-RESTORE] Account details loaded: displayName='${details["Account.displayName"]}', username='${details["Account.username"]}'")
+
+                // Ensure DHT proxy is enabled for NAT traversal (important for emulators and devices behind NAT)
+                val proxyEnabled = details["Account.proxyEnabled"]
+                if (proxyEnabled != "true") {
+                    println("[ACCOUNT-RESTORE] Enabling DHT proxy for better connectivity...")
+                    jamiBridge.setAccountDetails(accountId, mapOf("Account.proxyEnabled" to "true"))
+                    println("[ACCOUNT-RESTORE] ✓ DHT proxy enabled")
+                }
+
+                // Disable UPnP - it fails in emulators and causes unnecessary connection attempts and instability
+                val upnpEnabled = details["Account.upnpEnabled"]
+                if (upnpEnabled == "true") {
+                    println("[ACCOUNT-RESTORE] Disabling UPnP for better stability...")
+                    jamiBridge.setAccountDetails(accountId, mapOf("Account.upnpEnabled" to "false"))
+                    println("[ACCOUNT-RESTORE] ✓ UPnP disabled")
+                }
+
+                // Disable TURN - IPv6 TURN resolution fails in emulators, causes connection instability
+                // DHT proxy is sufficient for messaging
+                val turnEnabled = details["TURN.enable"]
+                if (turnEnabled == "true") {
+                    println("[ACCOUNT-RESTORE] Disabling TURN to avoid IPv6 resolution failures...")
+                    jamiBridge.setAccountDetails(accountId, mapOf("TURN.enable" to "false"))
+                    println("[ACCOUNT-RESTORE] ✓ TURN disabled")
+                }
+
+                println("[ACCOUNT-RESTORE] Loading volatile details for: $accountId")
                 val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
+                val regStatus = volatileDetails["Account.registrationStatus"]
+                println("[ACCOUNT-RESTORE] Volatile details: registrationStatus='$regStatus'")
+
+                val regState = parseRegistrationState(regStatus)
+                println("[ACCOUNT-RESTORE] Parsed registration state: $regState")
 
                 _accountState.value = AccountState(
                     accountId = accountId,
                     displayName = details["Account.displayName"] ?: "",
                     username = details["Account.username"] ?: "",
                     jamiId = details["Account.username"] ?: accountId,
-                    registrationState = parseRegistrationState(volatileDetails["Account.registrationStatus"]),
+                    registrationState = regState,
                     isLoaded = true
                 )
+                println("[ACCOUNT-RESTORE] ✓ Account state updated successfully")
+                println("[ACCOUNT-RESTORE]   accountId: $accountId")
+                println("[ACCOUNT-RESTORE]   displayName: ${_accountState.value.displayName}")
+                println("[ACCOUNT-RESTORE]   username: ${_accountState.value.username}")
+                println("[ACCOUNT-RESTORE]   registrationState: ${_accountState.value.registrationState}")
+                println("═══════════════════════════════════════════════════════════════")
+                println("[JAMI-ID] Account loaded - Jami ID (40-char): $accountId")
+                println("[JAMI-ID] Share this ID with others to receive contact requests")
+                println("═══════════════════════════════════════════════════════════════")
             } else {
+                println("[ACCOUNT-RESTORE] No accounts found - setting empty state")
                 _accountState.value = AccountState(isLoaded = true)
             }
         } catch (e: Exception) {
+            println("[ACCOUNT-RESTORE] ERROR: Exception during loadAccounts(): ${e.message}")
+            e.printStackTrace()
             _accountState.value = AccountState(
                 isLoaded = true,
                 error = e.message
@@ -75,13 +145,20 @@ class AccountRepository(
 
     /**
      * Create a new account with the given display name.
+     * Waits for the account to be fully registered on the Jami network before returning.
      */
     suspend fun createAccount(displayName: String): String {
-        println("[AccountRepo] createAccount: Starting with displayName='$displayName'")
+        println("[ACCOUNT-CREATE] === AccountRepository.createAccount() called ===")
+        println("[ACCOUNT-CREATE] displayName='$displayName'")
+
+        println("[ACCOUNT-CREATE] Calling jamiBridge.createAccount()...")
         val accountId = jamiBridge.createAccount(displayName)
-        println("[AccountRepo] createAccount: Created account with id='$accountId'")
+        println("[ACCOUNT-CREATE] jamiBridge.createAccount() returned accountId='$accountId'")
+
+        println("[ACCOUNT-CREATE] Setting current account ID to: $accountId")
         _currentAccountId.value = accountId
 
+        println("[ACCOUNT-CREATE] Updating account state with TRYING registration state...")
         _accountState.value = AccountState(
             accountId = accountId,
             displayName = displayName,
@@ -90,14 +167,84 @@ class AccountRepository(
         )
         println("[AccountRepo] createAccount: Set initial state (jamiId will be fetched when REGISTERED)")
 
+        println("[ACCOUNT-CREATE] Waiting for account registration to complete...")
+        // Use NonCancellable to ensure registration wait completes even if caller scope is cancelled
+        withContext(NonCancellable) {
+            try {
+                // Wait for registration state to change to REGISTERED (with 60 second timeout)
+                withTimeout(60_000L) {
+                    jamiBridge.accountEvents.first { event ->
+                        if (event is JamiAccountEvent.RegistrationStateChanged &&
+                            event.accountId == accountId) {
+                            println("[ACCOUNT-CREATE] Registration event received: state=${event.state}")
+                            when (event.state) {
+                                RegistrationState.REGISTERED -> {
+                                    println("[ACCOUNT-CREATE] ✓ Account registered successfully on network!")
+                                    true
+                                }
+                                RegistrationState.ERROR_GENERIC,
+                                RegistrationState.ERROR_AUTH,
+                                RegistrationState.ERROR_NETWORK,
+                                RegistrationState.ERROR_HOST,
+                                RegistrationState.ERROR_SERVICE_UNAVAILABLE -> {
+                                    println("[ACCOUNT-CREATE] ✗ Registration failed: ${event.state}")
+                                    _accountState.value = _accountState.value.copy(
+                                        registrationState = event.state
+                                    )
+                                    // Don't wait anymore if there's an error
+                                    true
+                                }
+                                else -> {
+                                    // Keep waiting for final state (TRYING, INITIALIZING, etc.)
+                                    false
+                                }
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                }
+
+                // Fetch account details to get the username (Jami ID)
+                println("[ACCOUNT-CREATE] Fetching account details...")
+                val details = jamiBridge.getAccountDetails(accountId)
+                val username = details["Account.username"] ?: ""
+                println("[ACCOUNT-CREATE] Got username (Jami ID): $username")
+
+                _accountState.value = _accountState.value.copy(
+                    registrationState = RegistrationState.REGISTERED,
+                    username = username,
+                    jamiId = username.ifEmpty { accountId }
+                )
+            } catch (e: Exception) {
+                println("[ACCOUNT-CREATE] ⚠ Registration wait exception: ${e.message}")
+                // Continue anyway - account was created, may just need time to register
+            }
+        }
+
+        println("[ACCOUNT-CREATE] ✓ Account creation completed")
+        println("[ACCOUNT-CREATE]   accountId: $accountId")
+        println("[ACCOUNT-CREATE]   displayName: $displayName")
+        println("[ACCOUNT-CREATE]   username: ${_accountState.value.username}")
+        println("[ACCOUNT-CREATE]   registrationState: ${_accountState.value.registrationState}")
+        println("═══════════════════════════════════════════════════════════════")
+        println("[JAMI-ID] NEW ACCOUNT CREATED - Jami ID (40-char): $accountId")
+        println("[JAMI-ID] Share this ID with others to receive contact requests")
+        println("═══════════════════════════════════════════════════════════════")
+
         return accountId
     }
 
     /**
      * Import an account from an archive file.
+     * Waits for the account to be fully registered on the Jami network before returning.
      */
     suspend fun importAccount(archivePath: String, password: String): String {
+        println("[ACCOUNT-IMPORT] === importAccount() called ===")
+
         val accountId = jamiBridge.importAccount(archivePath, password)
+        println("[ACCOUNT-IMPORT] Account imported with ID: $accountId")
+
         _currentAccountId.value = accountId
 
         // Load the imported account details
@@ -111,6 +258,53 @@ class AccountRepository(
             isLoaded = true
         )
 
+        println("[ACCOUNT-IMPORT] Waiting for account registration to complete...")
+        withContext(NonCancellable) {
+            try {
+                // Wait for registration state to change to REGISTERED (with 60 second timeout)
+                withTimeout(60_000L) {
+                    jamiBridge.accountEvents.first { event ->
+                        if (event is JamiAccountEvent.RegistrationStateChanged &&
+                            event.accountId == accountId) {
+                            println("[ACCOUNT-IMPORT] Registration event received: state=${event.state}")
+                            when (event.state) {
+                                RegistrationState.REGISTERED -> {
+                                    println("[ACCOUNT-IMPORT] ✓ Account registered successfully on network!")
+                                    true
+                                }
+                                RegistrationState.ERROR_GENERIC,
+                                RegistrationState.ERROR_AUTH,
+                                RegistrationState.ERROR_NETWORK,
+                                RegistrationState.ERROR_HOST,
+                                RegistrationState.ERROR_SERVICE_UNAVAILABLE -> {
+                                    println("[ACCOUNT-IMPORT] ✗ Registration failed: ${event.state}")
+                                    _accountState.value = _accountState.value.copy(
+                                        registrationState = event.state
+                                    )
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                }
+
+                // Fetch updated account details
+                val updatedDetails = jamiBridge.getAccountDetails(accountId)
+                val username = updatedDetails["Account.username"] ?: ""
+                _accountState.value = _accountState.value.copy(
+                    registrationState = RegistrationState.REGISTERED,
+                    username = username,
+                    jamiId = username.ifEmpty { accountId }
+                )
+            } catch (e: Exception) {
+                println("[ACCOUNT-IMPORT] ⚠ Registration wait exception: ${e.message}")
+            }
+        }
+
+        println("[ACCOUNT-IMPORT] ✓ Account import completed, state: ${_accountState.value.registrationState}")
         return accountId
     }
 
@@ -183,14 +377,192 @@ class AccountRepository(
             ?: throw IllegalStateException("No account is currently active")
     }
 
+    /**
+     * Export the current account to a backup file.
+     * @param destinationPath Full path where the backup file will be saved
+     * @param password Password to encrypt the backup (can be empty for unencrypted)
+     * @return True if export succeeded
+     */
+    suspend fun exportAccount(destinationPath: String, password: String): Boolean {
+        println("[ACCOUNT-EXPORT] === exportAccount() called ===")
+        println("[ACCOUNT-EXPORT] destinationPath='$destinationPath', password.length=${password.length}")
+
+        val accountId = _currentAccountId.value
+        if (accountId == null) {
+            println("[ACCOUNT-EXPORT] ERROR: No account active")
+            throw IllegalStateException("No account is currently active")
+        }
+
+        println("[ACCOUNT-EXPORT] Exporting account: $accountId")
+        val result = jamiBridge.exportAccount(accountId, destinationPath, password)
+        println("[ACCOUNT-EXPORT] Export result: $result")
+
+        return result
+    }
+
+    /**
+     * Logout the current account without deleting it.
+     * Deactivates the account but preserves local data for relogin.
+     */
+    suspend fun logoutCurrentAccount() {
+        println("[ACCOUNT-LOGOUT] === logoutCurrentAccount() called ===")
+
+        val accountId = _currentAccountId.value
+        if (accountId == null) {
+            println("[ACCOUNT-LOGOUT] No account to logout")
+            return
+        }
+
+        println("[ACCOUNT-LOGOUT] Deactivating account: $accountId")
+        jamiBridge.setAccountActive(accountId, false)
+
+        println("[ACCOUNT-LOGOUT] Clearing current account state")
+        _currentAccountId.value = null
+        _accountState.value = AccountState(isLoaded = true)
+
+        println("[ACCOUNT-LOGOUT] ✓ Logout complete. Account preserved for relogin.")
+    }
+
+    /**
+     * Get list of all existing accounts on the device (active and deactivated).
+     */
+    fun getAllAccounts(): List<ExistingAccount> {
+        println("[ACCOUNT-LIST] === getAllAccounts() called ===")
+
+        val accountIds = jamiBridge.getAccountIds()
+        println("[ACCOUNT-LIST] Found ${accountIds.size} account IDs: $accountIds")
+
+        return accountIds.map { accountId ->
+            val details = jamiBridge.getAccountDetails(accountId)
+            val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
+
+            val isEnabled = details["Account.enable"] == "true"
+            val regStatus = volatileDetails["Account.registrationStatus"] ?: ""
+            val isActive = isEnabled && regStatus != "UNREGISTERED"
+
+            println("[ACCOUNT-LIST]   Account $accountId: displayName='${details["Account.displayName"]}', isActive=$isActive")
+
+            ExistingAccount(
+                accountId = accountId,
+                displayName = details["Account.displayName"] ?: "",
+                username = details["Account.username"] ?: "",
+                jamiId = details["Account.username"] ?: accountId,
+                isActive = isActive
+            )
+        }
+    }
+
+    /**
+     * Get list of deactivated accounts that can be relogged into.
+     */
+    fun getDeactivatedAccounts(): List<ExistingAccount> {
+        println("[ACCOUNT-RELOGIN] === getDeactivatedAccounts() called ===")
+
+        val all = getAllAccounts()
+        val deactivated = all.filter { !it.isActive }
+
+        println("[ACCOUNT-RELOGIN] Found ${deactivated.size} deactivated accounts")
+        return deactivated
+    }
+
+    /**
+     * Relogin to an existing deactivated account.
+     * Waits for the account to be fully registered on the Jami network before returning.
+     */
+    suspend fun reloginToAccount(accountId: String) {
+        println("[ACCOUNT-RELOGIN] === reloginToAccount() called ===")
+        println("[ACCOUNT-RELOGIN] Relogging to account: $accountId")
+
+        // Activate the account
+        println("[ACCOUNT-RELOGIN] Activating account...")
+        jamiBridge.setAccountActive(accountId, true)
+
+        // Set as current account
+        _currentAccountId.value = accountId
+
+        // Load account details
+        println("[ACCOUNT-RELOGIN] Loading account details...")
+        val details = jamiBridge.getAccountDetails(accountId)
+        _accountState.value = AccountState(
+            accountId = accountId,
+            displayName = details["Account.displayName"] ?: "",
+            username = details["Account.username"] ?: "",
+            jamiId = details["Account.username"] ?: accountId,
+            registrationState = RegistrationState.TRYING,
+            isLoaded = true
+        )
+
+        println("[ACCOUNT-RELOGIN] Waiting for account registration to complete...")
+        withContext(NonCancellable) {
+            try {
+                // Wait for registration state to change to REGISTERED (with 60 second timeout)
+                withTimeout(60_000L) {
+                    jamiBridge.accountEvents.first { event ->
+                        if (event is JamiAccountEvent.RegistrationStateChanged &&
+                            event.accountId == accountId) {
+                            println("[ACCOUNT-RELOGIN] Registration event received: state=${event.state}")
+                            when (event.state) {
+                                RegistrationState.REGISTERED -> {
+                                    println("[ACCOUNT-RELOGIN] ✓ Account registered successfully on network!")
+                                    true
+                                }
+                                RegistrationState.ERROR_GENERIC,
+                                RegistrationState.ERROR_AUTH,
+                                RegistrationState.ERROR_NETWORK,
+                                RegistrationState.ERROR_HOST,
+                                RegistrationState.ERROR_SERVICE_UNAVAILABLE -> {
+                                    println("[ACCOUNT-RELOGIN] ✗ Registration failed: ${event.state}")
+                                    _accountState.value = _accountState.value.copy(
+                                        registrationState = event.state
+                                    )
+                                    true
+                                }
+                                else -> false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                }
+
+                // Fetch updated account details
+                val updatedDetails = jamiBridge.getAccountDetails(accountId)
+                val username = updatedDetails["Account.username"] ?: ""
+                _accountState.value = _accountState.value.copy(
+                    registrationState = RegistrationState.REGISTERED,
+                    username = username,
+                    jamiId = username.ifEmpty { accountId }
+                )
+            } catch (e: Exception) {
+                println("[ACCOUNT-RELOGIN] ⚠ Registration wait exception: ${e.message}")
+            }
+        }
+
+        println("[ACCOUNT-RELOGIN] ✓ Relogin complete")
+        println("[ACCOUNT-RELOGIN]   accountId: $accountId")
+        println("[ACCOUNT-RELOGIN]   displayName: ${_accountState.value.displayName}")
+        println("[ACCOUNT-RELOGIN]   registrationState: ${_accountState.value.registrationState}")
+        println("═══════════════════════════════════════════════════════════════")
+        println("[JAMI-ID] Account switched - Jami ID (40-char): $accountId")
+        println("[JAMI-ID] Share this ID with others to receive contact requests")
+        println("═══════════════════════════════════════════════════════════════")
+    }
+
     private fun handleAccountEvent(event: JamiAccountEvent) {
+        println("[ACCOUNT-EVENT] Received event: ${event::class.simpleName}")
+
         when (event) {
             is JamiAccountEvent.RegistrationStateChanged -> {
-                println("[AccountRepo] RegistrationStateChanged: accountId=${event.accountId}, state=${event.state}")
+                println("[ACCOUNT-EVENT] RegistrationStateChanged: accountId=${event.accountId}, state=${event.state}, code=${event.code}, detail=${event.detail}")
+                println("[ACCOUNT-EVENT]   Current account ID: ${_currentAccountId.value}")
+                println("[ACCOUNT-EVENT]   Is for current account: ${event.accountId == _currentAccountId.value}")
+
                 if (event.accountId == _currentAccountId.value) {
+                    val oldState = _accountState.value.registrationState
                     _accountState.value = _accountState.value.copy(
                         registrationState = event.state
                     )
+                    println("[ACCOUNT-EVENT] ✓ Account state updated: $oldState -> ${event.state}")
 
                     // When account becomes REGISTERED, fetch full details to get jamiId
                     if (event.state == RegistrationState.REGISTERED) {
@@ -201,24 +573,30 @@ class AccountRepository(
                 }
             }
             is JamiAccountEvent.ProfileReceived -> {
+                println("[ACCOUNT-EVENT] ProfileReceived: accountId=${event.accountId}, displayName=${event.displayName}")
                 if (event.accountId == _currentAccountId.value) {
                     _accountState.value = _accountState.value.copy(
                         displayName = event.displayName
                     )
+                    println("[ACCOUNT-EVENT] ✓ Profile updated: displayName=${event.displayName}")
                 }
             }
             is JamiAccountEvent.AccountDetailsChanged -> {
-                println("[AccountRepo] AccountDetailsChanged: accountId=${event.accountId}, details=${event.details}")
+                println("[ACCOUNT-EVENT] AccountDetailsChanged: accountId=${event.accountId}, details count=${event.details.size}")
                 if (event.accountId == _currentAccountId.value) {
-                    val username = event.details["Account.username"] ?: _accountState.value.username
+                    val newDisplayName = event.details["Account.displayName"] ?: _accountState.value.displayName
+                    val newUsername = event.details["Account.username"] ?: _accountState.value.username
                     _accountState.value = _accountState.value.copy(
-                        displayName = event.details["Account.displayName"] ?: _accountState.value.displayName,
-                        username = username,
-                        jamiId = username.ifEmpty { _accountState.value.jamiId }
+                        displayName = newDisplayName,
+                        username = newUsername,
+                        jamiId = newUsername.ifEmpty { _accountState.value.jamiId }
                     )
+                    println("[ACCOUNT-EVENT] ✓ Account details updated: displayName=$newDisplayName, username=$newUsername")
                 }
             }
-            else -> { /* Handle other events as needed */ }
+            else -> {
+                println("[ACCOUNT-EVENT] Unhandled event type: ${event::class.simpleName}")
+            }
         }
     }
 

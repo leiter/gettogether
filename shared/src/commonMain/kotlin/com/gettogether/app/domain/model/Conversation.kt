@@ -1,6 +1,6 @@
 package com.gettogether.app.domain.model
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 data class Conversation(
     val id: String,

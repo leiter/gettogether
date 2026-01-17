@@ -208,10 +208,147 @@ devices:
         input_field:
           tap: [683, 1725]
 
+  # Android Emulator - Medium Phone API 36
+  emulator-5554:
+    model: sdk_gphone64_arm64
+    product: sdk_gphone64_arm64
+    resolution: [1080, 2400]
+    # Tested accounts: Quic (@e026379d8c785fe14b3218ecc790884cbdbef13a)
+
+    screens:
+      # =====================
+      # Authentication Screens
+      # =====================
+      welcome:
+        create_account_button:
+          bounds: [[84, 1176], [996, 1302]]
+          tap: [540, 1239]
+        import_account_button:
+          bounds: [[84, 1344], [996, 1470]]
+          tap: [540, 1407]
+
+      create_account:
+        display_name_field:
+          bounds: [[84, 599], [996, 767]]
+          tap: [540, 683]
+        create_button:
+          bounds: [[84, 852], [996, 978]]
+          tap: [540, 915]
+        back_button:
+          bounds: [[12, 85], [138, 211]]
+          tap: [75, 148]
+
+      # =====================
+      # Main Navigation (VERIFIED 2026-01-16)
+      # =====================
+      home:
+        bottom_nav:
+          chats_tab:
+            bounds: [[0, 2127], [346, 2337]]
+            tap: [173, 2232]
+          contacts_tab:
+            bounds: [[367, 2127], [713, 2337]]
+            tap: [540, 2232]
+          settings_tab:
+            bounds: [[734, 2127], [1080, 2337]]
+            tap: [907, 2232]
+
+      # =====================
+      # Contacts Screen (VERIFIED 2026-01-16)
+      # =====================
+      contacts:
+        add_contact_button:
+          bounds: [[944, 148], [1070, 274]]
+          tap: [1007, 211]
+
+      # =====================
+      # Add Contact Screen (VERIFIED 2026-01-16)
+      # =====================
+      add_contact:
+        back_button:
+          bounds: [[12, 85], [138, 211]]
+          tap: [75, 148]
+        username_field:
+          bounds: [[63, 420], [1017, 588]]
+          tap: [540, 504]
+        search_button:
+          bounds: [[63, 631], [1017, 757]]
+          tap: [540, 694]
+        # Search result card with Add Contact button
+        search_result:
+          add_contact_button:
+            bounds: [[105, 1282], [975, 1408]]
+            tap: [540, 1345]
+
+      # =====================
+      # Permission Dialogs (Android 36)
+      # =====================
+      permission_dialog:
+        while_using_app:
+          bounds: [[133, 1176], [947, 1281]]
+          tap: [540, 1228]
+        only_this_time:
+          bounds: [[133, 1324], [947, 1429]]
+          tap: [540, 1376]
+        dont_allow:
+          bounds: [[133, 1472], [947, 1577]]
+          tap: [540, 1524]
+
+      notification_permission:
+        allow:
+          bounds: [[133, 1250], [947, 1355]]
+          tap: [540, 1302]
+        dont_allow:
+          bounds: [[133, 1398], [947, 1503]]
+          tap: [540, 1450]
+
+  # Android Emulator - Pixel 2 API 36
+  emulator-5556:
+    model: sdk_gphone64_arm64
+    product: sdk_gphone64_arm64
+    resolution: [1080, 2424]
+    # Tested accounts: UserB (@3bbc978bd8f3757a894d55079a6f85744b0f04ba)
+
+    screens:
+      # =====================
+      # Main Navigation (VERIFIED 2026-01-16)
+      # =====================
+      home:
+        bottom_nav:
+          chats_tab:
+            bounds: [[0, 2151], [346, 2361]]
+            tap: [173, 2256]
+          contacts_tab:
+            bounds: [[367, 2151], [713, 2361]]
+            tap: [540, 2256]
+          settings_tab:
+            bounds: [[734, 2151], [1080, 2361]]
+            tap: [907, 2256]
+
+      # =====================
+      # Chats Screen - Conversation Requests (VERIFIED 2026-01-16)
+      # =====================
+      chats:
+        conversation_request:
+          accept_button:
+            bounds: [[42, 590], [529, 716]]
+            tap: [285, 653]
+          decline_button:
+            bounds: [[550, 590], [1038, 716]]
+            tap: [794, 653]
+
+      # =====================
+      # Contacts Screen
+      # =====================
+      contacts:
+        add_contact_button:
+          bounds: [[944, 148], [1070, 274]]
+          tap: [1007, 211]
+
 # =============================================================================
-# Template for adding new devices
+# Template for adding new Android devices
 # =============================================================================
-# To add a new device:
+# To add a new Android device:
 # 1. Get serial: adb devices
 # 2. Get model: adb devices -l (look for model:XXX)
 # 3. Get resolution: adb shell wm size
@@ -232,3 +369,130 @@ devices:
 #         create_account_button:
 #           bounds: [[x1, y1], [x2, y2]]
 #           tap: [center_x, center_y]
+
+# =============================================================================
+# iOS Simulator Coordinates
+# =============================================================================
+# NOTE: iOS uses a MOCK JamiBridge implementation. Real network contact requests
+# are NOT possible until native iOS Jami daemon integration is completed.
+#
+# How to capture iOS coordinates:
+# 1. Run app in iOS Simulator from Xcode
+# 2. Use Accessibility Inspector (Xcode > Open Developer Tool > Accessibility Inspector)
+# 3. Select the iOS Simulator as the target
+# 4. Hover over UI elements to see their frame coordinates
+# 5. Alternative: Add tap gesture logging temporarily to the iOS app
+#
+# iOS Simulator serials follow pattern: DEVICE_UUID
+# Get list: xcrun simctl list devices
+
+ios_simulators:
+  # Template for iPhone 15 Pro (iOS 18.0)
+  # Replace SIMULATOR_UUID with actual UUID from `xcrun simctl list devices`
+  iPhone-15-Pro-template:
+    model: iPhone 15 Pro
+    os_version: iOS 18.0
+    resolution: [393, 852]  # Logical points (not pixels)
+    scale_factor: 3  # @3x retina
+    note: "MOCK IMPLEMENTATION - Real contact requests require native integration"
+
+    screens:
+      # =====================
+      # Authentication Screens
+      # =====================
+      welcome:
+        create_account_button:
+          # Coordinates in logical points
+          frame: [20, 400, 353, 50]  # [x, y, width, height]
+          tap: [196, 425]
+        import_account_button:
+          frame: [20, 470, 353, 50]
+          tap: [196, 495]
+
+      create_account:
+        display_name_field:
+          frame: [20, 200, 353, 44]
+          tap: [196, 222]
+        create_button:
+          frame: [20, 280, 353, 50]
+          tap: [196, 305]
+
+      # =====================
+      # Main Navigation (TabView)
+      # =====================
+      home:
+        tab_bar:
+          chats_tab:
+            tap: [65, 815]
+          contacts_tab:
+            tap: [196, 815]
+          settings_tab:
+            tap: [327, 815]
+
+      # =====================
+      # Contacts Screen
+      # =====================
+      contacts:
+        add_contact_button:
+          # Navigation bar trailing button
+          tap: [360, 55]
+
+      # =====================
+      # Add Contact Screen
+      # =====================
+      add_contact:
+        back_button:
+          tap: [30, 55]
+        username_field:
+          frame: [20, 120, 353, 44]
+          tap: [196, 142]
+        search_button:
+          frame: [20, 180, 353, 50]
+          tap: [196, 205]
+
+  # Template for iPhone SE (3rd gen) - smaller screen
+  iPhone-SE-template:
+    model: iPhone SE (3rd generation)
+    os_version: iOS 18.0
+    resolution: [375, 667]  # Logical points
+    scale_factor: 2  # @2x retina
+    note: "MOCK IMPLEMENTATION - Real contact requests require native integration"
+
+    screens:
+      # Coordinates TBD - run simulator and capture with Accessibility Inspector
+      placeholder:
+        note: "Run Accessibility Inspector to capture coordinates for this device"
+
+# =============================================================================
+# iOS Coordinate Capture Instructions
+# =============================================================================
+# Step-by-step guide for capturing iOS UI coordinates:
+#
+# Method 1: Accessibility Inspector (Recommended)
+# ------------------------------------------------
+# 1. Open Xcode
+# 2. Menu: Xcode > Open Developer Tool > Accessibility Inspector
+# 3. In Accessibility Inspector, click the target picker (crosshair icon)
+# 4. Select your iOS Simulator from the dropdown
+# 5. Hover over UI elements - coordinates shown in the inspector
+# 6. Frame shows: [x, y, width, height] in logical points
+# 7. Calculate tap point: tap_x = x + width/2, tap_y = y + height/2
+#
+# Method 2: Debug View Hierarchy
+# ------------------------------
+# 1. Run app in Simulator
+# 2. In Xcode: Debug > View Debugging > Capture View Hierarchy
+# 3. Click on elements to see their frames in the inspector
+#
+# Method 3: Temporary Tap Logger
+# ------------------------------
+# Add this to your SwiftUI view temporarily:
+#   .onTapGesture { location in
+#       print("Tap at: \(location)")
+#   }
+#
+# Important Notes:
+# - iOS uses logical points, not pixels
+# - Multiply by scale_factor to get pixel coordinates
+# - Safe area insets affect usable screen area
+# - Tab bar height is typically 49 points + safe area

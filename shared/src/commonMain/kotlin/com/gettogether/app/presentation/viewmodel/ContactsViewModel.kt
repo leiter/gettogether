@@ -24,7 +24,8 @@ data class ContactUiItem(
     val name: String,
     val isOnline: Boolean,
     val isBanned: Boolean,
-    val avatarInitial: String
+    val avatarInitial: String,
+    val avatarUri: String?
 )
 
 class ContactsViewModel(
@@ -125,7 +126,8 @@ class ContactsViewModel(
             name = effectiveName,
             isOnline = isOnline,
             isBanned = isBanned,
-            avatarInitial = initial
+            avatarInitial = initial,
+            avatarUri = avatarUri
         )
     }
 }

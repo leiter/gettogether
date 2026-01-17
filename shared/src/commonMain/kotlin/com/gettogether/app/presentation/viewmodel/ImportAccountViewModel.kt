@@ -20,6 +20,35 @@ class ImportAccountViewModel(
     private val _state = MutableStateFlow(ImportAccountState())
     val state: StateFlow<ImportAccountState> = _state.asStateFlow()
 
+    init {
+        loadDeactivatedAccounts()
+    }
+
+    /**
+     * Load deactivated accounts that can be relogged into.
+     */
+    private fun loadDeactivatedAccounts() {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoadingLocalAccounts = true) }
+            try {
+                val accounts = accountRepository.getDeactivatedAccounts()
+                _state.update {
+                    it.copy(
+                        isLoadingLocalAccounts = false,
+                        deactivatedAccounts = accounts
+                    )
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isLoadingLocalAccounts = false,
+                        error = e.message ?: "Failed to load local accounts"
+                    )
+                }
+            }
+        }
+    }
+
     fun onImportMethodChanged(method: ImportMethod) {
         _state.update { it.copy(importMethod = method, error = null) }
     }
@@ -36,12 +65,20 @@ class ImportAccountViewModel(
         _state.update { it.copy(accountPin = pin, error = null) }
     }
 
+    /**
+     * Select a local deactivated account for relogin.
+     */
+    fun onLocalAccountSelected(accountId: String) {
+        _state.update { it.copy(selectedLocalAccountId = accountId, error = null) }
+    }
+
     fun importAccount() {
         val currentState = _state.value
         if (!currentState.isValid) {
             val errorMessage = when (currentState.importMethod) {
                 ImportMethod.Archive -> "Please provide a valid archive path"
                 ImportMethod.Pin -> "PIN must be at least 8 characters"
+                ImportMethod.LocalAccount -> "Please select an account to relogin"
             }
             _state.update { it.copy(error = errorMessage) }
             return
@@ -61,6 +98,11 @@ class ImportAccountViewModel(
                         // PIN-based import - PIN is used as password with empty archive path
                         // The Jami daemon treats this as a DHT import
                         accountRepository.importAccount("", currentState.accountPin)
+                    }
+                    ImportMethod.LocalAccount -> {
+                        // Relogin to existing local account
+                        val accountId = currentState.selectedLocalAccountId!!
+                        accountRepository.reloginToAccount(accountId)
                     }
                 }
                 _state.update { it.copy(isImporting = false, isAccountImported = true) }

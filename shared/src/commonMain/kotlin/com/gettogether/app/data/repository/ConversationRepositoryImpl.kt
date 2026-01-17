@@ -8,6 +8,8 @@ import com.gettogether.app.domain.model.MessageType
 import com.gettogether.app.domain.repository.ConversationRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiConversationEvent
+import com.gettogether.app.platform.NotificationConstants
+import com.gettogether.app.platform.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -15,8 +17,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
-import kotlinx.datetime.Instant
+import kotlin.time.Clock
+import kotlin.time.Instant
 
 /**
  * Implementation of ConversationRepository using JamiBridge.
@@ -25,7 +27,8 @@ class ConversationRepositoryImpl(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
     private val conversationPersistence: com.gettogether.app.data.persistence.ConversationPersistence,
-    private val contactRepository: ContactRepositoryImpl
+    private val contactRepository: ContactRepositoryImpl,
+    private val notificationHelper: NotificationHelper? = null
 ) : ConversationRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -432,6 +435,15 @@ class ConversationRepositoryImpl(
                 if (currentMessages.none { it.id == message.id }) {
                     _messagesCache.value = _messagesCache.value + (key to (currentMessages + message))
                     println("ConversationRepository.handleConversationEvent: Message added to cache, key=$key, total messages=${(currentMessages + message).size}")
+
+                    // Show notification for the new message
+                    showMessageNotificationIfNeeded(
+                        accountId = accountId,
+                        conversationId = event.conversationId,
+                        authorId = event.message.author,
+                        messageText = messageBody,
+                        timestamp = timestampMillis
+                    )
                 } else {
                     println("ConversationRepository.handleConversationEvent: Message already in cache, skipping")
                 }
@@ -753,6 +765,58 @@ class ConversationRepositoryImpl(
         } catch (e: Exception) {
             println("ConversationRepository: Failed to decline conversation request: ${e.message}")
             throw e
+        }
+    }
+
+    /**
+     * Shows a notification for a new message if conditions are met.
+     * Only shows notifications for messages from others (not self).
+     */
+    private fun showMessageNotificationIfNeeded(
+        accountId: String,
+        conversationId: String,
+        authorId: String,
+        messageText: String,
+        timestamp: Long
+    ) {
+        // Don't notify if NotificationHelper not available (iOS or test environment)
+        if (notificationHelper == null) {
+            println("ConversationRepository: NotificationHelper not available, skipping notification")
+            return
+        }
+
+        // Don't notify for own messages
+        // Check if the message author is the current user (by comparing with the user's Jami ID)
+        val currentUserJamiId = accountRepository.accountState.value.jamiId
+        if (authorId == currentUserJamiId || authorId == accountId) {
+            println("ConversationRepository: Skipping notification for own message (author=$authorId, currentUser=$currentUserJamiId)")
+            return
+        }
+
+        try {
+            // Get contact details for the author to get their display name
+            val contactDetails = jamiBridge.getContactDetails(accountId, authorId)
+            val contactName = contactDetails["displayName"]
+                ?: contactDetails["username"]
+                ?: authorId.take(8)
+
+            // Generate notification ID based on conversation (so multiple messages stack)
+            val notificationId = NotificationConstants.MESSAGE_NOTIFICATION_BASE_ID +
+                conversationId.hashCode().and(0xFFFF)
+
+            println("ConversationRepository: Showing message notification from $contactName in conversation $conversationId")
+
+            notificationHelper.showMessageNotification(
+                notificationId = notificationId,
+                contactId = authorId,
+                contactName = contactName,
+                message = messageText,
+                conversationId = conversationId,
+                timestamp = timestamp
+            )
+        } catch (e: Exception) {
+            println("ConversationRepository: Failed to show message notification: ${e.message}")
+            // Don't throw - notification failure shouldn't break message handling
         }
     }
 }

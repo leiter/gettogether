@@ -7,6 +7,7 @@ import com.gettogether.app.jami.CallState as JamiCallState
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
 import com.gettogether.app.platform.CallServiceBridge
+import com.gettogether.app.platform.PermissionManager
 import com.gettogether.app.presentation.state.CallState
 import com.gettogether.app.presentation.state.CallStatus
 import kotlinx.coroutines.Job
@@ -21,7 +22,8 @@ import kotlinx.coroutines.launch
 class CallViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val callServiceBridge: CallServiceBridge? = null
+    private val callServiceBridge: CallServiceBridge? = null,
+    private val permissionManager: PermissionManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CallState())
@@ -39,6 +41,19 @@ class CallViewModel(
     }
 
     fun initializeOutgoingCall(contactId: String, withVideo: Boolean) {
+        // Check permissions before initiating call
+        if (!permissionManager.hasRequiredPermissions()) {
+            _state.update {
+                it.copy(
+                    contactId = contactId,
+                    isVideo = withVideo,
+                    callStatus = CallStatus.Failed,
+                    error = "Required permissions not granted. Please grant microphone and camera permissions in settings."
+                )
+            }
+            return
+        }
+
         _state.update {
             it.copy(
                 contactId = contactId,
@@ -62,6 +77,9 @@ class CallViewModel(
             try {
                 val accountId = accountRepository.currentAccountId.value
                 if (accountId != null) {
+                    // Initialize audio system before call
+                    initializeAudioSystem()
+
                     // Start call via JamiBridge
                     val callId = jamiBridge.placeCall(accountId, contactId, withVideo)
                     _state.update { it.copy(callId = callId, callStatus = CallStatus.Ringing) }
@@ -100,6 +118,17 @@ class CallViewModel(
     }
 
     fun acceptCall() {
+        // Check permissions before accepting call
+        if (!permissionManager.hasRequiredPermissions()) {
+            _state.update {
+                it.copy(
+                    callStatus = CallStatus.Failed,
+                    error = "Required permissions not granted. Please grant microphone and camera permissions in settings."
+                )
+            }
+            return
+        }
+
         viewModelScope.launch {
             _state.update { it.copy(callStatus = CallStatus.Connecting) }
 
@@ -107,6 +136,9 @@ class CallViewModel(
                 val accountId = accountRepository.currentAccountId.value
                 val callId = _state.value.callId
                 if (accountId != null && callId.isNotEmpty()) {
+                    // Initialize audio system before accepting call
+                    initializeAudioSystem()
+
                     jamiBridge.acceptCall(accountId, callId, _state.value.isVideo)
                 }
                 // Call state will be updated via call events
@@ -252,6 +284,26 @@ class CallViewModel(
                 delay(1000)
                 _state.update { it.copy(callDuration = it.callDuration + 1) }
             }
+        }
+    }
+
+    /**
+     * Initialize audio system before starting or accepting a call.
+     * This ensures both input and output audio devices are properly configured.
+     */
+    private suspend fun initializeAudioSystem() {
+        try {
+            // Initialize default audio input device (microphone)
+            jamiBridge.useDefaultAudioInputDevice()
+
+            // Initialize audio output to earpiece (not speaker) for calls
+            jamiBridge.setAudioOutputDevice(0)
+
+            // Small delay to ensure audio layer initialization completes
+            delay(100)
+        } catch (e: Exception) {
+            // Log error but don't fail the call
+            println("Warning: Audio initialization error: ${e.message}")
         }
     }
 

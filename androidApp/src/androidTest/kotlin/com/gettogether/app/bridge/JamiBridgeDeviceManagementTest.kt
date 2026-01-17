@@ -257,7 +257,7 @@ class JamiBridgeDeviceManagementTest {
     // ==================== Audio Input Device Operations ====================
 
     @Test
-    @Ignore("Native crash when getting audio input devices list. Native library bug, not bridge issue.")
+    @Ignore("CONFIRMED: Native crash (SIGSEGV) in getAudioInputDeviceList on both emulator and Pixel 7a hardware. See crash log 2025-12-21.")
     fun testGetAudioInputDevices() = runTest {
         // When: Get available audio input devices
         val devices = bridge.getAudioInputDevices()
@@ -268,7 +268,7 @@ class JamiBridgeDeviceManagementTest {
     }
 
     @Test
-    @Ignore("Native crash when setting audio input device. Native library bug, not bridge issue.")
+    @Ignore("Test calls getAudioInputDevices() which crashes. setAudioInputDevice() itself works on Pixel 7a.")
     fun testSetAudioInputDevice() = runTest {
         // Given: Available audio input devices
         val devices = bridge.getAudioInputDevices()
@@ -281,7 +281,7 @@ class JamiBridgeDeviceManagementTest {
     }
 
     @Test
-    @Ignore("Native crash when setting audio input device. Native library bug, not bridge issue.")
+    @Ignore("Temporarily disabled - WORKS on Pixel 7a! Re-enable after fixing getAudioInputDevices().")
     fun testSetAudioInputDeviceWithInvalidIndex() = runTest {
         // When: Set audio input device with invalid index
         val invalidIndex = 999
@@ -291,7 +291,7 @@ class JamiBridgeDeviceManagementTest {
     }
 
     @Test
-    @Ignore("Native crash when switching audio input devices. Native library bug, not bridge issue.")
+    @Ignore("Test calls getAudioInputDevices() which crashes. Switching itself may work.")
     fun testSwitchBetweenMultipleInputDevices() = runTest {
         // Given: Available audio input devices
         val devices = bridge.getAudioInputDevices()
@@ -312,7 +312,7 @@ class JamiBridgeDeviceManagementTest {
     // ==================== Combined Audio Device Operations ====================
 
     @Test
-    @Ignore("Native crash when setting audio input device. Native library bug, not bridge issue.")
+    @Ignore("Test calls getAudioInputDevices() which crashes. Workflow may work without enumeration.")
     fun testAudioDeviceWorkflow() = runTest {
         // When: Complete audio device workflow
         // 1. Get output devices
@@ -341,7 +341,7 @@ class JamiBridgeDeviceManagementTest {
     }
 
     @Test
-    @Ignore("Native crash when enumerating all device types together. Native library bug, not bridge issue.")
+    @Ignore("CONFIRMED: Crashes when calling getAudioInputDevices() on line 349. Other device types work.")
     fun testAllDeviceTypesEnumeration() = runTest {
         // When: Enumerate all device types
         val videoDevices = bridge.getVideoDevices()
@@ -478,7 +478,7 @@ class JamiBridgeDeviceManagementTest {
     }
 
     @Test
-    @Ignore("Native crash when getting audio input devices list. Native library bug, not bridge issue.")
+    @Ignore("Test calls getAudioInputDevices() which crashes. Audio output device enumeration works.")
     fun testAudioDevicesListNotNull() = runTest {
         // When: Get audio devices multiple times
         val outputDevices1 = bridge.getAudioOutputDevices()

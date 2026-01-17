@@ -13,7 +13,10 @@ import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.platform.CallServiceBridge
+import com.gettogether.app.platform.ExportPathProvider
+import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationHelper
+import com.gettogether.app.platform.PermissionManager
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -22,6 +25,13 @@ actual val platformModule: Module = module {
     // Android-specific dependencies
     single { CallServiceBridge(androidContext()) }
     single { NotificationHelper(androidContext()) }
+    single { PermissionManager(androidContext()) }
+
+    // Image handling
+    single { ImageProcessor(androidContext()) }
+
+    // Export path provider
+    single { ExportPathProvider(androidContext()) }
 
     // Settings persistence
     single<SettingsRepository> {

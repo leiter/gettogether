@@ -56,10 +56,20 @@ class TrustRequestsViewModel(
 
     private fun loadTrustRequests(accountId: String) {
         viewModelScope.launch {
+            println("[TRUST-REQUEST] === loadTrustRequests() called ===")
+            println("[TRUST-REQUEST] Account ID: $accountId")
             _state.update { it.copy(isLoading = true, error = null) }
 
             try {
                 contactRepository.getTrustRequests(accountId).collect { trustRequests ->
+                    println("[TRUST-REQUEST] Received ${trustRequests.size} trust requests")
+                    trustRequests.forEachIndexed { index, req ->
+                        println("[TRUST-REQUEST]   [$index] From: ${req.from}")
+                        println("[TRUST-REQUEST]   [$index] ConversationId: ${req.conversationId}")
+                        println("[TRUST-REQUEST]   [$index] Received: ${req.received}")
+                        println("[TRUST-REQUEST]   [$index] Payload size: ${req.payload.size} bytes")
+                    }
+
                     val uiItems = trustRequests.map { it.toUiItem() }
                         .sortedByDescending { it.received }
 
@@ -69,8 +79,10 @@ class TrustRequestsViewModel(
                             isLoading = false
                         )
                     }
+                    println("[TRUST-REQUEST] ✓ UI state updated with ${uiItems.size} requests")
                 }
             } catch (e: Exception) {
+                println("[TRUST-REQUEST] ✗ Failed to load trust requests: ${e.message}")
                 _state.update {
                     it.copy(
                         isLoading = false,
@@ -83,6 +95,12 @@ class TrustRequestsViewModel(
 
     fun acceptRequest(from: String) {
         val accountId = accountRepository.currentAccountId.value ?: return
+        val timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+        println("[TRUST-ACCEPT] === acceptRequest() called ===")
+        println("[TRUST-ACCEPT] Timestamp: $timestamp")
+        println("[TRUST-ACCEPT] My Account ID: $accountId")
+        println("[TRUST-ACCEPT] Accepting request from: $from")
 
         viewModelScope.launch {
             // Mark as processing
@@ -99,8 +117,10 @@ class TrustRequestsViewModel(
             }
 
             try {
+                println("[TRUST-ACCEPT] → Calling contactRepository.acceptTrustRequest()...")
                 val result = contactRepository.acceptTrustRequest(accountId, from)
                 if (result.isFailure) {
+                    println("[TRUST-ACCEPT] ✗ Accept failed: ${result.exceptionOrNull()?.message}")
                     _state.update {
                         it.copy(error = result.exceptionOrNull()?.message ?: "Failed to accept request")
                     }
@@ -116,9 +136,13 @@ class TrustRequestsViewModel(
                             }
                         )
                     }
+                } else {
+                    println("[TRUST-ACCEPT] ✓ Request accepted successfully")
+                    println("[TRUST-ACCEPT]   Contact added: $from")
                 }
                 // On success, the request will be removed from the list via the flow update
             } catch (e: Exception) {
+                println("[TRUST-ACCEPT] ✗ Exception during accept: ${e.message}")
                 _state.update {
                     it.copy(error = e.message ?: "Failed to accept request")
                 }
@@ -128,6 +152,13 @@ class TrustRequestsViewModel(
 
     fun rejectRequest(from: String, block: Boolean = false) {
         val accountId = accountRepository.currentAccountId.value ?: return
+        val timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+        println("[TRUST-REJECT] === rejectRequest() called ===")
+        println("[TRUST-REJECT] Timestamp: $timestamp")
+        println("[TRUST-REJECT] My Account ID: $accountId")
+        println("[TRUST-REJECT] Rejecting request from: $from")
+        println("[TRUST-REJECT] Block user: $block")
 
         viewModelScope.launch {
             // Mark as processing
@@ -144,8 +175,10 @@ class TrustRequestsViewModel(
             }
 
             try {
+                println("[TRUST-REJECT] → Calling contactRepository.rejectTrustRequest(block=$block)...")
                 val result = contactRepository.rejectTrustRequest(accountId, from, block)
                 if (result.isFailure) {
+                    println("[TRUST-REJECT] ✗ Reject failed: ${result.exceptionOrNull()?.message}")
                     _state.update {
                         it.copy(error = result.exceptionOrNull()?.message ?: "Failed to reject request")
                     }
@@ -161,9 +194,15 @@ class TrustRequestsViewModel(
                             }
                         )
                     }
+                } else {
+                    println("[TRUST-REJECT] ✓ Request rejected successfully")
+                    if (block) {
+                        println("[TRUST-REJECT]   User blocked: $from")
+                    }
                 }
                 // On success, the request will be removed from the list via the flow update
             } catch (e: Exception) {
+                println("[TRUST-REJECT] ✗ Exception during reject: ${e.message}")
                 _state.update {
                     it.copy(error = e.message ?: "Failed to reject request")
                 }

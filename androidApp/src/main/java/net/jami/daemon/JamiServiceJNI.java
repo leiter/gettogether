@@ -38,6 +38,8 @@ public class JamiServiceJNI {
   public final static native void StringVect_clear(long jarg1, StringVect jarg1_);
   public final static native long new_StringVect__SWIG_2(int jarg1, String jarg2);
   public final static native int StringVect_doSize(long jarg1, StringVect jarg1_);
+  public final static native int StringVect_doCapacity(long jarg1, StringVect jarg1_);
+  public final static native void StringVect_doReserve(long jarg1, StringVect jarg1_, int jarg2);
   public final static native void StringVect_doAdd__SWIG_0(long jarg1, StringVect jarg1_, String jarg2);
   public final static native void StringVect_doAdd__SWIG_1(long jarg1, StringVect jarg1_, int jarg2, String jarg3);
   public final static native String StringVect_doRemove(long jarg1, StringVect jarg1_, int jarg2);
@@ -53,6 +55,8 @@ public class JamiServiceJNI {
   public final static native void VectMap_clear(long jarg1, VectMap jarg1_);
   public final static native long new_VectMap__SWIG_2(int jarg1, long jarg2, StringMap jarg2_);
   public final static native int VectMap_doSize(long jarg1, VectMap jarg1_);
+  public final static native int VectMap_doCapacity(long jarg1, VectMap jarg1_);
+  public final static native void VectMap_doReserve(long jarg1, VectMap jarg1_, int jarg2);
   public final static native void VectMap_doAdd__SWIG_0(long jarg1, VectMap jarg1_, long jarg2, StringMap jarg2_);
   public final static native void VectMap_doAdd__SWIG_1(long jarg1, VectMap jarg1_, int jarg2, long jarg3, StringMap jarg3_);
   public final static native long VectMap_doRemove(long jarg1, VectMap jarg1_, int jarg2);
@@ -86,6 +90,8 @@ public class JamiServiceJNI {
   public final static native void IntVect_clear(long jarg1, IntVect jarg1_);
   public final static native long new_IntVect__SWIG_2(int jarg1, int jarg2);
   public final static native int IntVect_doSize(long jarg1, IntVect jarg1_);
+  public final static native int IntVect_doCapacity(long jarg1, IntVect jarg1_);
+  public final static native void IntVect_doReserve(long jarg1, IntVect jarg1_, int jarg2);
   public final static native void IntVect_doAdd__SWIG_0(long jarg1, IntVect jarg1_, int jarg2);
   public final static native void IntVect_doAdd__SWIG_1(long jarg1, IntVect jarg1_, int jarg2, int jarg3);
   public final static native int IntVect_doRemove(long jarg1, IntVect jarg1_, int jarg2);
@@ -101,6 +107,8 @@ public class JamiServiceJNI {
   public final static native void UintVect_clear(long jarg1, UintVect jarg1_);
   public final static native long new_UintVect__SWIG_2(int jarg1, long jarg2);
   public final static native int UintVect_doSize(long jarg1, UintVect jarg1_);
+  public final static native int UintVect_doCapacity(long jarg1, UintVect jarg1_);
+  public final static native void UintVect_doReserve(long jarg1, UintVect jarg1_, int jarg2);
   public final static native void UintVect_doAdd__SWIG_0(long jarg1, UintVect jarg1_, long jarg2);
   public final static native void UintVect_doAdd__SWIG_1(long jarg1, UintVect jarg1_, int jarg2, long jarg3);
   public final static native long UintVect_doRemove(long jarg1, UintVect jarg1_, int jarg2);
@@ -116,6 +124,8 @@ public class JamiServiceJNI {
   public final static native void Blob_clear(long jarg1, Blob jarg1_);
   public final static native long new_Blob__SWIG_2(int jarg1, byte jarg2);
   public final static native int Blob_doSize(long jarg1, Blob jarg1_);
+  public final static native int Blob_doCapacity(long jarg1, Blob jarg1_);
+  public final static native void Blob_doReserve(long jarg1, Blob jarg1_, int jarg2);
   public final static native void Blob_doAdd__SWIG_0(long jarg1, Blob jarg1_, byte jarg2);
   public final static native void Blob_doAdd__SWIG_1(long jarg1, Blob jarg1_, int jarg2, byte jarg3);
   public final static native byte Blob_doRemove(long jarg1, Blob jarg1_, int jarg2);
@@ -133,6 +143,8 @@ public class JamiServiceJNI {
   public final static native void FloatVect_clear(long jarg1, FloatVect jarg1_);
   public final static native long new_FloatVect__SWIG_2(int jarg1, float jarg2);
   public final static native int FloatVect_doSize(long jarg1, FloatVect jarg1_);
+  public final static native int FloatVect_doCapacity(long jarg1, FloatVect jarg1_);
+  public final static native void FloatVect_doReserve(long jarg1, FloatVect jarg1_, int jarg2);
   public final static native void FloatVect_doAdd__SWIG_0(long jarg1, FloatVect jarg1_, float jarg2);
   public final static native void FloatVect_doAdd__SWIG_1(long jarg1, FloatVect jarg1_, int jarg2, float jarg3);
   public final static native float FloatVect_doRemove(long jarg1, FloatVect jarg1_, int jarg2);
@@ -250,6 +262,8 @@ public class JamiServiceJNI {
   public final static native void MessageVect_clear(long jarg1, MessageVect jarg1_);
   public final static native long new_MessageVect__SWIG_2(int jarg1, long jarg2, Message jarg2_);
   public final static native int MessageVect_doSize(long jarg1, MessageVect jarg1_);
+  public final static native int MessageVect_doCapacity(long jarg1, MessageVect jarg1_);
+  public final static native void MessageVect_doReserve(long jarg1, MessageVect jarg1_, int jarg2);
   public final static native void MessageVect_doAdd__SWIG_0(long jarg1, MessageVect jarg1_, long jarg2, Message jarg2_);
   public final static native void MessageVect_doAdd__SWIG_1(long jarg1, MessageVect jarg1_, int jarg2, long jarg3, Message jarg3_);
   public final static native long MessageVect_doRemove(long jarg1, MessageVect jarg1_, int jarg2);
@@ -592,6 +606,8 @@ public class JamiServiceJNI {
   public final static native void SwarmMessageVect_clear(long jarg1, SwarmMessageVect jarg1_);
   public final static native long new_SwarmMessageVect__SWIG_2(int jarg1, long jarg2, SwarmMessage jarg2_);
   public final static native int SwarmMessageVect_doSize(long jarg1, SwarmMessageVect jarg1_);
+  public final static native int SwarmMessageVect_doCapacity(long jarg1, SwarmMessageVect jarg1_);
+  public final static native void SwarmMessageVect_doReserve(long jarg1, SwarmMessageVect jarg1_, int jarg2);
   public final static native void SwarmMessageVect_doAdd__SWIG_0(long jarg1, SwarmMessageVect jarg1_, long jarg2, SwarmMessage jarg2_);
   public final static native void SwarmMessageVect_doAdd__SWIG_1(long jarg1, SwarmMessageVect jarg1_, int jarg2, long jarg3, SwarmMessage jarg3_);
   public final static native long SwarmMessageVect_doRemove(long jarg1, SwarmMessageVect jarg1_, int jarg2);

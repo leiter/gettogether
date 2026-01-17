@@ -42,21 +42,28 @@ class AddContactViewModel(
             _state.update { it.copy(isSearching = true, error = null, searchResult = null) }
             try {
                 val accountId = accountRepository.currentAccountId.value
+                val query = currentState.contactId.trim()
+
+                println("[CONTACT-SEARCH] === searchContact() called ===")
+                println("[CONTACT-SEARCH] Query: '$query'")
+                println("[CONTACT-SEARCH] Account ID: ${accountId ?: "null (demo mode)"}")
 
                 if (accountId != null) {
-                    val query = currentState.contactId.trim()
-
                     // Check if query is a 40-character hexadecimal Jami ID (DHT account)
                     val isJamiId = query.length == 40 && query.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+                    println("[CONTACT-SEARCH] Query length: ${query.length}")
+                    println("[CONTACT-SEARCH] Is valid 40-char Jami ID: $isJamiId")
 
                     if (isJamiId) {
                         // Direct DHT account ID - skip name server lookup
+                        println("[CONTACT-SEARCH] → Using direct DHT lookup (no name server)")
                         val searchResult = ContactSearchResult(
                             id = query,
                             username = query.take(8), // Show first 8 chars as username
                             displayName = query.take(8),
                             isAlreadyContact = false
                         )
+                        println("[CONTACT-SEARCH] ✓ Contact found: id=${searchResult.id}")
                         _state.update {
                             it.copy(
                                 isSearching = false,
@@ -66,8 +73,10 @@ class AddContactViewModel(
                         }
                     } else {
                         // Username or short ID - perform name server lookup
+                        println("[CONTACT-SEARCH] → Performing name server lookup for username: '$query'")
                         val result = jamiBridge.lookupName(accountId, query)
                         if (result != null) {
+                            println("[CONTACT-SEARCH] ✓ Name server found: name='${result.name}', address='${result.address}'")
                             val searchResult = ContactSearchResult(
                                 id = result.address,
                                 username = result.name,
@@ -82,6 +91,7 @@ class AddContactViewModel(
                                 )
                             }
                         } else {
+                            println("[CONTACT-SEARCH] ✗ User not found on name server")
                             _state.update {
                                 it.copy(
                                     isSearching = false,
@@ -91,6 +101,7 @@ class AddContactViewModel(
                         }
                     }
                 } else {
+                    println("[CONTACT-SEARCH] → Demo mode: simulating search")
                     // Demo mode: simulate finding a user
                     kotlinx.coroutines.delay(800)
                     val searchResult = simulateSearch(currentState.contactId)
@@ -126,13 +137,30 @@ class AddContactViewModel(
             _state.update { it.copy(isAdding = true, error = null) }
             try {
                 val accountId = accountRepository.currentAccountId.value
+                val timestamp = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+                println("[CONTACT-ADD] === addContact() called ===")
+                println("[CONTACT-ADD] Timestamp: $timestamp")
+                println("[CONTACT-ADD] My Account ID: ${accountId ?: "null"}")
+                println("[CONTACT-ADD] Target Contact ID: ${searchResult.id}")
+                println("[CONTACT-ADD] Target Username: ${searchResult.username}")
+                println("[CONTACT-ADD] Target Display Name: ${searchResult.displayName}")
 
                 if (accountId != null) {
+                    println("[CONTACT-ADD] → Sending contact request via JamiBridge...")
                     jamiBridge.addContact(accountId, searchResult.id)
+                    println("[CONTACT-ADD] ✓ Contact request sent successfully")
+                    println("[CONTACT-ADD]   From: $accountId")
+                    println("[CONTACT-ADD]   To: ${searchResult.id}")
+                } else {
+                    println("[CONTACT-ADD] → Demo mode: no actual request sent")
                 }
 
                 _state.update { it.copy(isAdding = false, isContactAdded = true) }
+                println("[CONTACT-ADD] ✓ UI state updated: isContactAdded=true")
             } catch (e: Exception) {
+                println("[CONTACT-ADD] ✗ Failed to add contact: ${e.message}")
+                e.printStackTrace()
                 _state.update {
                     it.copy(
                         isAdding = false,

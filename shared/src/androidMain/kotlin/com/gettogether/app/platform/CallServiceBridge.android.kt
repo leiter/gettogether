@@ -28,7 +28,12 @@ actual class CallServiceBridge(private val context: Context) {
             putExtra("contact_name", contactName)
             putExtra("is_video", isVideo)
         }
-        context.startService(intent)
+        // Use foreground service for incoming calls (Android O+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
     }
 
     actual fun answerCall() {

@@ -25,16 +25,26 @@ import org.koin.dsl.module
 
 val sharedModule = module {
     // Jami Bridge
-    single<JamiBridge> { createJamiBridge() }
+    single<JamiBridge> {
+        println("Koin: Creating JamiBridge")
+        createJamiBridge().also { println("Koin: JamiBridge created") }
+    }
 
     // Repositories
-    single { AccountRepository(get()) }
+    single {
+        println("Koin: Creating AccountRepository")
+        AccountRepository(get()).also { println("Koin: AccountRepository created") }
+    }
     single { ContactRepositoryImpl(get(), get(), get()) }
     single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }
-    single { ConversationRepositoryImpl(get(), get(), get(), get()) }
+    single { ConversationRepositoryImpl(get(), get(), get(), get(), getOrNull()) }
 
     // ViewModels
-    viewModel { CreateAccountViewModel(get(), get()) }
+    // Using factory for CreateAccountViewModel to work around iOS koinViewModel issue
+    factory {
+        println("Koin: Creating CreateAccountViewModel")
+        CreateAccountViewModel(get(), get()).also { println("Koin: CreateAccountViewModel created") }
+    }
     viewModel { ImportAccountViewModel(get(), get()) }
     viewModel { ChatViewModel(get(), get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }
@@ -43,9 +53,9 @@ val sharedModule = module {
     viewModel { TrustRequestsViewModel(get(), get()) }
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }
-    viewModel { SettingsViewModel(get(), get(), get()) }
+    viewModel { SettingsViewModel(get(), get(), get(), get(), get()) }
     viewModel { ContactDetailsViewModel(get(), get(), get()) }
-    viewModel { CallViewModel(get(), get(), getOrNull()) }
+    viewModel { CallViewModel(get(), get(), getOrNull(), get()) }
     viewModel { ConferenceViewModel(get(), get()) }
 }
 

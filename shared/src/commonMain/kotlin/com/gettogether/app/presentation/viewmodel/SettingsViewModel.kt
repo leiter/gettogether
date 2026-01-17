@@ -6,6 +6,10 @@ import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.RegistrationState
+import com.gettogether.app.platform.ExportPathProvider
+import com.gettogether.app.platform.ImageProcessor
+import com.gettogether.app.platform.ImageProcessingResult
+import com.gettogether.app.platform.generateExportFilename
 import com.gettogether.app.presentation.state.NotificationSettings
 import com.gettogether.app.presentation.state.PrivacySettings
 import com.gettogether.app.presentation.state.SettingsState
@@ -19,7 +23,9 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val imageProcessor: ImageProcessor,
+    private val exportPathProvider: ExportPathProvider
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
@@ -152,6 +158,57 @@ class SettingsViewModel(
         }
     }
 
+    /**
+     * Update user profile (display name and avatar).
+     * Note: This function may cause native crashes in libjami::updateProfile.
+     * Error handling is in place to gracefully handle the issue.
+     */
+    fun updateProfile(displayName: String, avatarPath: String? = null) {
+        viewModelScope.launch {
+            _state.update { it.copy(isUpdatingProfile = true, profileUpdateSuccess = null, error = null) }
+            try {
+                accountRepository.updateProfile(displayName, avatarPath)
+                _state.update {
+                    it.copy(
+                        userProfile = it.userProfile.copy(displayName = displayName),
+                        isUpdatingProfile = false,
+                        showEditProfileDialog = false,
+                        profileUpdateSuccess = "Profile updated successfully"
+                    )
+                }
+            } catch (e: Exception) {
+                // Known issue: updateProfile may cause native crash
+                // Fallback to updateDisplayName which uses setAccountDetails
+                try {
+                    accountRepository.updateDisplayName(displayName)
+                    _state.update {
+                        it.copy(
+                            userProfile = it.userProfile.copy(displayName = displayName),
+                            isUpdatingProfile = false,
+                            showEditProfileDialog = false,
+                            profileUpdateSuccess = "Display name updated (profile update unavailable)"
+                        )
+                    }
+                } catch (fallbackError: Exception) {
+                    _state.update {
+                        it.copy(
+                            isUpdatingProfile = false,
+                            error = "Failed to update profile: ${fallbackError.message}. This may be a Jami library issue."
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun showEditProfileDialog() {
+        _state.update { it.copy(showEditProfileDialog = true) }
+    }
+
+    fun hideEditProfileDialog() {
+        _state.update { it.copy(showEditProfileDialog = false, error = null) }
+    }
+
     private fun RegistrationState.toDisplayString(): String {
         return when (this) {
             RegistrationState.REGISTERED -> "REGISTERED"
@@ -254,5 +311,166 @@ class SettingsViewModel(
 
     fun clearError() {
         _state.update { it.copy(error = null) }
+    }
+
+    fun selectAvatar(uri: String) {
+        _state.update { it.copy(selectedAvatarUri = uri, error = null) }
+    }
+
+    fun clearSelectedAvatar() {
+        _state.update { it.copy(selectedAvatarUri = null) }
+    }
+
+    /**
+     * Process and update profile with avatar
+     */
+    fun updateProfileWithAvatar(displayName: String, avatarUri: String?) {
+        viewModelScope.launch {
+            _state.update { it.copy(isUpdatingProfile = true, isProcessingAvatar = true, error = null) }
+
+            var processedAvatarPath: String? = null
+
+            // Process avatar if provided
+            if (avatarUri != null) {
+                when (val result = imageProcessor.processImage(avatarUri)) {
+                    is ImageProcessingResult.Success -> {
+                        processedAvatarPath = result.filePath
+                        println("Avatar processed: ${result.filePath}, size: ${result.sizeBytes} bytes")
+                    }
+                    is ImageProcessingResult.Error -> {
+                        _state.update {
+                            it.copy(
+                                isUpdatingProfile = false,
+                                isProcessingAvatar = false,
+                                error = "Avatar processing failed: ${result.message}"
+                            )
+                        }
+                        return@launch
+                    }
+                }
+            }
+
+            _state.update { it.copy(isProcessingAvatar = false) }
+
+            // Update profile with processed avatar
+            try {
+                accountRepository.updateProfile(displayName, processedAvatarPath)
+                _state.update {
+                    it.copy(
+                        userProfile = it.userProfile.copy(
+                            displayName = displayName,
+                            avatarUri = processedAvatarPath
+                        ),
+                        isUpdatingProfile = false,
+                        showEditProfileDialog = false,
+                        selectedAvatarUri = null,
+                        profileUpdateSuccess = "Profile updated successfully"
+                    )
+                }
+            } catch (e: Exception) {
+                // Fallback to updateDisplayName if updateProfile crashes
+                try {
+                    accountRepository.updateDisplayName(displayName)
+                    _state.update {
+                        it.copy(
+                            userProfile = it.userProfile.copy(displayName = displayName),
+                            isUpdatingProfile = false,
+                            showEditProfileDialog = false,
+                            selectedAvatarUri = null,
+                            profileUpdateSuccess = "Display name updated (avatar update unavailable)"
+                        )
+                    }
+                } catch (fallbackError: Exception) {
+                    _state.update {
+                        it.copy(
+                            isUpdatingProfile = false,
+                            error = "Failed to update profile: ${fallbackError.message}"
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    // ========== Export Account ==========
+
+    fun showExportDialog() {
+        _state.update { it.copy(showExportDialog = true, exportError = null, exportSuccess = null) }
+    }
+
+    fun hideExportDialog() {
+        _state.update { it.copy(showExportDialog = false, exportError = null) }
+    }
+
+    fun exportAccount(password: String) {
+        viewModelScope.launch {
+            _state.update { it.copy(isExporting = true, exportError = null) }
+            try {
+                val exportDir = exportPathProvider.getExportDirectory()
+                val filename = generateExportFilename()
+                val destinationPath = "$exportDir/$filename"
+
+                val success = accountRepository.exportAccount(destinationPath, password)
+
+                if (success) {
+                    _state.update {
+                        it.copy(
+                            isExporting = false,
+                            showExportDialog = false,
+                            exportSuccess = "Account exported to: $filename"
+                        )
+                    }
+                } else {
+                    _state.update {
+                        it.copy(
+                            isExporting = false,
+                            exportError = "Export failed. Please try again."
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isExporting = false,
+                        exportError = e.message ?: "Export failed"
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearExportSuccess() {
+        _state.update { it.copy(exportSuccess = null) }
+    }
+
+    // ========== Logout Options ==========
+
+    fun showLogoutOptionsDialog() {
+        _state.update { it.copy(showLogoutOptionsDialog = true) }
+    }
+
+    fun hideLogoutOptionsDialog() {
+        _state.update { it.copy(showLogoutOptionsDialog = false) }
+    }
+
+    /**
+     * Logout while preserving account data.
+     * The account can be relogged into later.
+     */
+    fun logoutKeepData() {
+        viewModelScope.launch {
+            _state.update { it.copy(isLoggingOut = true, showLogoutOptionsDialog = false) }
+            try {
+                accountRepository.logoutCurrentAccount()
+                _state.update { it.copy(isLoggingOut = false, logoutComplete = true) }
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isLoggingOut = false,
+                        error = e.message ?: "Logout failed"
+                    )
+                }
+            }
+        }
     }
 }

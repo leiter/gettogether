@@ -7,6 +7,7 @@ import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlin.time.Clock
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -306,12 +307,19 @@ class ContactRepositoryImpl(
 
         when (event) {
             is JamiContactEvent.ContactAdded -> {
+                println("[CONTACT-EVENT] ContactAdded received")
+                println("[CONTACT-EVENT]   Event Account ID: ${event.accountId}")
+                println("[CONTACT-EVENT]   Current Account ID: $accountId")
+                println("[CONTACT-EVENT]   Contact URI: ${event.uri}")
+                println("[CONTACT-EVENT]   Is Confirmed: ${event.confirmed}")
+
                 if (event.accountId == accountId) {
                     // Fetch contact details and add to cache
                     scope.launch {
                         try {
                             val details = jamiBridge.getContactDetails(accountId, event.uri)
                             val displayName = details["displayName"] ?: event.uri.take(8)
+                            println("[CONTACT-EVENT]   Display Name: $displayName")
 
                             val contact = Contact(
                                 id = event.uri,
@@ -325,19 +333,31 @@ class ContactRepositoryImpl(
                             if (currentContacts.none { it.uri == event.uri }) {
                                 _contactsCache.value = _contactsCache.value +
                                     (accountId to (currentContacts + contact))
+                                println("[CONTACT-EVENT] ✓ Contact added to cache: ${event.uri}")
+                            } else {
+                                println("[CONTACT-EVENT]   Contact already in cache, skipping")
                             }
                         } catch (e: Exception) {
-                            // Handle error
+                            println("[CONTACT-EVENT] ✗ Failed to fetch contact details: ${e.message}")
                         }
                     }
                 }
             }
 
             is JamiContactEvent.ContactRemoved -> {
+                println("[CONTACT-EVENT] ContactRemoved received")
+                println("[CONTACT-EVENT]   Event Account ID: ${event.accountId}")
+                println("[CONTACT-EVENT]   Current Account ID: $accountId")
+                println("[CONTACT-EVENT]   Contact URI: ${event.uri}")
+                println("[CONTACT-EVENT]   Is Banned: ${event.banned}")
+
                 if (event.accountId == accountId) {
                     val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+                    val previousCount = currentContacts.size
                     _contactsCache.value = _contactsCache.value +
                         (accountId to currentContacts.filter { it.uri != event.uri })
+                    val newCount = (_contactsCache.value[accountId] ?: emptyList()).size
+                    println("[CONTACT-EVENT] ✓ Contact removed from cache: $previousCount -> $newCount contacts")
                 }
             }
 
@@ -347,7 +367,7 @@ class ContactRepositoryImpl(
                     _onlineStatusCache.value = _onlineStatusCache.value + (event.uri to event.isOnline)
 
                     // Update last presence timestamp
-                    val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+                    val now = Clock.System.now().toEpochMilliseconds()
                     _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
 
                     // Update contact in cache
@@ -364,6 +384,16 @@ class ContactRepositoryImpl(
             }
 
             is JamiContactEvent.IncomingTrustRequest -> {
+                val timestamp = Clock.System.now().toEpochMilliseconds()
+                println("[CONTACT-EVENT] IncomingTrustRequest received")
+                println("[CONTACT-EVENT]   Timestamp: $timestamp")
+                println("[CONTACT-EVENT]   Event Account ID: ${event.accountId}")
+                println("[CONTACT-EVENT]   Current Account ID: $accountId")
+                println("[CONTACT-EVENT]   From URI: ${event.from}")
+                println("[CONTACT-EVENT]   Conversation ID: ${event.conversationId}")
+                println("[CONTACT-EVENT]   Payload size: ${event.payload.size} bytes")
+                println("[CONTACT-EVENT]   Received timestamp: ${event.received}")
+
                 if (event.accountId == accountId) {
                     // Add trust request to cache
                     val trustRequest = TrustRequest(
@@ -378,6 +408,10 @@ class ContactRepositoryImpl(
                     if (currentRequests.none { it.from == event.from }) {
                         _trustRequestsCache.value = _trustRequestsCache.value +
                             (accountId to (currentRequests + trustRequest))
+                        println("[CONTACT-EVENT] ✓ Trust request added to cache from: ${event.from}")
+                        println("[CONTACT-EVENT]   Total pending requests: ${currentRequests.size + 1}")
+                    } else {
+                        println("[CONTACT-EVENT]   Trust request already in cache, skipping")
                     }
                 }
             }
@@ -462,7 +496,7 @@ class ContactRepositoryImpl(
      */
     private fun checkPresenceTimeouts() {
         val accountId = accountRepository.currentAccountId.value ?: return
-        val now = kotlinx.datetime.Clock.System.now().toEpochMilliseconds()
+        val now = Clock.System.now().toEpochMilliseconds()
         val currentTimestamps = _lastPresenceTimestamp.value
         val currentOnlineStatus = _onlineStatusCache.value
         val currentContacts = _contactsCache.value[accountId] ?: return

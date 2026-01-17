@@ -722,11 +722,19 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override fun getAudioInputDevices(): List<String> {
-        return try {
-            nativeGetAudioInputDeviceList().toList()
-        } catch (e: UnsatisfiedLinkError) {
-            emptyList()
-        }
+        // ⚠️ CRASH PREVENTION: This native call causes SIGSEGV
+        // See: doc/audio-input-crash-analysis-pixel7a.md
+        throw UnsupportedOperationException(
+            "getAudioInputDevices() crashes with SIGSEGV in native library. " +
+            "Use useDefaultAudioInputDevice() instead. " +
+            "See doc/audio-input-crash-analysis-pixel7a.md for details."
+        )
+        // Original implementation (DO NOT UNCOMMENT):
+        // return try {
+        //     nativeGetAudioInputDeviceList().toList()
+        // } catch (e: UnsatisfiedLinkError) {
+        //     emptyList()
+        // }
     }
 
     override suspend fun setAudioOutputDevice(index: Int) = withContext(Dispatchers.IO) {

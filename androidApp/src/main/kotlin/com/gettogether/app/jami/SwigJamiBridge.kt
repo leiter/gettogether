@@ -5,6 +5,7 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -37,26 +38,37 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     // SWIG Callback implementations
     private val configCallback = object : ConfigurationCallback() {
         override fun registrationStateChanged(accountId: String?, state: String?, code: Int, detail: String?) {
+            Log.i(TAG, "[ACCOUNT-EVENT] registrationStateChanged: accountId=$accountId, state=$state, code=$code, detail=$detail")
             val regState = parseRegistrationState(state ?: "")
+            Log.i(TAG, "[ACCOUNT-EVENT] Parsed registration state: $regState")
             val event = JamiAccountEvent.RegistrationStateChanged(
                 accountId ?: "",
                 regState,
                 code,
                 detail ?: ""
             )
-            _accountEvents.tryEmit(event)
+            val emitted = _accountEvents.tryEmit(event)
+            Log.i(TAG, "[ACCOUNT-EVENT] RegistrationStateChanged event emitted: $emitted")
             _events.tryEmit(event)
         }
 
         override fun accountsChanged() {
-            Log.d(TAG, "Accounts changed")
+            Log.i(TAG, "[ACCOUNT-EVENT] accountsChanged callback triggered")
+            Log.i(TAG, "[ACCOUNT-EVENT] This indicates accounts list was modified (add/remove)")
         }
 
         override fun accountDetailsChanged(accountId: String?, details: StringMap?) {
+            Log.i(TAG, "[ACCOUNT-EVENT] accountDetailsChanged: accountId=$accountId")
             if (accountId != null && details != null) {
                 val detailsMap = stringMapToKotlin(details)
+                Log.i(TAG, "[ACCOUNT-EVENT] Changed details count: ${detailsMap.size}")
+                detailsMap.forEach { (key, value) ->
+                    val safeValue = if (key.contains("password", ignoreCase = true)) "***" else value
+                    Log.i(TAG, "[ACCOUNT-EVENT]   $key = $safeValue")
+                }
                 val event = JamiAccountEvent.AccountDetailsChanged(accountId, detailsMap)
-                _accountEvents.tryEmit(event)
+                val emitted = _accountEvents.tryEmit(event)
+                Log.i(TAG, "[ACCOUNT-EVENT] AccountDetailsChanged event emitted: $emitted")
                 _events.tryEmit(event)
             }
         }
@@ -471,14 +483,36 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     // Account Management
     override suspend fun createAccount(displayName: String, password: String): String = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext ""
-        val details = kotlinToStringMap(mapOf(
+        Log.i(TAG, "[ACCOUNT-CREATE] === createAccount() called ===")
+        Log.i(TAG, "[ACCOUNT-CREATE] displayName='$displayName', password.length=${password.length}")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-CREATE] FAILED: Native library not loaded!")
+            return@withContext ""
+        }
+
+        val detailsMap = mapOf(
             "Account.type" to "RING",
             "Account.alias" to displayName,
             "Account.displayName" to displayName,
-            "Account.archivePassword" to password
-        ))
-        JamiService.addAccount(details)
+            "Account.archivePassword" to password,
+            // Enable DHT proxy to allow communication through Jami's relay servers
+            // This is essential for devices behind NAT (like emulators) that can't establish direct P2P connections
+            "Account.proxyEnabled" to "true",
+            // Disable UPnP - it always fails in emulators and causes unnecessary connection attempts
+            "Account.upnpEnabled" to "false",
+            // Disable TURN - IPv6 TURN resolution fails in emulators, DHT proxy is sufficient for messaging
+            "TURN.enable" to "false"
+        )
+        Log.i(TAG, "[ACCOUNT-CREATE] Account details map: $detailsMap")
+
+        val details = kotlinToStringMap(detailsMap)
+        Log.i(TAG, "[ACCOUNT-CREATE] Calling JamiService.addAccount()...")
+
+        val result = JamiService.addAccount(details)
+        Log.i(TAG, "[ACCOUNT-CREATE] JamiService.addAccount() returned: '$result'")
+        Log.i(TAG, "[ACCOUNT-CREATE] Note: Registration events will follow asynchronously")
+        result
     }
 
     override suspend fun importAccount(archivePath: String, password: String): String = withContext(Dispatchers.IO) {
@@ -492,8 +526,45 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override suspend fun exportAccount(accountId: String, destinationPath: String, password: String): Boolean = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext false
-        JamiService.exportToFile(accountId, destinationPath, "password", password)
+        Log.i(TAG, "[ACCOUNT-EXPORT] exportAccount called for accountId=$accountId")
+        Log.i(TAG, "[ACCOUNT-EXPORT] destinationPath=$destinationPath, password.length=${password.length}")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-EXPORT] FAILED: Native library not loaded")
+            return@withContext false
+        }
+
+        // Ensure account is active before export
+        try {
+            val details = JamiService.getAccountDetails(accountId)
+            val isEnabled = details?.get("Account.enable")?.equals("true") == true
+            Log.i(TAG, "[ACCOUNT-EXPORT] Account enabled: $isEnabled")
+
+            if (!isEnabled) {
+                Log.w(TAG, "[ACCOUNT-EXPORT] Account not enabled, activating temporarily for export")
+                JamiService.setAccountActive(accountId, true)
+                // Give daemon time to initialize
+                delay(500)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[ACCOUNT-EXPORT] Could not check/set account state: ${e.message}")
+        }
+
+        // Use empty scheme for better compatibility (password still encrypts the archive)
+        val result = JamiService.exportToFile(accountId, destinationPath, "", password)
+        Log.i(TAG, "[ACCOUNT-EXPORT] Export result: $result")
+
+        if (!result) {
+            Log.e(TAG, "[ACCOUNT-EXPORT] Export failed. Checking account details...")
+            try {
+                val volatileDetails = JamiService.getVolatileAccountDetails(accountId)
+                Log.e(TAG, "[ACCOUNT-EXPORT] Registration status: ${volatileDetails?.get("Account.registrationStatus")}")
+            } catch (e: Exception) {
+                Log.e(TAG, "[ACCOUNT-EXPORT] Could not get volatile details: ${e.message}")
+            }
+        }
+
+        result
     }
 
     override suspend fun deleteAccount(accountId: String) = withContext(Dispatchers.IO) {
@@ -502,18 +573,44 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override fun getAccountIds(): List<String> {
-        if (!nativeLoaded) return emptyList()
-        return stringVectToList(JamiService.getAccountList())
+        Log.i(TAG, "[ACCOUNT-PERSIST] getAccountIds() called")
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getAccountIds() FAILED: Native not loaded")
+            return emptyList()
+        }
+        val accountIds = stringVectToList(JamiService.getAccountList())
+        Log.i(TAG, "[ACCOUNT-PERSIST] Found ${accountIds.size} accounts: $accountIds")
+        return accountIds
     }
 
     override fun getAccountDetails(accountId: String): Map<String, String> {
-        if (!nativeLoaded) return emptyMap()
-        return stringMapToKotlin(JamiService.getAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] getAccountDetails() called for accountId=$accountId")
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getAccountDetails() FAILED: Native not loaded")
+            return emptyMap()
+        }
+        val details = stringMapToKotlin(JamiService.getAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] Account details for $accountId:")
+        details.forEach { (key, value) ->
+            // Don't log sensitive values
+            val safeValue = if (key.contains("password", ignoreCase = true) || key.contains("secret", ignoreCase = true)) "***" else value
+            Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $safeValue")
+        }
+        return details
     }
 
     override fun getVolatileAccountDetails(accountId: String): Map<String, String> {
-        if (!nativeLoaded) return emptyMap()
-        return stringMapToKotlin(JamiService.getVolatileAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() called for accountId=$accountId")
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() FAILED: Native not loaded")
+            return emptyMap()
+        }
+        val details = stringMapToKotlin(JamiService.getVolatileAccountDetails(accountId))
+        Log.i(TAG, "[ACCOUNT-PERSIST] Volatile details for $accountId:")
+        details.forEach { (key, value) ->
+            Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $value")
+        }
+        return details
     }
 
     override suspend fun setAccountDetails(accountId: String, details: Map<String, String>) = withContext(Dispatchers.IO) {
@@ -980,8 +1077,16 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override fun getAudioInputDevices(): List<String> {
-        if (!nativeLoaded) return emptyList()
-        return stringVectToList(JamiService.getAudioInputDeviceList())
+        // ⚠️ CRASH PREVENTION: This native call causes SIGSEGV
+        // See: doc/audio-input-crash-analysis-pixel7a.md
+        throw UnsupportedOperationException(
+            "getAudioInputDevices() crashes with SIGSEGV in native library. " +
+            "Use useDefaultAudioInputDevice() instead. " +
+            "See doc/audio-input-crash-analysis-pixel7a.md for details."
+        )
+        // Original implementation (DO NOT UNCOMMENT):
+        // if (!nativeLoaded) return emptyList()
+        // return stringVectToList(JamiService.getAudioInputDeviceList())
     }
 
     override suspend fun setAudioOutputDevice(index: Int) = withContext(Dispatchers.IO) {

@@ -18,6 +18,7 @@ import platform.AVFAudio.AVAudioSessionPortOverrideNone
 import platform.AVFAudio.AVAudioSessionPortOverrideSpeaker
 import platform.Foundation.NSDate
 import platform.Foundation.NSLog
+import platform.Foundation.NSUserDefaults
 import platform.Foundation.NSUUID
 import platform.Foundation.timeIntervalSince1970
 
@@ -55,13 +56,14 @@ class IOSJamiBridge : JamiBridge {
     private val mockContacts = mutableMapOf<String, MutableList<JamiContact>>()
     private val mockConversations = mutableMapOf<String, MutableList<String>>()
 
-    // Audio/Video state
-    private val audioSession = AVAudioSession.sharedInstance()
+    // Audio/Video state - lazy initialization to avoid init-time crashes
+    private val audioSession by lazy { AVAudioSession.sharedInstance() }
     private var currentVideoDeviceId: String = "front"
     private var isVideoActive = false
     private var isSpeakerEnabled = false
     private var currentAudioOutputIndex = 0
     private var currentAudioInputIndex = 0
+    private var audioSessionConfigured = false
 
     companion object {
         private const val TAG = "JamiBridge-iOS"
@@ -69,14 +71,73 @@ class IOSJamiBridge : JamiBridge {
         // Video device IDs
         private const val VIDEO_DEVICE_FRONT = "front"
         private const val VIDEO_DEVICE_BACK = "back"
+
+        // UserDefaults keys for persistence
+        private const val KEY_ACCOUNTS = "jami_mock_accounts"
+        private const val KEY_ACCOUNT_DETAILS_PREFIX = "jami_mock_account_details_"
     }
+
+    private val userDefaults = NSUserDefaults.standardUserDefaults
 
     init {
-        // Configure audio session for VoIP
-        configureAudioSession()
+        NSLog("$TAG: IOSJamiBridge initialized")
+        // Load persisted accounts
+        loadPersistedAccounts()
+        // Don't configure audio session in init - do it lazily when needed
     }
 
-    private fun configureAudioSession() {
+    @Suppress("UNCHECKED_CAST")
+    private fun loadPersistedAccounts() {
+        try {
+            val accountIdsArray = userDefaults.arrayForKey(KEY_ACCOUNTS) as? List<*>
+            if (accountIdsArray != null) {
+                mockAccounts.clear()
+                for (item in accountIdsArray) {
+                    val accountId = item as? String
+                    if (accountId != null) {
+                        mockAccounts.add(accountId)
+
+                        // Load account details
+                        val detailsDict = userDefaults.dictionaryForKey("$KEY_ACCOUNT_DETAILS_PREFIX$accountId") as? Map<*, *>
+                        if (detailsDict != null) {
+                            val details = mutableMapOf<String, String>()
+                            for ((key, value) in detailsDict) {
+                                if (key is String && value is String) {
+                                    details[key] = value
+                                }
+                            }
+                            mockAccountDetails[accountId] = details
+                        }
+
+                        // Initialize empty contacts/conversations
+                        mockContacts[accountId] = mutableListOf()
+                        mockConversations[accountId] = mutableListOf()
+                    }
+                }
+            }
+            NSLog("$TAG: Loaded ${mockAccounts.size} persisted accounts")
+        } catch (e: Exception) {
+            NSLog("$TAG: Failed to load persisted accounts: ${e.message}")
+        }
+    }
+
+    private fun persistAccounts() {
+        try {
+            userDefaults.setObject(mockAccounts.toList(), KEY_ACCOUNTS)
+            for (accountId in mockAccounts) {
+                mockAccountDetails[accountId]?.let { details ->
+                    userDefaults.setObject(details.toMap(), "$KEY_ACCOUNT_DETAILS_PREFIX$accountId")
+                }
+            }
+            userDefaults.synchronize()
+            NSLog("$TAG: Persisted ${mockAccounts.size} accounts")
+        } catch (e: Exception) {
+            NSLog("$TAG: Failed to persist accounts: ${e.message}")
+        }
+    }
+
+    private fun configureAudioSessionIfNeeded() {
+        if (audioSessionConfigured) return
         try {
             audioSession.setCategory(
                 AVAudioSessionCategoryPlayAndRecord,
@@ -85,6 +146,7 @@ class IOSJamiBridge : JamiBridge {
                          AVAudioSessionCategoryOptionDefaultToSpeaker,
                 error = null
             )
+            audioSessionConfigured = true
             NSLog("$TAG: Audio session configured for VoIP")
         } catch (e: Exception) {
             NSLog("$TAG: Failed to configure audio session: ${e.message}")
@@ -135,6 +197,9 @@ class IOSJamiBridge : JamiBridge {
         mockContacts[accountId] = mutableListOf()
         mockConversations[accountId] = mutableListOf()
 
+        // Persist to UserDefaults
+        persistAccounts()
+
         // Emit registration events
         _accountEvents.tryEmit(JamiAccountEvent.RegistrationStateChanged(
             accountId, RegistrationState.TRYING, 0, ""
@@ -164,6 +229,10 @@ class IOSJamiBridge : JamiBridge {
             mockAccountDetails.remove(accountId)
             mockContacts.remove(accountId)
             mockConversations.remove(accountId)
+
+            // Remove persisted details and update accounts list
+            userDefaults.removeObjectForKey("$KEY_ACCOUNT_DETAILS_PREFIX$accountId")
+            persistAccounts()
         }
     }
 
@@ -238,7 +307,11 @@ class IOSJamiBridge : JamiBridge {
 
     override suspend fun addContact(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: addContact: $uri")
+            NSLog("$TAG: ⚠️ [MOCK WARNING] addContact() - NO NETWORK REQUEST SENT")
+            NSLog("$TAG: ⚠️ This is a MOCK implementation. No contact request is sent over the Jami network.")
+            NSLog("$TAG: ⚠️ Real cross-platform contact requests require native iOS Jami daemon integration.")
+            NSLog("$TAG: addContact: accountId=$accountId, uri=$uri")
+
             val contact = JamiContact(
                 uri = uri,
                 displayName = "Contact ${uri.take(8)}",
@@ -248,6 +321,7 @@ class IOSJamiBridge : JamiBridge {
             )
             mockContacts[accountId]?.add(contact)
             _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, false))
+            NSLog("$TAG: ✓ Mock contact added locally (not sent to network)")
         }
     }
 
@@ -273,23 +347,48 @@ class IOSJamiBridge : JamiBridge {
 
     override suspend fun acceptTrustRequest(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: acceptTrustRequest from: $uri")
+            NSLog("$TAG: ⚠️ [MOCK WARNING] acceptTrustRequest() - MOCK-ONLY OPERATION")
+            NSLog("$TAG: ⚠️ This is a MOCK implementation. No acceptance is sent over the Jami network.")
+            NSLog("$TAG: ⚠️ Real trust request acceptance requires native iOS Jami daemon integration.")
+            NSLog("$TAG: acceptTrustRequest: accountId=$accountId, from=$uri")
+
             mockContacts[accountId]?.find { it.uri == uri }?.let {
                 val updated = it.copy(isConfirmed = true)
                 mockContacts[accountId]?.remove(it)
                 mockContacts[accountId]?.add(updated)
             }
             _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, true))
+            NSLog("$TAG: ✓ Mock trust request accepted locally (not sent to network)")
         }
     }
 
     override suspend fun discardTrustRequest(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: discardTrustRequest from: $uri")
+            NSLog("$TAG: ⚠️ [MOCK WARNING] discardTrustRequest() - MOCK-ONLY OPERATION")
+            NSLog("$TAG: ⚠️ This is a MOCK implementation. No discard is sent over the Jami network.")
+            NSLog("$TAG: ⚠️ Real trust request discard requires native iOS Jami daemon integration.")
+            NSLog("$TAG: discardTrustRequest: accountId=$accountId, from=$uri")
+            NSLog("$TAG: ✓ Mock trust request discarded locally (not sent to network)")
         }
     }
 
-    override fun getTrustRequests(accountId: String): List<TrustRequest> = emptyList()
+    override fun getTrustRequests(accountId: String): List<TrustRequest> {
+        NSLog("$TAG: ⚠️ [MOCK WARNING] getTrustRequests() - ALWAYS RETURNS EMPTY LIST")
+        NSLog("$TAG: ⚠️ This is a MOCK implementation. Real trust requests are not fetched from the network.")
+        NSLog("$TAG: ⚠️ Cross-platform contact requests will NOT appear here until native iOS integration is complete.")
+        NSLog("$TAG: getTrustRequests: accountId=$accountId, returning empty list")
+        return emptyList()
+    }
+
+    override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: subscribeBuddy: $uri, flag=$flag")
+            // Emit a presence event for UI testing
+            if (flag) {
+                _contactEvents.tryEmit(JamiContactEvent.PresenceChanged(accountId, uri, false))
+            }
+        }
+    }
 
     // =========================================================================
     // Conversation Management
@@ -684,10 +783,18 @@ class IOSJamiBridge : JamiBridge {
     }
 
     override fun getAudioInputDevices(): List<String> {
-        // Standard iOS audio inputs
-        val devices = listOf("Built-in Microphone")
-        NSLog("$TAG: getAudioInputDevices: $devices")
-        return devices
+        // ⚠️ CRASH PREVENTION: Android implementation crashes with SIGSEGV
+        // iOS should also throw for API consistency
+        // See: doc/audio-input-crash-analysis-pixel7a.md
+        throw UnsupportedOperationException(
+            "getAudioInputDevices() crashes with SIGSEGV on Android. " +
+            "Use useDefaultAudioInputDevice() instead. " +
+            "See doc/audio-input-crash-analysis-pixel7a.md for details."
+        )
+        // Original mock implementation (DO NOT UNCOMMENT):
+        // val devices = listOf("Built-in Microphone")
+        // NSLog("$TAG: getAudioInputDevices: $devices")
+        // return devices
     }
 
     override suspend fun setAudioOutputDevice(index: Int) {

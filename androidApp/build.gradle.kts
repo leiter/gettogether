@@ -18,18 +18,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            // Only include ABIs we have pre-built libraries for
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
         }
 
-        externalNativeBuild {
-            cmake {
-                cppFlags += listOf("-std=c++17", "-frtti", "-fexceptions")
-                arguments += listOf(
-                    "-DANDROID_STL=c++_shared",
-                    "-DANDROID_ARM_NEON=TRUE"
-                )
-            }
-        }
+        // Using pre-built native libraries from jniLibs, no CMake build needed
+        // externalNativeBuild {
+        //     cmake {
+        //         cppFlags += listOf("-std=c++17", "-frtti", "-fexceptions")
+        //         arguments += listOf(
+        //             "-DANDROID_STL=c++_shared",
+        //             "-DANDROID_ARM_NEON=TRUE"
+        //         )
+        //     }
+        // }
     }
 
     buildTypes {
@@ -56,12 +58,13 @@ android {
         compose = true
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.18.1"
-        }
-    }
+    // Using pre-built native libraries from jniLibs - CMake build disabled
+    // externalNativeBuild {
+    //     cmake {
+    //         path = file("src/main/cpp/CMakeLists.txt")
+    //         version = "3.18.1"
+    //     }
+    // }
 
     packaging {
         resources {

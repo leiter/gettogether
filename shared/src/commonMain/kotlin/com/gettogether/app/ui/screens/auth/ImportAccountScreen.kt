@@ -1,6 +1,8 @@
 package com.gettogether.app.ui.screens.auth
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -16,8 +21,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -46,6 +56,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.gettogether.app.domain.model.ExistingAccount
+import com.gettogether.app.platform.FilePickerResult
+import com.gettogether.app.platform.provideFilePicker
 import com.gettogether.app.presentation.state.ImportMethod
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
 import org.koin.compose.viewmodel.koinViewModel
@@ -113,27 +126,44 @@ fun ImportAccountScreen(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Import method selection
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    ImportMethodCard(
-                        title = "Archive",
-                        description = "Import from backup file",
-                        icon = Icons.Default.Add,
-                        isSelected = state.importMethod == ImportMethod.Archive,
-                        onClick = { viewModel.onImportMethodChanged(ImportMethod.Archive) },
-                        modifier = Modifier.weight(1f)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ImportMethodCard(
+                            title = "Archive",
+                            description = "Import from backup file",
+                            icon = Icons.Default.Add,
+                            isSelected = state.importMethod == ImportMethod.Archive,
+                            onClick = { viewModel.onImportMethodChanged(ImportMethod.Archive) },
+                            modifier = Modifier.weight(1f)
+                        )
 
-                    ImportMethodCard(
-                        title = "PIN",
-                        description = "Use account PIN",
-                        icon = Icons.Default.Lock,
-                        isSelected = state.importMethod == ImportMethod.Pin,
-                        onClick = { viewModel.onImportMethodChanged(ImportMethod.Pin) },
-                        modifier = Modifier.weight(1f)
-                    )
+                        ImportMethodCard(
+                            title = "PIN",
+                            description = "Use account PIN",
+                            icon = Icons.Default.Lock,
+                            isSelected = state.importMethod == ImportMethod.Pin,
+                            onClick = { viewModel.onImportMethodChanged(ImportMethod.Pin) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    // Show Local Account option only if there are deactivated accounts
+                    if (state.hasDeactivatedAccounts) {
+                        ImportMethodCard(
+                            title = "Local Account",
+                            description = "Relogin to account on this device",
+                            icon = Icons.Default.Refresh,
+                            isSelected = state.importMethod == ImportMethod.LocalAccount,
+                            onClick = { viewModel.onImportMethodChanged(ImportMethod.LocalAccount) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
@@ -160,6 +190,15 @@ fun ImportAccountScreen(
                                     viewModel.importAccount()
                                 }
                             }
+                        )
+                    }
+                    ImportMethod.LocalAccount -> {
+                        LocalAccountFields(
+                            accounts = state.deactivatedAccounts,
+                            selectedAccountId = state.selectedLocalAccountId,
+                            isLoading = state.isLoadingLocalAccounts,
+                            onAccountSelected = viewModel::onLocalAccountSelected,
+                            enabled = !state.isImporting
                         )
                     }
                 }
@@ -269,22 +308,52 @@ private fun ArchiveImportFields(
     onArchivePasswordChanged: (String) -> Unit,
     enabled: Boolean
 ) {
+    val filePicker = provideFilePicker()
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = archivePath,
-            onValueChange = onArchivePathChanged,
-            label = { Text("Archive File Path") },
-            placeholder = { Text("/path/to/backup.gz") },
-            singleLine = true,
-            enabled = enabled,
-            leadingIcon = {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            OutlinedTextField(
+                value = archivePath,
+                onValueChange = onArchivePathChanged,
+                label = { Text("Archive File Path") },
+                placeholder = { Text("Select backup file...") },
+                singleLine = true,
+                enabled = enabled,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null
+                    )
+                },
+                modifier = Modifier.weight(1f)
+            )
+
+            Button(
+                onClick = {
+                    filePicker.pickFile { result ->
+                        when (result) {
+                            is FilePickerResult.Success -> onArchivePathChanged(result.path)
+                            is FilePickerResult.Error -> { /* Error handled by snackbar if needed */ }
+                            is FilePickerResult.Cancelled -> { /* User cancelled */ }
+                        }
+                    }
+                },
+                enabled = enabled,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null
+                    imageVector = Icons.Default.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Browse")
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -351,5 +420,148 @@ private fun PinImportFields(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.outline
         )
+    }
+}
+
+@Composable
+private fun LocalAccountFields(
+    accounts: List<ExistingAccount>,
+    selectedAccountId: String?,
+    isLoading: Boolean,
+    onAccountSelected: (String) -> Unit,
+    enabled: Boolean
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = "Select an account to relogin:",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        when {
+            isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+            accounts.isEmpty() -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "No deactivated accounts found on this device.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+            else -> {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    accounts.forEach { account ->
+                        LocalAccountItem(
+                            account = account,
+                            isSelected = selectedAccountId == account.accountId,
+                            onClick = { if (enabled) onAccountSelected(account.accountId) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Relogin to an account that was previously logged out on this device.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LocalAccountItem(
+    account: ExistingAccount,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = MaterialTheme.shapes.medium,
+        color = if (isSelected)
+            MaterialTheme.colorScheme.primaryContainer
+        else
+            MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(40.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = if (isSelected)
+                    MaterialTheme.colorScheme.primary
+                else
+                    MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = if (isSelected)
+                            MaterialTheme.colorScheme.onPrimary
+                        else
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = account.displayName.ifEmpty { "Unknown" },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = account.jamiId.take(16) + "...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected)
+                        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    else
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (isSelected) {
+                Icon(
+                    Icons.Default.CheckCircle,
+                    contentDescription = "Selected",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
     }
 }
