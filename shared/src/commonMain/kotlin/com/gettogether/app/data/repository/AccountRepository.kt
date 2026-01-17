@@ -95,13 +95,18 @@ class AccountRepository(
                     println("[ACCOUNT-RESTORE] ✓ UPnP disabled")
                 }
 
-                // Disable TURN - IPv6 TURN resolution fails in emulators, causes connection instability
-                // DHT proxy is sufficient for messaging
+                // Enable TURN - required for cross-network connectivity via relay
+                // TURN relay is the fallback when direct/STUN connections fail across NAT
                 val turnEnabled = details["TURN.enable"]
-                if (turnEnabled == "true") {
-                    println("[ACCOUNT-RESTORE] Disabling TURN to avoid IPv6 resolution failures...")
-                    jamiBridge.setAccountDetails(accountId, mapOf("TURN.enable" to "false"))
-                    println("[ACCOUNT-RESTORE] ✓ TURN disabled")
+                if (turnEnabled != "true") {
+                    println("[ACCOUNT-RESTORE] Enabling TURN for cross-network relay support...")
+                    jamiBridge.setAccountDetails(accountId, mapOf(
+                        "TURN.enable" to "true",
+                        "TURN.server" to "turn.jami.net",
+                        "TURN.username" to "ring",
+                        "TURN.password" to "ring"
+                    ))
+                    println("[ACCOUNT-RESTORE] ✓ TURN enabled (turn.jami.net)")
                 }
 
                 println("[ACCOUNT-RESTORE] Loading volatile details for: $accountId")
