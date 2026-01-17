@@ -1,7 +1,7 @@
 # GetTogether - Open Tasks & Known Issues
 
-**Last Updated:** 2025-12-21 16:20
-**Version:** Consolidated from all task documents
+**Last Updated:** 2026-01-17
+**Version:** Consolidated from all task documents (Updated post filepicker-jamibridge merge)
 
 ---
 
@@ -9,7 +9,7 @@
 
 | Priority | Category | Tasks | Status |
 |----------|----------|-------|--------|
-| 🔴 P1 | Android Critical | 7 | ⚠️ 4 Open, 3 Complete |
+| 🔴 P1 | Android Critical | 7 | ⚠️ 2 Open, 5 Complete |
 | 🟡 P2 | Android High Impact | 4 | ✅ All Complete |
 | 🔵 P3 | iOS Platform | 3 | ⏳ All Pending |
 | ⚫ P4 | Nice-to-Have | 3 | ⏳ Mixed |
@@ -80,151 +80,45 @@
 
 ---
 
-### 1.2 Logout Functionality - Missing 🔴
+### 1.2 Logout Functionality - ✅ COMPLETE
 
-**Status:** Not implemented
-**Impact:** CRITICAL - Users cannot log out
+**Status:** ✅ Fully implemented (2026-01-17)
+**Impact:** Users can log out while keeping their account data
 
-#### Requirements
-- Add logout button in Settings screen
-- Clear current account ID from AccountRepository
-- Clear cached data (conversations, contacts, messages)
-- Stop Jami daemon or disconnect account
-- Clear all notifications
-- Return to Welcome/Account Selection screen
+#### What Works ✅
+- Logout button in Settings screen with dialog options
+- Account deactivation (keeps data for relogin)
+- Navigation back to Welcome/Account Selection screen
+- `LaunchedEffect` handles automatic navigation on logout completion
 
-#### Implementation Tasks
-- [ ] Add "Logout" button UI in SettingsTab (bottom of settings list)
-- [ ] Add `logout()` method to AccountRepository
-  ```kotlin
-  suspend fun logout() {
-      // Clear account state
-      _currentAccountId.value = null
-      // Stop daemon or disconnect account
-      jamiBridge.unregisterAccount(currentAccountId)
-  }
-  ```
-- [ ] Add `logout()` method to SettingsViewModel
-  ```kotlin
-  fun logout() {
-      viewModelScope.launch {
-          accountRepository.logout()
-          settingsRepository.clearSettings()
-          conversationRepository.clearCache()
-          contactRepository.clearCache()
-          NotificationHelper.cancelAllNotifications()
-          // Navigate to Welcome screen
-      }
-  }
-  ```
-- [ ] Add confirmation dialog before logout
-  - "Are you sure you want to logout?"
-  - "Your conversations will not be deleted from the network"
-- [ ] Clear settings in SettingsRepository
-- [ ] Clear caches in ConversationRepository
-- [ ] Clear caches in ContactRepository
-- [ ] Navigate to Welcome screen after logout
-- [ ] Test logout clears all data properly
-
-#### Related Files
-- `shared/src/commonMain/kotlin/com/gettogether/app/ui/screens/home/SettingsTab.kt`
-- `shared/src/commonMain/kotlin/com/gettogether/app/presentation/viewmodel/SettingsViewModel.kt`
-- `shared/src/commonMain/kotlin/com/gettogether/app/data/repository/AccountRepository.kt`
-- `shared/src/commonMain/kotlin/com/gettogether/app/ui/navigation/AppNavigation.kt`
+#### Implementation Details
+| Component | File | Implementation |
+|-----------|------|----------------|
+| Repository | `AccountRepository.kt:408-424` | `logoutCurrentAccount()` - deactivates account, clears state |
+| ViewModel | `SettingsViewModel.kt:460-470` | `logoutKeepData()` - calls repository, updates UI state |
+| UI | `SettingsTab.kt:119-130, 868+` | `LogoutOptionsDialog` with "Logout (Keep Data)" option |
+| Navigation | `SettingsTab.kt:92-93` | `LaunchedEffect` handles navigation on `logoutComplete` |
 
 ---
 
-### 1.3 Account Persistence & Auto-Login - Missing 🔴
+### 1.3 Account Persistence & Auto-Login - ✅ COMPLETE
 
-**Status:** Not implemented
-**Impact:** CRITICAL - Users must re-import account every app launch
+**Status:** ✅ Fully implemented (2026-01-17)
+**Impact:** Accounts persist across app restarts, relogin supported
 
-#### Description
-Account credentials are not saved between app restarts. Users must re-import or create account every time they launch the app.
+#### What Works ✅
+- Accounts automatically loaded on app startup
+- Multiple account management supported
+- Deactivated accounts can be relogged into
+- Navigation skips Welcome screen when logged in
 
-#### Requirements
-- Save account credentials securely (encrypted storage)
-- Auto-detect saved account on app start
-- Auto-login if account credentials found
-- Skip account creation screen if already logged in
-- Handle multiple accounts (optional future enhancement)
-
-#### Implementation Tasks
-- [ ] **Android: Use EncryptedSharedPreferences**
-  ```kotlin
-  // In SettingsRepository.android.kt
-  private val encryptedPrefs = EncryptedSharedPreferences.create(
-      context,
-      "account_credentials",
-      MasterKey.Builder(context)
-          .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-          .build(),
-      EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-      EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-  )
-
-  fun saveAccountCredentials(accountId: String, password: String?) {
-      encryptedPrefs.edit()
-          .putString("account_id", accountId)
-          .putString("account_password", password)
-          .apply()
-  }
-
-  fun getSavedAccountId(): String? {
-      return encryptedPrefs.getString("account_id", null)
-  }
-  ```
-
-- [ ] **Load saved account on app start** (in GetTogetherApplication or AccountRepository)
-  ```kotlin
-  // In AccountRepository init block
-  init {
-      viewModelScope.launch {
-          val savedAccountId = settingsRepository.getSavedAccountId()
-          if (savedAccountId != null) {
-              _currentAccountId.value = savedAccountId
-              // Daemon should automatically load account details
-          }
-      }
-  }
-  ```
-
-- [ ] **Update navigation to skip Welcome screen if logged in**
-  ```kotlin
-  // In AppNavigation.kt
-  val startDestination = if (accountRepository.isLoggedIn()) {
-      Screen.Home.route
-  } else {
-      Screen.Welcome.route
-  }
-  ```
-
-- [ ] **Save credentials after account creation/import**
-  - In CreateAccountViewModel after successful account creation
-  - In ImportAccountViewModel after successful import
-
-- [ ] **Clear saved credentials on logout**
-  - Call `settingsRepository.clearAccountCredentials()` in logout flow
-
-- [ ] **iOS: Use Keychain (future)**
-  ```swift
-  // Use KeychainAccess or native Keychain APIs
-  ```
-
-#### Security Considerations
-- ✅ Use EncryptedSharedPreferences (not plain SharedPreferences)
-- ✅ Use Android Keystore for encryption keys
-- ⚠️ Handle key rotation and migration
-- ⚠️ Clear credentials on app uninstall (automatic with EncryptedSharedPreferences)
-- ⚠️ Consider biometric authentication for extra security (future)
-
-#### Related Files
-- `shared/src/commonMain/kotlin/com/gettogether/app/data/repository/AccountRepository.kt`
-- `shared/src/androidMain/kotlin/com/gettogether/app/data/repository/SettingsRepository.kt`
-- `androidApp/src/main/kotlin/com/gettogether/app/GetTogetherApplication.kt`
-- `shared/src/commonMain/kotlin/com/gettogether/app/ui/navigation/AppNavigation.kt`
-- `shared/src/commonMain/kotlin/com/gettogether/app/presentation/viewmodel/CreateAccountViewModel.kt`
-- `shared/src/commonMain/kotlin/com/gettogether/app/presentation/viewmodel/ImportAccountViewModel.kt`
+#### Implementation Details
+| Component | File | Implementation |
+|-----------|------|----------------|
+| Load accounts | `AccountRepository.kt:65-144` | `loadAccounts()` - auto-loads on init |
+| Get all accounts | `AccountRepository.kt:429-453` | `getAllAccounts()` - lists all accounts |
+| Get deactivated | `AccountRepository.kt:458-466` | `getDeactivatedAccounts()` - for relogin |
+| Relogin | `AccountRepository.kt:472-555` | `reloginToAccount()` - reactivates account |
 
 ---
 
@@ -299,6 +193,48 @@ Account credentials are not saved between app restarts. Users must re-import or 
 - `shared/src/commonMain/kotlin/com/gettogether/app/presentation/viewmodel/SettingsViewModel.kt`
 
 **Documented in:** `doc/WORKING_FEATURES.md`
+
+---
+
+### 1.6 Export Account - ✅ COMPLETE (NEW)
+
+**Status:** ✅ Fully implemented (2026-01-17, filepicker-jamibridge merge)
+**Impact:** Users can backup their account to an encrypted file
+
+#### What Works ✅
+- Export account to encrypted backup file
+- Password protection for exported archive
+- Platform-specific export paths (Downloads folder on Android)
+- Export dialog with password input UI
+
+#### Implementation Details
+| Component | File | Implementation |
+|-----------|------|----------------|
+| Repository | `AccountRepository.kt:392-407` | `exportAccount(destinationPath, password)` |
+| ViewModel | `SettingsViewModel.kt` | `exportAccount(password)` method |
+| UI | `SettingsTab.kt:111-115, 796+` | `ExportAccountDialog` with password encryption |
+| Platform | `ExportPath.android.kt`, `ExportPath.ios.kt` | Platform-specific export paths |
+
+---
+
+### 1.7 Import Account - ✅ COMPLETE (NEW)
+
+**Status:** ✅ Fully implemented (2026-01-17, filepicker-jamibridge merge)
+**Impact:** Users can restore their account from a backup file
+
+#### What Works ✅
+- Import account from backup file with file picker
+- Password entry for encrypted archives
+- Full import flow with UI feedback
+- Platform-specific file selection
+
+#### Implementation Details
+| Component | File | Implementation |
+|-----------|------|----------------|
+| Repository | `AccountRepository.kt:248-315` | `importAccount(archivePath, password)` |
+| ViewModel | `ImportAccountViewModel.kt` | Full import flow |
+| UI | `ImportAccountScreen.kt` | Complete UI with file picker |
+| Platform | `FilePicker.android.kt`, `FilePicker.ios.kt` | File selection |
 
 ---
 
@@ -567,10 +503,12 @@ jamiBridge.muteAudio(accountId, callId, true) // TODO: Track mute state to toggl
 **Critical (P1):**
 - [ ] Incoming call notifications work reliably
 - [ ] Answer/Decline from notification works
-- [ ] Logout functionality implemented
-- [ ] Account persistence & auto-login implemented
+- [x] Logout functionality implemented ✅
+- [x] Account persistence & auto-login implemented ✅
 - [ ] Message notifications tested and working
 - [x] Avatar feature fully functional ✅
+- [x] Export account functionality ✅
+- [x] Import account functionality ✅
 
 **High Impact (P2):**
 - [x] Settings persist across app restarts
@@ -598,6 +536,9 @@ jamiBridge.muteAudio(accountId, callId, true) // TODO: Track mute state to toggl
 1. **Test incoming calls** - Try making calls between devices and report specific issues
 2. **Test message notifications** - Send messages with app in background, verify notifications
 3. ✅ ~~Test avatar feature~~ - **COMPLETE & WORKING**
+4. ✅ ~~Test logout~~ - **COMPLETE & WORKING**
+5. ✅ ~~Test account persistence~~ - **COMPLETE & WORKING**
+6. **Test export/import account** - Verify backup and restore workflow
 
 **For Development:**
 1. **Debug incoming call notifications:**
@@ -606,18 +547,14 @@ jamiBridge.muteAudio(accountId, callId, true) // TODO: Track mute state to toggl
    - Add comprehensive logging
    - Test on Android 14+
 
-2. **Implement logout functionality:**
-   - Add logout button in Settings
-   - Implement logout logic in ViewModel
-   - Test data clearing
+2. ✅ ~~Implement logout functionality~~ - **COMPLETE**
 
-3. **Implement account persistence:**
-   - Use EncryptedSharedPreferences
-   - Save credentials after account creation
-   - Load credentials on app start
+3. ✅ ~~Implement account persistence~~ - **COMPLETE**
+
+4. ✅ ~~Implement account export/import~~ - **COMPLETE**
 
 ---
 
-**Document Version:** 2025-12-21 16:20 (Consolidated)
-**Last Code Changes:** 2025-12-21 (Avatar feature complete, permission & notification implementation)
-**Next Review:** After testing incoming calls, logout, and account persistence
+**Document Version:** 2026-01-17 (Updated post filepicker-jamibridge merge)
+**Last Code Changes:** 2026-01-17 (Account management, export/import, logout all complete)
+**Next Review:** After testing incoming calls and message notifications

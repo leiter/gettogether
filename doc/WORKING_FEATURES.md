@@ -1,7 +1,7 @@
 # Working Features - letsJam App
 
-**Last Updated:** 2025-12-21 16:15
-**Status:** Production Ready Features
+**Last Updated:** 2026-01-17
+**Status:** Production Ready Features (Updated post filepicker-jamibridge merge)
 
 ---
 
@@ -26,6 +26,34 @@
   - Avatar display in Conversations list
   - Remove avatar functionality
   - Fallback to initial letter when no avatar
+
+### Account Backup & Restore (NEW - 2026-01-17)
+- ✅ **Export Account**
+  - Export account to encrypted backup file
+  - Password protection for exported archive
+  - Platform-specific export paths (Downloads folder on Android)
+  - Export dialog with password input UI
+  - Files: `AccountRepository.kt:392-407`, `SettingsTab.kt:796+`, `ExportPath.android.kt`
+
+- ✅ **Import Account**
+  - Import account from backup file with file picker
+  - Password entry for encrypted archives
+  - Full import flow with UI feedback
+  - Platform-specific file selection
+  - Files: `AccountRepository.kt:248-315`, `ImportAccountViewModel.kt`, `ImportAccountScreen.kt`
+
+### Session Management (NEW - 2026-01-17)
+- ✅ **Logout Functionality**
+  - Logout with account preservation (keeps data for relogin)
+  - Logout dialog with options
+  - Navigation back to Welcome/Account Selection screen
+  - Files: `AccountRepository.kt:408-424`, `SettingsViewModel.kt:460-470`, `SettingsTab.kt:119-130`
+
+- ✅ **Relogin to Accounts**
+  - List deactivated accounts
+  - Reactivate deactivated accounts
+  - Account switching support
+  - Files: `AccountRepository.kt:458-466, 472-555`
 
 ---
 
@@ -304,6 +332,8 @@
 |----------|-------------|---------|--------|
 | Account Management | 100% | ✅ | Complete |
 | Profile & Avatars | 100% | ✅ | Complete |
+| Account Backup/Restore | 100% | ✅ | Complete (NEW) |
+| Session Management | 100% | ✅ | Complete (NEW) |
 | Contact Management | 100% | ✅ | Complete |
 | Messaging | 100% | ✅ | Complete |
 | Audio/Video Calls | 95% | ⚠️ | Working (audio limitations on some devices) |
@@ -316,6 +346,19 @@
 ---
 
 ## 🎯 Recently Completed Features
+
+### January 17, 2026
+- ✅ **Account Backup & Restore** (filepicker-jamibridge merge)
+  - Export account to encrypted backup file
+  - Import account from backup with file picker
+  - Password protection for archives
+  - Platform-specific file handling
+
+- ✅ **Session Management** (filepicker-jamibridge merge)
+  - Logout with account preservation
+  - Relogin to deactivated accounts
+  - Account switching support
+  - Navigation flow for logout/relogin
 
 ### December 21, 2025
 - ✅ **Avatar/Profile Picture Feature**

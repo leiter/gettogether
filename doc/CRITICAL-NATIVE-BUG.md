@@ -1,14 +1,25 @@
-# CRITICAL: Unfixable Native Library Bug
+# ~~CRITICAL: Unfixable Native Library Bug~~
 
-**Date:** 2025-12-21
-**Status:** 🔴 BLOCKER
-**Severity:** CRITICAL - Prevents all calls
+## ✅ RESOLVED (2026-01-17)
+
+> **This issue has been resolved.** The original diagnosis was incorrect - the crashes were caused by **permission issues**, not native library bugs. After proper permission handling was implemented, calls now work correctly.
+>
+> This document is retained for historical reference only.
 
 ---
 
-## Summary
+**Original Date:** 2025-12-21
+**Resolution Date:** 2026-01-17
+**Status:** ✅ RESOLVED
+**Original Severity:** ~~CRITICAL - Prevents all calls~~ → Now working
 
-**Calls crash 100% of the time** due to null pointer dereference in libjami-core.so (PJSIP media layer). This bug **cannot be fixed at the app layer**.
+---
+
+## ~~Summary~~ (Historical - Issue Resolved)
+
+> **RESOLVED:** The crashes were caused by missing runtime permissions (RECORD_AUDIO, CAMERA), not native library bugs. After implementing proper permission handling in `PermissionManager.kt` and requesting permissions at app start, calls now work correctly.
+
+~~**Calls crash 100% of the time** due to null pointer dereference in libjami-core.so (PJSIP media layer). This bug **cannot be fixed at the app layer**.~~
 
 ---
 
@@ -373,6 +384,6 @@ Decide between:
 
 ---
 
-**Status:** AWAITING DECISION
-**Blocking:** All call features
-**Severity:** CRITICAL
+**Status:** ✅ RESOLVED
+**Blocking:** ~~All call features~~ None - calls work
+**Resolution:** Permission handling implemented - crashes were not native bugs
