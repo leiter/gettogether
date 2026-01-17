@@ -22,10 +22,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -55,6 +57,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gettogether.app.domain.model.ExistingAccount
+import com.gettogether.app.platform.FilePickerResult
+import com.gettogether.app.platform.provideFilePicker
 import com.gettogether.app.presentation.state.ImportMethod
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
 import org.koin.compose.viewmodel.koinViewModel
@@ -304,22 +308,52 @@ private fun ArchiveImportFields(
     onArchivePasswordChanged: (String) -> Unit,
     enabled: Boolean
 ) {
+    val filePicker = provideFilePicker()
+
     Column(modifier = Modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = archivePath,
-            onValueChange = onArchivePathChanged,
-            label = { Text("Archive File Path") },
-            placeholder = { Text("/path/to/backup.gz") },
-            singleLine = true,
-            enabled = enabled,
-            leadingIcon = {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            OutlinedTextField(
+                value = archivePath,
+                onValueChange = onArchivePathChanged,
+                label = { Text("Archive File Path") },
+                placeholder = { Text("Select backup file...") },
+                singleLine = true,
+                enabled = enabled,
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = null
+                    )
+                },
+                modifier = Modifier.weight(1f)
+            )
+
+            Button(
+                onClick = {
+                    filePicker.pickFile { result ->
+                        when (result) {
+                            is FilePickerResult.Success -> onArchivePathChanged(result.path)
+                            is FilePickerResult.Error -> { /* Error handled by snackbar if needed */ }
+                            is FilePickerResult.Cancelled -> { /* User cancelled */ }
+                        }
+                    }
+                },
+                enabled = enabled,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
                 Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = null
+                    imageVector = Icons.Default.FolderOpen,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Browse")
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

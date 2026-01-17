@@ -5,6 +5,7 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -399,8 +400,45 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override suspend fun exportAccount(accountId: String, destinationPath: String, password: String): Boolean = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext false
-        JamiService.exportToFile(accountId, destinationPath, "password", password)
+        Log.i(TAG, "[ACCOUNT-EXPORT] exportAccount called for accountId=$accountId")
+        Log.i(TAG, "[ACCOUNT-EXPORT] destinationPath=$destinationPath, password.length=${password.length}")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "[ACCOUNT-EXPORT] FAILED: Native library not loaded")
+            return@withContext false
+        }
+
+        // Ensure account is active before export
+        try {
+            val details = JamiService.getAccountDetails(accountId)
+            val isEnabled = details?.get("Account.enable")?.equals("true") == true
+            Log.i(TAG, "[ACCOUNT-EXPORT] Account enabled: $isEnabled")
+
+            if (!isEnabled) {
+                Log.w(TAG, "[ACCOUNT-EXPORT] Account not enabled, activating temporarily for export")
+                JamiService.setAccountActive(accountId, true)
+                // Give daemon time to initialize
+                delay(500)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[ACCOUNT-EXPORT] Could not check/set account state: ${e.message}")
+        }
+
+        // Use empty scheme for better compatibility (password still encrypts the archive)
+        val result = JamiService.exportToFile(accountId, destinationPath, "", password)
+        Log.i(TAG, "[ACCOUNT-EXPORT] Export result: $result")
+
+        if (!result) {
+            Log.e(TAG, "[ACCOUNT-EXPORT] Export failed. Checking account details...")
+            try {
+                val volatileDetails = JamiService.getVolatileAccountDetails(accountId)
+                Log.e(TAG, "[ACCOUNT-EXPORT] Registration status: ${volatileDetails?.get("Account.registrationStatus")}")
+            } catch (e: Exception) {
+                Log.e(TAG, "[ACCOUNT-EXPORT] Could not get volatile details: ${e.message}")
+            }
+        }
+
+        result
     }
 
     override suspend fun deleteAccount(accountId: String) = withContext(Dispatchers.IO) {
