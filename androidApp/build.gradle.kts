@@ -9,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.gettogether.app"
+        applicationId = "cut.the.crap.gettogether"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

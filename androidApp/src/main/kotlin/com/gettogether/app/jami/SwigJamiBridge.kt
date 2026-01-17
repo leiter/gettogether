@@ -237,6 +237,10 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     private val conversationCallback = object : ConversationCallback() {
         override fun conversationReady(accountId: String?, conversationId: String?) {
+            Log.i(TAG, "┌─── conversationReady CALLBACK ───")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            Log.i(TAG, "└─── End conversationReady ───")
             if (accountId != null && conversationId != null) {
                 val event = JamiConversationEvent.ConversationReady(accountId, conversationId)
                 _conversationEvents.tryEmit(event)
@@ -259,6 +263,20 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
 
         override fun conversationRequestReceived(accountId: String?, conversationId: String?, metadata: StringMap?) {
+            Log.i(TAG, "┌─── conversationRequestReceived CALLBACK ───")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            if (metadata != null) {
+                val metaMap = stringMapToKotlin(metadata)
+                Log.i(TAG, "│ Metadata fields:")
+                metaMap.forEach { (key, value) ->
+                    Log.i(TAG, "│   $key = $value")
+                }
+            } else {
+                Log.i(TAG, "│ Metadata: null")
+            }
+            Log.i(TAG, "└─── End conversationRequestReceived ───")
+
             if (accountId != null && conversationId != null) {
                 val event = JamiConversationEvent.ConversationRequestReceived(
                     accountId,
@@ -687,10 +705,18 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     override fun getConversationRequests(accountId: String): List<ConversationRequest> {
         if (!nativeLoaded) return emptyList()
+        Log.i(TAG, "┌─── getConversationRequests ───")
+        Log.i(TAG, "│ accountId: $accountId")
         val requests = JamiService.getConversationRequests(accountId)
+        Log.i(TAG, "│ Raw request count: ${requests.size}")
         val result = mutableListOf<ConversationRequest>()
         for (i in 0 until requests.size) {
             val map = stringMapToKotlin(requests[i])
+            Log.i(TAG, "│ ┌─ Request [$i] raw fields:")
+            map.forEach { (key, value) ->
+                Log.i(TAG, "│ │   $key = $value")
+            }
+            Log.i(TAG, "│ └─ End Request [$i]")
             result.add(ConversationRequest(
                 conversationId = map["id"] ?: "",
                 from = map["from"] ?: "",
@@ -698,6 +724,7 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                 received = map["received"]?.toLongOrNull() ?: 0L
             ))
         }
+        Log.i(TAG, "└─── End getConversationRequests (${result.size} requests) ───")
         return result
     }
 
