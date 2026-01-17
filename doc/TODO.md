@@ -392,7 +392,44 @@ jamiBridge.muteAudio(accountId, callId, true) // TODO: Track mute state to toggl
 
 ---
 
-### 4.3 UI/UX Improvements ⏳
+### 4.3 DHT Proxy Configuration for Mobile Networks ⏳
+
+**Status:** Low priority - workaround exists (WiFi works)
+**Priority:** LOW
+**Impact:** Registration fails on some 5G/mobile networks, but messaging still works
+
+#### Problem
+On 5G mobile networks (tested on Pixel 7), the account shows UNREGISTERED because DHT proxy connections fail. However, messaging still works through TURN relays and existing swarm connections. WiFi registration works fine.
+
+#### Root Cause
+- Carrier-grade NAT (CGNAT) on mobile networks
+- Possible DNS filtering or port blocking by carrier
+- Default DHT proxy: `dhtproxy.jami.net:[80-95]`
+
+#### Action Items
+- [ ] **Enable proxy list fetching** - Try multiple proxy servers automatically
+  ```kotlin
+  // In account creation/restore
+  "Account.proxyListEnabled" to "true"
+  ```
+- [ ] **Try specific proxy ports** - Some carriers allow port 443 but block others
+  ```kotlin
+  // Configure specific proxy server with port 443
+  "Account.proxyServer" to "dhtproxy.jami.net:443"
+  ```
+
+#### Related Files
+- `shared/src/commonMain/kotlin/com/gettogether/app/data/repository/AccountRepository.kt` - Account config
+- `androidApp/src/main/kotlin/com/gettogether/app/jami/SwigJamiBridge.kt:504` - Default proxy setting
+
+#### Notes
+- Current workaround: Use WiFi for full functionality
+- Messaging works on mobile even when UNREGISTERED (uses TURN relays)
+- Only affects discoverability for new contact requests
+
+---
+
+### 4.4 UI/UX Improvements ⏳
 
 **Pending Items:**
 - [ ] Add loading states during permission requests

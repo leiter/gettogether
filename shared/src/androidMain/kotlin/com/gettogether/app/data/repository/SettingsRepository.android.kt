@@ -24,6 +24,9 @@ class AndroidSettingsRepository(context: Context) : SettingsRepository {
     private val _privacySettings = MutableStateFlow(loadPrivacySettings())
     override val privacySettings: StateFlow<PrivacySettings> = _privacySettings.asStateFlow()
 
+    private val _avatarPath = MutableStateFlow(loadAvatarPath())
+    override val avatarPath: StateFlow<String?> = _avatarPath.asStateFlow()
+
     private fun loadNotificationSettings(): NotificationSettings {
         return NotificationSettings(
             enabled = prefs.getBoolean(KEY_NOTIFICATIONS_ENABLED, true),
@@ -41,6 +44,10 @@ class AndroidSettingsRepository(context: Context) : SettingsRepository {
             typingIndicators = prefs.getBoolean(KEY_TYPING_INDICATORS, true),
             blockUnknownContacts = prefs.getBoolean(KEY_BLOCK_UNKNOWN_CONTACTS, false)
         )
+    }
+
+    private fun loadAvatarPath(): String? {
+        return prefs.getString(KEY_AVATAR_PATH, null)
     }
 
     override suspend fun updateNotificationSettings(settings: NotificationSettings) {
@@ -66,6 +73,18 @@ class AndroidSettingsRepository(context: Context) : SettingsRepository {
         _privacySettings.value = settings
     }
 
+    override suspend fun updateAvatarPath(path: String?) {
+        prefs.edit().apply {
+            if (path != null) {
+                putString(KEY_AVATAR_PATH, path)
+            } else {
+                remove(KEY_AVATAR_PATH)
+            }
+            apply()
+        }
+        _avatarPath.value = path
+    }
+
     companion object {
         private const val PREFS_NAME = "gettogether_settings"
         private const val KEY_NOTIFICATIONS_ENABLED = "notifications_enabled"
@@ -77,6 +96,7 @@ class AndroidSettingsRepository(context: Context) : SettingsRepository {
         private const val KEY_READ_RECEIPTS = "read_receipts"
         private const val KEY_TYPING_INDICATORS = "typing_indicators"
         private const val KEY_BLOCK_UNKNOWN_CONTACTS = "block_unknown_contacts"
+        private const val KEY_AVATAR_PATH = "avatar_path"
     }
 }
 

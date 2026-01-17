@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.ChatMessage
 import com.gettogether.app.presentation.state.MessageStatus
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
+import com.gettogether.app.ui.components.ContactAvatarImage
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -103,19 +104,11 @@ fun ChatScreen(
                             )
                             .padding(vertical = 4.dp)
                     ) {
-                        Surface(
-                            modifier = Modifier.size(40.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            color = MaterialTheme.colorScheme.primaryContainer
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = state.contactName.firstOrNull()?.uppercase() ?: "?",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                        }
+                        ContactAvatarImage(
+                            avatarUri = state.contactAvatarUri,
+                            displayName = state.contactName,
+                            size = 40.dp
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(

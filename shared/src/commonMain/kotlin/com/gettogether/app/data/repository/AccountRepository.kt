@@ -325,12 +325,24 @@ class AccountRepository(
 
     /**
      * Update the display name for the current account.
+     * Also updates the vCard profile to ensure the name is sent with trust requests.
      */
     suspend fun updateDisplayName(displayName: String) {
         val accountId = _currentAccountId.value ?: return
         val currentDetails = jamiBridge.getAccountDetails(accountId).toMutableMap()
         currentDetails["Account.displayName"] = displayName
         jamiBridge.setAccountDetails(accountId, currentDetails)
+
+        // Also update the profile vCard - this ensures the display name is included
+        // in trust request payloads. The updateProfile call may fail silently but
+        // the account details update above will still succeed.
+        try {
+            jamiBridge.updateProfile(accountId, displayName, null)
+            println("[AccountRepo] updateDisplayName: Updated vCard profile with displayName='$displayName'")
+        } catch (e: Exception) {
+            println("[AccountRepo] updateDisplayName: vCard update failed (non-fatal): ${e.message}")
+            // Non-fatal - account details were still updated
+        }
 
         _accountState.value = _accountState.value.copy(displayName = displayName)
     }

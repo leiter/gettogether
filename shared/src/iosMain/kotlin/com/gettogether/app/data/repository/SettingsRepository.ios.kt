@@ -27,6 +27,7 @@ class IosSettingsRepository : SettingsRepository {
         private const val KEY_READ_RECEIPTS = "gettogether_read_receipts"
         private const val KEY_TYPING_INDICATORS = "gettogether_typing_indicators"
         private const val KEY_BLOCK_UNKNOWN_CONTACTS = "gettogether_block_unknown_contacts"
+        private const val KEY_AVATAR_PATH = "gettogether_avatar_path"
 
         // Key to track if defaults have been set
         private const val KEY_DEFAULTS_INITIALIZED = "gettogether_defaults_initialized"
@@ -39,6 +40,9 @@ class IosSettingsRepository : SettingsRepository {
 
     private val _privacySettings = MutableStateFlow(loadPrivacySettings())
     override val privacySettings: StateFlow<PrivacySettings> = _privacySettings.asStateFlow()
+
+    private val _avatarPath = MutableStateFlow(loadAvatarPath())
+    override val avatarPath: StateFlow<String?> = _avatarPath.asStateFlow()
 
     init {
         // Initialize default values if not already set
@@ -92,6 +96,10 @@ class IosSettingsRepository : SettingsRepository {
         }
     }
 
+    private fun loadAvatarPath(): String? {
+        return defaults.stringForKey(KEY_AVATAR_PATH)
+    }
+
     override suspend fun updateNotificationSettings(settings: NotificationSettings) {
         NSLog("$TAG: Updating notification settings")
 
@@ -119,6 +127,17 @@ class IosSettingsRepository : SettingsRepository {
         _privacySettings.value = settings
 
         NSLog("$TAG: Privacy settings saved: readReceipts=${settings.readReceipts}, typing=${settings.typingIndicators}")
+    }
+
+    override suspend fun updateAvatarPath(path: String?) {
+        NSLog("$TAG: Updating avatar path: $path")
+        if (path != null) {
+            defaults.setObject(path, KEY_AVATAR_PATH)
+        } else {
+            defaults.removeObjectForKey(KEY_AVATAR_PATH)
+        }
+        defaults.synchronize()
+        _avatarPath.value = path
     }
 }
 

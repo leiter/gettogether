@@ -453,15 +453,37 @@ class ContactRepositoryImpl(
 
     /**
      * Reject an incoming trust request.
+     *
+     * Note: In Jami's design, the only reliable way to stop a trust request from
+     * reappearing is to block the contact. The remote device will keep re-sending
+     * until blocked. Therefore, reject always blocks the contact.
      */
     suspend fun rejectTrustRequest(accountId: String, contactUri: String, block: Boolean = false): Result<Unit> {
         return try {
-            if (block) {
-                // Block the contact (adds to ban list)
-                jamiBridge.removeContact(accountId, contactUri, ban = true)
-            } else {
-                // Just discard the request
-                jamiBridge.discardTrustRequest(accountId, contactUri)
+            // Find the trust request to get its conversation ID
+            val trustRequest = _trustRequestsCache.value[accountId]?.find { it.from == contactUri }
+            val conversationId = trustRequest?.conversationId
+
+            println("[TRUST-REJECT-REPO] Rejecting trust request from: $contactUri")
+            println("[TRUST-REJECT-REPO]   Associated conversationId: $conversationId")
+
+            // Always block the contact to prevent re-delivery
+            // In Jami, discardTrustRequest only removes locally - the sender keeps re-sending
+            // The only way to truly reject is to block (add to ban list)
+            println("[TRUST-REJECT-REPO] → Blocking contact to prevent re-delivery")
+            jamiBridge.removeContact(accountId, contactUri, ban = true)
+            println("[TRUST-REJECT-REPO] ✓ Contact blocked")
+
+            // Also remove the conversation if it exists
+            if (!conversationId.isNullOrBlank()) {
+                println("[TRUST-REJECT-REPO] → Removing conversation: $conversationId")
+                try {
+                    jamiBridge.declineConversationRequest(accountId, conversationId)
+                    jamiBridge.removeConversation(accountId, conversationId)
+                    println("[TRUST-REJECT-REPO] ✓ Conversation removed")
+                } catch (e: Exception) {
+                    println("[TRUST-REJECT-REPO] ⚠️ Failed to remove conversation: ${e.message}")
+                }
             }
 
             // Remove from trust requests cache
@@ -469,8 +491,10 @@ class ContactRepositoryImpl(
             _trustRequestsCache.value = _trustRequestsCache.value +
                 (accountId to currentRequests.filter { it.from != contactUri })
 
+            println("[TRUST-REJECT-REPO] ✓ Trust request rejected and removed from cache")
             Result.success(Unit)
         } catch (e: Exception) {
+            println("[TRUST-REJECT-REPO] ✗ Failed to reject: ${e.message}")
             Result.failure(e)
         }
     }

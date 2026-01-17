@@ -48,6 +48,11 @@ class SettingsViewModel(
                 _state.update { it.copy(privacySettings = settings) }
             }
         }
+        viewModelScope.launch {
+            settingsRepository.avatarPath.collect { path ->
+                _state.update { it.copy(userProfile = it.userProfile.copy(avatarUri = path)) }
+            }
+        }
     }
 
     private fun observeAccountState() {
@@ -355,6 +360,8 @@ class SettingsViewModel(
             // Update profile with processed avatar
             try {
                 accountRepository.updateProfile(displayName, processedAvatarPath)
+                // Persist avatar path so it survives app restarts
+                settingsRepository.updateAvatarPath(processedAvatarPath)
                 _state.update {
                     it.copy(
                         userProfile = it.userProfile.copy(

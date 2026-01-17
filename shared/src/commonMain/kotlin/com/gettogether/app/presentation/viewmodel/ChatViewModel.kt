@@ -47,8 +47,37 @@ class ChatViewModel(
                 if (accountId != null) {
                     // Load conversation info
                     val convInfo = jamiBridge.getConversationInfo(accountId, conversationId)
-                    val contactName = convInfo["title"] ?: "Conversation"
-                    println("ChatViewModel.loadConversation: contactName=$contactName, convInfo=$convInfo")
+                    println("ChatViewModel.loadConversation: convInfo=$convInfo")
+
+                    // Get contact name and avatar from conversation members
+                    var contactName = convInfo["title"] ?: ""
+                    var contactAvatarUri: String? = null
+                    try {
+                        val members = jamiBridge.getConversationMembers(accountId, conversationId)
+                        println("ChatViewModel.loadConversation: Found ${members.size} members")
+                        // Find the member that is not the current user
+                        val otherMember = members.find { it.uri != userJamiId && it.uri != accountId }
+                        if (otherMember != null) {
+                            // Use member URI as display name if title is empty
+                            if (contactName.isBlank()) {
+                                // Truncate long Jami IDs for display
+                                contactName = if (otherMember.uri.length > 8) {
+                                    otherMember.uri.take(8)
+                                } else {
+                                    otherMember.uri
+                                }
+                            }
+                            val contactDetails = jamiBridge.getContactDetails(accountId, otherMember.uri)
+                            contactAvatarUri = contactDetails["avatar"]
+                            println("ChatViewModel.loadConversation: Contact name: $contactName, avatar: $contactAvatarUri")
+                        }
+                    } catch (e: Exception) {
+                        println("ChatViewModel.loadConversation: Failed to get contact info: ${e.message}")
+                    }
+                    // Final fallback
+                    if (contactName.isBlank()) {
+                        contactName = "Conversation"
+                    }
 
                     // Subscribe to messages from ConversationRepository (includes persisted messages)
                     viewModelScope.launch {
@@ -75,6 +104,7 @@ class ChatViewModel(
                     _state.update {
                         it.copy(
                             contactName = contactName,
+                            contactAvatarUri = contactAvatarUri,
                             userJamiId = userJamiId
                         )
                     }

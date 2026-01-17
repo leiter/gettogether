@@ -28,7 +28,8 @@ class ConversationRepositoryImpl(
     private val accountRepository: AccountRepository,
     private val conversationPersistence: com.gettogether.app.data.persistence.ConversationPersistence,
     private val contactRepository: ContactRepositoryImpl,
-    private val notificationHelper: NotificationHelper? = null
+    private val notificationHelper: NotificationHelper? = null,
+    private val settingsRepository: SettingsRepository? = null
 ) : ConversationRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -167,11 +168,12 @@ class ConversationRepositoryImpl(
                 type = MessageType.TEXT
             )
 
-            // Add to cache
+            // Add to cache (sorted by timestamp)
             val key = "$accountId:$conversationId"
             val currentMessages = _messagesCache.value[key] ?: emptyList()
-            _messagesCache.value = _messagesCache.value + (key to (currentMessages + message))
-            println("ConversationRepository.sendMessage: Message added to cache, total messages=${(currentMessages + message).size}")
+            val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
+            _messagesCache.value = _messagesCache.value + (key to updatedMessages)
+            println("ConversationRepository.sendMessage: Message added to cache, total messages=${updatedMessages.size}")
 
             Result.success(message)
         } catch (e: Exception) {
@@ -433,8 +435,9 @@ class ConversationRepositoryImpl(
 
                 val currentMessages = _messagesCache.value[key] ?: emptyList()
                 if (currentMessages.none { it.id == message.id }) {
-                    _messagesCache.value = _messagesCache.value + (key to (currentMessages + message))
-                    println("ConversationRepository.handleConversationEvent: Message added to cache, key=$key, total messages=${(currentMessages + message).size}")
+                    val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
+                    _messagesCache.value = _messagesCache.value + (key to updatedMessages)
+                    println("ConversationRepository.handleConversationEvent: Message added to cache, key=$key, total messages=${updatedMessages.size}")
 
                     // Show notification for the new message
                     showMessageNotificationIfNeeded(
@@ -466,7 +469,8 @@ class ConversationRepositoryImpl(
                         type = MessageType.TEXT
                     )
                 }
-                _messagesCache.value = _messagesCache.value + (key to messages)
+                val sortedMessages = messages.sortedBy { it.timestamp }
+                _messagesCache.value = _messagesCache.value + (key to sortedMessages)
             }
 
             is JamiConversationEvent.ConversationReady -> {
@@ -689,8 +693,9 @@ class ConversationRepositoryImpl(
             println("ConversationRepository: ✓ Loaded ${persistedMessages.size} persisted messages")
             if (persistedMessages.isNotEmpty()) {
                 val key = "$accountId:$conversationId"
-                _messagesCache.value = _messagesCache.value + (key to persistedMessages)
-                println("ConversationRepository: ✓ Added persisted messages to cache")
+                val sortedMessages = persistedMessages.sortedBy { it.timestamp }
+                _messagesCache.value = _messagesCache.value + (key to sortedMessages)
+                println("ConversationRepository: ✓ Added persisted messages to cache (sorted)")
             } else {
                 println("ConversationRepository: No persisted messages found")
             }
@@ -782,6 +787,13 @@ class ConversationRepositoryImpl(
         // Don't notify if NotificationHelper not available (iOS or test environment)
         if (notificationHelper == null) {
             println("ConversationRepository: NotificationHelper not available, skipping notification")
+            return
+        }
+
+        // Check if message notifications are enabled in settings
+        val notificationsEnabled = settingsRepository?.notificationSettings?.value?.messageNotifications ?: true
+        if (!notificationsEnabled) {
+            println("ConversationRepository: Message notifications disabled in settings, skipping notification")
             return
         }
 

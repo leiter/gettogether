@@ -3,6 +3,7 @@ package com.gettogether.app.presentation.state
 data class ChatState(
     val conversationId: String = "",
     val contactName: String = "",
+    val contactAvatarUri: String? = null,
     val userJamiId: String = "",
     val messages: List<ChatMessage> = emptyList(),
     val messageInput: String = "",

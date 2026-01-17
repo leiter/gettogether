@@ -11,9 +11,11 @@ import kotlinx.coroutines.flow.StateFlow
 interface SettingsRepository {
     val notificationSettings: StateFlow<NotificationSettings>
     val privacySettings: StateFlow<PrivacySettings>
+    val avatarPath: StateFlow<String?>
 
     suspend fun updateNotificationSettings(settings: NotificationSettings)
     suspend fun updatePrivacySettings(settings: PrivacySettings)
+    suspend fun updateAvatarPath(path: String?)
 }
 
 /**

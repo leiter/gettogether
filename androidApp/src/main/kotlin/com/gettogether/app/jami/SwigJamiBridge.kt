@@ -73,12 +73,15 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             }
         }
 
-        override fun profileReceived(accountId: String?, name: String?, photo: String?) {
-            if (accountId != null) {
-                val event = JamiAccountEvent.ProfileReceived(accountId, name ?: "", name ?: "", photo)
-                _accountEvents.tryEmit(event)
-                _events.tryEmit(event)
-            }
+        override fun profileReceived(accountId: String?, from: String?, vcardPath: String?) {
+            // NOTE: This callback is for CONTACT profiles (when we receive a contact's vCard),
+            // NOT for the account's own profile. The parameters are:
+            //   - accountId: our account
+            //   - from: the contact's URI whose profile we received
+            //   - vcardPath: path to the contact's vCard file
+            // Do NOT emit an account profile event here - that would incorrectly
+            // update our display name to the contact's name!
+            Log.d(TAG, "profileReceived: accountId=$accountId, from=$from, vcardPath=$vcardPath (contact profile, ignored for account state)")
         }
 
         override fun nameRegistrationEnded(accountId: String?, state: Int, name: String?) {
@@ -648,10 +651,13 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     // Contacts
     override fun getContacts(accountId: String): List<JamiContact> {
         if (!nativeLoaded) return emptyList()
+        Log.i(TAG, "getContacts: Fetching contacts for account $accountId")
         val contacts = JamiService.getContacts(accountId)
+        Log.i(TAG, "getContacts: Jami returned ${contacts.size} contacts")
         val result = mutableListOf<JamiContact>()
         for (i in 0 until contacts.size) {
             val map = stringMapToKotlin(contacts[i])
+            Log.i(TAG, "getContacts: Contact $i raw data: $map")
             result.add(JamiContact(
                 uri = map["id"] ?: "",
                 displayName = map["displayName"] ?: "",
@@ -691,7 +697,9 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     override fun getContactDetails(accountId: String, uri: String): Map<String, String> {
         if (!nativeLoaded) return emptyMap()
-        return stringMapToKotlin(JamiService.getContactDetails(accountId, uri))
+        val details = stringMapToKotlin(JamiService.getContactDetails(accountId, uri))
+        Log.i(TAG, "getContactDetails: uri=${uri.take(16)}... details=$details")
+        return details
     }
 
     override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) = withContext(Dispatchers.IO) {
@@ -715,23 +723,38 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override suspend fun discardTrustRequest(accountId: String, uri: String) = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext
-        JamiService.discardTrustRequest(accountId, uri)
+        if (!nativeLoaded) {
+            Log.w(TAG, "discardTrustRequest: native library not loaded")
+            return@withContext
+        }
+        Log.i(TAG, "[TRUST-DISCARD] Calling JamiService.discardTrustRequest(accountId=$accountId, uri=$uri)")
+        val result = JamiService.discardTrustRequest(accountId, uri)
+        Log.i(TAG, "[TRUST-DISCARD] Result: $result")
+        if (!result) {
+            Log.w(TAG, "[TRUST-DISCARD] ⚠️ discardTrustRequest returned false - request may not have been removed!")
+        }
     }
 
     override fun getTrustRequests(accountId: String): List<TrustRequest> {
         if (!nativeLoaded) return emptyList()
+        Log.i(TAG, "[TRUST-GET] getTrustRequests called for accountId=$accountId")
         val requests = JamiService.getTrustRequests(accountId)
+        Log.i(TAG, "[TRUST-GET] JamiService returned ${requests.size} trust requests")
         val result = mutableListOf<TrustRequest>()
         for (i in 0 until requests.size) {
             val map = stringMapToKotlin(requests[i])
+            val from = map["from"] ?: ""
+            val conversationId = map["conversationId"] ?: ""
+            val received = map["received"]?.toLongOrNull() ?: 0L
+            Log.i(TAG, "[TRUST-GET]   [$i] from=$from, conversationId=$conversationId, received=$received")
             result.add(TrustRequest(
-                from = map["from"] ?: "",
-                conversationId = map["conversationId"] ?: "",
+                from = from,
+                conversationId = conversationId,
                 payload = ByteArray(0),
-                received = map["received"]?.toLongOrNull() ?: 0L
+                received = received
             ))
         }
+        Log.i(TAG, "[TRUST-GET] Returning ${result.size} trust requests")
         return result
     }
 
