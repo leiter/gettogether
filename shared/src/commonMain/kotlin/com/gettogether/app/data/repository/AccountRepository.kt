@@ -77,7 +77,9 @@ class AccountRepository(
      * Create a new account with the given display name.
      */
     suspend fun createAccount(displayName: String): String {
+        println("[AccountRepo] createAccount: Starting with displayName='$displayName'")
         val accountId = jamiBridge.createAccount(displayName)
+        println("[AccountRepo] createAccount: Created account with id='$accountId'")
         _currentAccountId.value = accountId
 
         _accountState.value = AccountState(
@@ -86,6 +88,7 @@ class AccountRepository(
             registrationState = RegistrationState.TRYING,
             isLoaded = true
         )
+        println("[AccountRepo] createAccount: Set initial state (jamiId will be fetched when REGISTERED)")
 
         return accountId
     }
@@ -144,6 +147,30 @@ class AccountRepository(
     }
 
     /**
+     * Refresh account details from the daemon.
+     * Called after registration completes to populate jamiId and other fields.
+     */
+    private suspend fun refreshAccountDetails(accountId: String) {
+        try {
+            println("[AccountRepo] refreshAccountDetails: Fetching details for '$accountId'")
+            val details = jamiBridge.getAccountDetails(accountId)
+            val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
+
+            val jamiId = details["Account.username"] ?: ""
+            println("[AccountRepo] refreshAccountDetails: Got jamiId='$jamiId'")
+
+            _accountState.value = _accountState.value.copy(
+                displayName = details["Account.displayName"] ?: _accountState.value.displayName,
+                username = details["Account.username"] ?: _accountState.value.username,
+                jamiId = jamiId.ifEmpty { accountId },
+                registrationState = parseRegistrationState(volatileDetails["Account.registrationStatus"])
+            )
+        } catch (e: Exception) {
+            println("[AccountRepo] refreshAccountDetails: Error - ${e.message}")
+        }
+    }
+
+    /**
      * Check if an account exists.
      */
     fun hasAccount(): Boolean = _currentAccountId.value != null
@@ -159,10 +186,18 @@ class AccountRepository(
     private fun handleAccountEvent(event: JamiAccountEvent) {
         when (event) {
             is JamiAccountEvent.RegistrationStateChanged -> {
+                println("[AccountRepo] RegistrationStateChanged: accountId=${event.accountId}, state=${event.state}")
                 if (event.accountId == _currentAccountId.value) {
                     _accountState.value = _accountState.value.copy(
                         registrationState = event.state
                     )
+
+                    // When account becomes REGISTERED, fetch full details to get jamiId
+                    if (event.state == RegistrationState.REGISTERED) {
+                        scope.launch {
+                            refreshAccountDetails(event.accountId)
+                        }
+                    }
                 }
             }
             is JamiAccountEvent.ProfileReceived -> {
@@ -173,10 +208,13 @@ class AccountRepository(
                 }
             }
             is JamiAccountEvent.AccountDetailsChanged -> {
+                println("[AccountRepo] AccountDetailsChanged: accountId=${event.accountId}, details=${event.details}")
                 if (event.accountId == _currentAccountId.value) {
+                    val username = event.details["Account.username"] ?: _accountState.value.username
                     _accountState.value = _accountState.value.copy(
                         displayName = event.details["Account.displayName"] ?: _accountState.value.displayName,
-                        username = event.details["Account.username"] ?: _accountState.value.username
+                        username = username,
+                        jamiId = username.ifEmpty { _accountState.value.jamiId }
                     )
                 }
             }

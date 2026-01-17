@@ -76,7 +76,7 @@ fun ContactsTab(
             !state.hasAccount -> {
                 NoAccountPlaceholder()
             }
-            state.contacts.isEmpty() -> {
+            state.contacts.isEmpty() && trustRequestsState.requests.isEmpty() -> {
                 PullToRefreshBox(
                     isRefreshing = state.isLoading,
                     onRefresh = {
