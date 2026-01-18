@@ -54,33 +54,34 @@ class ChatViewModel(
 
                     // Get contact name and avatar from conversation members
                     var contactName = convInfo["title"] ?: ""
-                    var contactAvatarUri: String? = null
                     try {
                         val members = jamiBridge.getConversationMembers(accountId, conversationId)
                         println("ChatViewModel.loadConversation: Found ${members.size} members")
                         // Find the member that is not the current user
                         val otherMember = members.find { it.uri != userJamiId && it.uri != accountId }
                         if (otherMember != null) {
-                            // Get contact info from ContactRepository (has profile data from profileReceived)
-                            val contact = contactRepository.getContactById(accountId, otherMember.uri).firstOrNull()
-                            if (contact != null) {
-                                // Use contact's effective name (customName > displayName)
-                                val effectiveName = contact.getEffectiveName()
-                                if (contactName.isBlank() && effectiveName.isNotBlank()) {
-                                    contactName = effectiveName
-                                }
-                                contactAvatarUri = contact.avatarUri
-                                println("ChatViewModel.loadConversation: Contact from repo - name: ${contact.displayName}, customName: ${contact.customName}, avatar: $contactAvatarUri")
-                            } else {
-                                // Fallback: Use member URI if title is empty
-                                if (contactName.isBlank()) {
-                                    contactName = if (otherMember.uri.length > 8) {
-                                        otherMember.uri.take(8)
-                                    } else {
-                                        otherMember.uri
+                            // Subscribe to contact updates for real-time presence tracking
+                            viewModelScope.launch {
+                                contactRepository.getContactById(accountId, otherMember.uri).collect { contact ->
+                                    if (contact != null) {
+                                        _state.update { currentState ->
+                                            val effectiveName = contact.getEffectiveName()
+                                            currentState.copy(
+                                                contactName = effectiveName.takeIf { it.isNotBlank() }
+                                                    ?: currentState.contactName.takeIf { it.isNotBlank() }
+                                                    ?: contactName,
+                                                contactAvatarUri = contact.avatarUri,
+                                                contactIsOnline = contact.isOnline
+                                            )
+                                        }
+                                        println("ChatViewModel.loadConversation: Contact updated - name: ${contact.displayName}, customName: ${contact.customName}, avatar: ${contact.avatarUri}, isOnline: ${contact.isOnline}")
                                     }
                                 }
-                                println("ChatViewModel.loadConversation: Contact not in repo, using fallback name: $contactName")
+                            }
+                        } else {
+                            // Fallback: Use title if no other member found
+                            if (contactName.isBlank()) {
+                                contactName = "Conversation"
                             }
                         }
                     } catch (e: Exception) {
@@ -115,8 +116,7 @@ class ChatViewModel(
 
                     _state.update {
                         it.copy(
-                            contactName = contactName,
-                            contactAvatarUri = contactAvatarUri,
+                            contactName = if (it.contactName.isBlank()) contactName else it.contactName,
                             userJamiId = userJamiId
                         )
                     }

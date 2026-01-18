@@ -116,9 +116,12 @@ fun ChatScreen(
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Online",
+                                text = if (state.contactIsOnline) "Online" else "Offline",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary
+                                color = if (state.contactIsOnline)
+                                    MaterialTheme.colorScheme.tertiary
+                                else
+                                    MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }

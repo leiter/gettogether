@@ -4,6 +4,7 @@ data class ChatState(
     val conversationId: String = "",
     val contactName: String = "",
     val contactAvatarUri: String? = null,
+    val contactIsOnline: Boolean = false,
     val userJamiId: String = "",
     val messages: List<ChatMessage> = emptyList(),
     val messageInput: String = "",

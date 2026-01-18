@@ -10,14 +10,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlin.time.Clock
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 
 /**
  * Implementation of ContactRepository using JamiBridge.
@@ -43,6 +45,9 @@ class ContactRepositoryImpl(
     // Cache for trust requests by account
     private val _trustRequestsCache = MutableStateFlow<Map<String, List<TrustRequest>>>(emptyMap())
 
+    // Shared flows for optimized contact list transformations (one computation shared across subscribers)
+    private val sharedContactFlows = mutableMapOf<String, SharedFlow<List<Contact>>>()
+
     companion object {
         private const val PRESENCE_TIMEOUT_MS = 60_000L // 60 seconds
     }
@@ -64,6 +69,10 @@ class ContactRepositoryImpl(
                     // Then refresh from Jami to get latest
                     refreshContacts(accountId)
                     refreshTrustRequests(accountId)
+                } else {
+                    // Account logged out - clean up shared flows to free resources
+                    println("ContactRepository: Clearing shared flows (account logout)")
+                    sharedContactFlows.clear()
                 }
             }
         }
@@ -100,12 +109,22 @@ class ContactRepositoryImpl(
                 refreshContacts(accountId)
             }
         }
-        return _contactsCache.map { cache ->
-            val contacts = cache[accountId] ?: emptyList()
-            // Apply online status from cache
-            contacts.map { contact ->
-                contact.copy(isOnline = _onlineStatusCache.value[contact.uri] ?: false)
-            }
+
+        // Return cached shared flow or create new one
+        // This optimizes the flow so that multiple subscribers share the same transformation
+        // instead of each creating their own map{} operation
+        return sharedContactFlows.getOrPut(accountId) {
+            _contactsCache.map { cache ->
+                val contacts = cache[accountId] ?: emptyList()
+                // Apply online status from cache
+                contacts.map { contact ->
+                    contact.copy(isOnline = _onlineStatusCache.value[contact.uri] ?: false)
+                }
+            }.shareIn(
+                scope = scope,
+                started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5000),
+                replay = 1
+            )
         }
     }
 

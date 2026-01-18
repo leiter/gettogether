@@ -891,7 +891,33 @@ sealed class JamiContactEvent : JamiEvent() {
         val payload: ByteArray,
         val received: Long,
         override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
-    ) : JamiContactEvent()
+    ) : JamiContactEvent() {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other == null || this::class != other::class) return false
+
+            other as IncomingTrustRequest
+
+            if (received != other.received) return false
+            if (timestamp != other.timestamp) return false
+            if (accountId != other.accountId) return false
+            if (conversationId != other.conversationId) return false
+            if (from != other.from) return false
+            if (!payload.contentEquals(other.payload)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = received.hashCode()
+            result = 31 * result + timestamp.hashCode()
+            result = 31 * result + accountId.hashCode()
+            result = 31 * result + conversationId.hashCode()
+            result = 31 * result + from.hashCode()
+            result = 31 * result + payload.contentHashCode()
+            return result
+        }
+    }
 
     data class PresenceChanged(
         val accountId: String,
