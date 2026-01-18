@@ -390,6 +390,13 @@ class IOSJamiBridge : JamiBridge {
         }
     }
 
+    override suspend fun publishPresence(accountId: String, isOnline: Boolean, note: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: publishPresence: accountId=${accountId.take(16)}..., isOnline=$isOnline, note=$note")
+            NSLog("$TAG: ⚠️ Presence publishing not implemented for iOS (stub)")
+        }
+    }
+
     // =========================================================================
     // Conversation Management
     // =========================================================================

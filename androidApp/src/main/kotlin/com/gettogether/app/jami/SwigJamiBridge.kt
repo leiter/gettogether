@@ -254,7 +254,16 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             Log.d(TAG, "  AccountId: $accountId")
             Log.d(TAG, "  BuddyUri: $buddyUri")
             Log.d(TAG, "  Status: $status (${if (status > 0) "ONLINE" else "OFFLINE"})")
-            Log.d(TAG, "  LineStatus: $lineStatus")
+            Log.d(TAG, "  LineStatus (note): '$lineStatus'")
+
+            // Log if this is from our timestamped presence updates
+            if (lineStatus?.startsWith("online:") == true) {
+                Log.i(TAG, "  ✓ Detected ONLINE presence with timestamp: ${lineStatus.substringAfter(":")}")
+            } else if (lineStatus?.startsWith("heartbeat:") == true) {
+                Log.i(TAG, "  ✓ Detected HEARTBEAT presence with timestamp: ${lineStatus.substringAfter(":")}")
+            } else if (lineStatus?.startsWith("offline:") == true) {
+                Log.i(TAG, "  ✓ Detected OFFLINE presence with timestamp: ${lineStatus.substringAfter(":")}")
+            }
 
             if (accountId != null && buddyUri != null) {
                 val isOnline = status > 0
@@ -748,6 +757,23 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             Log.i(TAG, "✓ subscribeBuddy completed")
         } catch (e: Exception) {
             Log.e(TAG, "✗ subscribeBuddy failed: ${e.message}")
+            e.printStackTrace()
+        }
+    }
+
+    override suspend fun publishPresence(accountId: String, isOnline: Boolean, note: String) = withContext(Dispatchers.IO) {
+        if (!nativeLoaded) {
+            Log.w(TAG, "publishPresence: native library not loaded")
+            return@withContext
+        }
+        Log.d(TAG, "[PRESENCE-PUBLISH] Publishing presence for account ${accountId.take(16)}...")
+        Log.d(TAG, "[PRESENCE-PUBLISH]   Status: ${if (isOnline) "ONLINE" else "OFFLINE"}")
+        Log.d(TAG, "[PRESENCE-PUBLISH]   Note: ${note.ifEmpty { "(none)" }}")
+        try {
+            JamiService.publish(accountId, isOnline, note)
+            Log.i(TAG, "[PRESENCE-PUBLISH] ✓ Presence published successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "[PRESENCE-PUBLISH] ✗ Failed to publish presence: ${e.message}")
             e.printStackTrace()
         }
     }

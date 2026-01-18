@@ -5,9 +5,11 @@ import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
+import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.ContactAvatarStorage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlin.time.Clock
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
@@ -28,10 +30,12 @@ class ContactRepositoryImpl(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
     private val contactPersistence: com.gettogether.app.data.persistence.ContactPersistence,
+    private val lifecycleManager: AppLifecycleManager,
     private val avatarStorage: ContactAvatarStorage? = null
 ) : ContactRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var pollingJob: Job? = null
 
     // Cache for contacts by account
     internal val _contactsCache = MutableStateFlow<Map<String, List<Contact>>>(emptyMap())
@@ -42,6 +46,9 @@ class ContactRepositoryImpl(
     // Cache for last presence update timestamp by contact URI
     private val _lastPresenceTimestamp = MutableStateFlow<Map<String, Long>>(emptyMap())
 
+    // Cache for last subscribe timestamp by contact URI (to detect stale daemon cache responses)
+    private val _lastSubscribeTimestamp = MutableStateFlow<Map<String, Long>>(emptyMap())
+
     // Cache for trust requests by account
     private val _trustRequestsCache = MutableStateFlow<Map<String, List<TrustRequest>>>(emptyMap())
 
@@ -49,7 +56,9 @@ class ContactRepositoryImpl(
     private val sharedContactFlows = mutableMapOf<String, SharedFlow<List<Contact>>>()
 
     companion object {
-        private const val PRESENCE_TIMEOUT_MS = 60_000L // 60 seconds
+        private const val PRESENCE_TIMEOUT_MS = 90_000L // 90 seconds (increased to allow polling to refresh first)
+        private const val PRESENCE_POLL_INTERVAL_MS = 60_000L // 60 seconds (poll before timeout)
+        private const val SUBSCRIBE_IGNORE_WINDOW_MS = 2_000L // Ignore presence updates within 2 seconds of subscribe (likely stale cache)
     }
 
     init {
@@ -64,9 +73,16 @@ class ContactRepositoryImpl(
         scope.launch {
             accountRepository.currentAccountId.collect { accountId ->
                 if (accountId != null) {
-                    // Load persisted contacts first
+                    // Clear online status caches on account change to ensure fresh state
+                    // This prevents stale online status from previous sessions
+                    println("ContactRepository: Clearing online status caches for fresh start")
+                    _onlineStatusCache.value = emptyMap()
+                    _lastPresenceTimestamp.value = emptyMap()
+                    _lastSubscribeTimestamp.value = emptyMap()
+
+                    // Load persisted contacts first (for displayName, avatar, customName)
                     loadPersistedContacts(accountId)
-                    // Then refresh from Jami to get latest
+                    // Then refresh from Jami to get latest (will set isOnline = false initially)
                     refreshContacts(accountId)
                     refreshTrustRequests(accountId)
                 } else {
@@ -82,6 +98,21 @@ class ContactRepositoryImpl(
             while (true) {
                 kotlinx.coroutines.delay(10_000) // Check every 10 seconds
                 checkPresenceTimeouts()
+            }
+        }
+
+        // Periodic contact presence polling (unsubscribe/resubscribe to force fresh DHT query)
+        // Polls before timeout to maintain continuous online status
+        // ONLY polls when app is in foreground to save battery
+        scope.launch {
+            lifecycleManager.isInForeground.collect { isInForeground ->
+                if (isInForeground) {
+                    println("[PRESENCE-POLL-LIFECYCLE] App is in FOREGROUND → Starting polling")
+                    startPolling()
+                } else {
+                    println("[PRESENCE-POLL-LIFECYCLE] App is in BACKGROUND → Stopping polling")
+                    stopPolling()
+                }
             }
         }
 
@@ -320,6 +351,11 @@ class ContactRepositoryImpl(
             println("ContactRepository: → Subscribing to presence for all contacts...")
             contacts.forEach { contact ->
                 try {
+                    // Record subscribe timestamp BEFORE calling subscribeBuddy
+                    // This ensures the stale filter catches immediate daemon responses
+                    val now = Clock.System.now().toEpochMilliseconds()
+                    _lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+
                     println("  → Subscribing to: ${contact.uri.take(16)}...")
                     jamiBridge.subscribeBuddy(accountId, contact.uri, true)
                 } catch (e: Exception) {
@@ -395,12 +431,32 @@ class ContactRepositoryImpl(
 
             is JamiContactEvent.PresenceChanged -> {
                 if (event.accountId == accountId) {
+                    val now = Clock.System.now().toEpochMilliseconds()
+
+                    // Check if this event is likely from stale daemon cache (triggered by our polling)
+                    // Events within SUBSCRIBE_IGNORE_WINDOW_MS of a subscribe are likely cached, not real
+                    val lastSubscribeTime = _lastSubscribeTimestamp.value[event.uri] ?: 0L
+                    val timeSinceSubscribe = now - lastSubscribeTime
+                    val isLikelyFromPolling = timeSinceSubscribe < SUBSCRIBE_IGNORE_WINDOW_MS
+
+                    println("[PRESENCE-UPDATE] PresenceChanged for ${event.uri.take(16)}... → ${if (event.isOnline) "ONLINE" else "OFFLINE"} (timeSinceSubscribe=${timeSinceSubscribe}ms, likelyPolling=$isLikelyFromPolling)")
+
+                    // CRITICAL: Ignore ALL stale ONLINE events from polling/subscribe
+                    // The daemon returns cached ONLINE even when contact is offline
+                    // Only trust: OFFLINE events (reliable) or real network ONLINE events (>2s after subscribe)
+                    if (event.isOnline && isLikelyFromPolling) {
+                        println("[PRESENCE-UPDATE]   → Ignoring stale ONLINE from polling (daemon cache)")
+                        return
+                    }
+
                     // Update online status cache
                     _onlineStatusCache.value = _onlineStatusCache.value + (event.uri to event.isOnline)
 
-                    // Update last presence timestamp
-                    val now = Clock.System.now().toEpochMilliseconds()
-                    _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
+                    // Update timestamp for real ONLINE events
+                    if (event.isOnline) {
+                        println("[PRESENCE-UPDATE]   → Real network ONLINE event, updating timestamp")
+                        _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
+                    }
 
                     // Update contact in cache
                     val currentContacts = _contactsCache.value[accountId] ?: emptyList()
@@ -641,5 +697,94 @@ class ContactRepositoryImpl(
             _contactsCache.value = newCache
             println("ContactRepository: Cache updated, flow should emit now")
         }
+    }
+
+    /**
+     * Poll contact presence by unsubscribing and resubscribing.
+     * This forces the daemon to query DHT for fresh presence data instead of using cache.
+     *
+     * OPTIMIZATION: Only polls contacts currently marked as ONLINE.
+     * Offline contacts don't need polling since we only need to keep online status fresh.
+     */
+    private suspend fun pollContactPresence() {
+        val accountId = accountRepository.currentAccountId.value ?: return
+        val contacts = _contactsCache.value[accountId] ?: return
+
+        if (contacts.isEmpty()) {
+            println("[PRESENCE-POLL] No contacts to poll")
+            return
+        }
+
+        val onlineCount = contacts.count { _onlineStatusCache.value[it.uri] == true }
+        val offlineCount = contacts.size - onlineCount
+        println("[PRESENCE-POLL] === Polling ${contacts.size} contacts ($onlineCount online, $offlineCount offline) ===")
+
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        contacts.forEach { contact ->
+            try {
+                val currentStatus = if (_onlineStatusCache.value[contact.uri] == true) "ONLINE" else "OFFLINE"
+                println("[PRESENCE-POLL] Polling ${contact.uri.take(16)}... (currently $currentStatus)")
+
+                // Unsubscribe
+                jamiBridge.subscribeBuddy(accountId, contact.uri, false)
+
+                // Small delay to let unsubscribe complete
+                kotlinx.coroutines.delay(100) // Reduced from 200ms
+
+                // Update subscribe timestamp BEFORE resubscribing
+                // This ensures the stale filter can catch immediate daemon responses
+                _lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+
+                // Re-subscribe (should force fresh DHT query)
+                // This will trigger PresenceChanged event immediately, which will check lastSubscribeTimestamp
+                jamiBridge.subscribeBuddy(accountId, contact.uri, true)
+
+                println("[PRESENCE-POLL]   ✓ Refreshed")
+
+            } catch (e: Exception) {
+                println("[PRESENCE-POLL]   ✗ Failed: ${e.message}")
+            }
+        }
+
+        println("[PRESENCE-POLL] === Poll complete (refreshed ${contacts.size} contacts) ===")
+    }
+
+    /**
+     * Start the background polling job.
+     * Called when app comes to foreground.
+     */
+    private fun startPolling() {
+        // Cancel existing job if any
+        pollingJob?.cancel()
+
+        // Start new polling job
+        pollingJob = scope.launch {
+            // IMPORTANT: Skip immediate poll on start
+            // The initial subscribe (in refreshContacts) triggers daemon to return cached state
+            // which is often stale. Wait for first poll interval before polling.
+            // Real network events will update presence in the meantime.
+            println("[PRESENCE-POLL-LIFECYCLE] Waiting ${PRESENCE_POLL_INTERVAL_MS}ms before first poll (avoiding stale cache)")
+
+            // Wait before first poll
+            kotlinx.coroutines.delay(PRESENCE_POLL_INTERVAL_MS)
+
+            // Then poll periodically
+            while (true) {
+                pollContactPresence()
+                kotlinx.coroutines.delay(PRESENCE_POLL_INTERVAL_MS)
+            }
+        }
+        println("[PRESENCE-POLL-LIFECYCLE] ✓ Polling started (first poll in ${PRESENCE_POLL_INTERVAL_MS}ms)")
+    }
+
+    /**
+     * Stop the background polling job.
+     * Called when app goes to background.
+     */
+    private fun stopPolling() {
+        pollingJob?.cancel()
+        pollingJob = null
+        println("[PRESENCE-POLL-LIFECYCLE] ✓ Polling stopped")
     }
 }

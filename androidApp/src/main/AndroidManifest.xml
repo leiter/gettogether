@@ -29,6 +29,7 @@
             android:exported="true"
             android:label="@string/app_name"
             android:theme="@style/Theme.GetTogether"
+            android:screenOrientation="portrait"
             android:showOnLockScreen="true"
             android:turnScreenOn="true">
             <intent-filter>

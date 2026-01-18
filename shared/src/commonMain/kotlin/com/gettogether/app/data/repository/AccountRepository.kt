@@ -21,7 +21,8 @@ import kotlinx.coroutines.withTimeout
  * Tracks the active account ID and provides account-related operations.
  */
 class AccountRepository(
-    private val jamiBridge: JamiBridge
+    private val jamiBridge: JamiBridge,
+    private val presenceManager: PresenceManager
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -47,6 +48,36 @@ class AccountRepository(
             println("[ACCOUNT-RESTORE] ERROR: Failed to start account events collection: ${e.message}")
         }
 
+        // Watch account changes and manage presence broadcasting
+        scope.launch {
+            var previousAccountId: String? = null
+            currentAccountId.collect { accountId ->
+                println("[ACCOUNT-LIFECYCLE] Account changed: $previousAccountId -> $accountId")
+
+                // Only act if the account actually changed
+                if (previousAccountId != accountId) {
+                    // Stop broadcasting for previous account (if different)
+                    val prevId = previousAccountId
+                    if (prevId != null) {
+                        println("[ACCOUNT-LIFECYCLE] Stopping presence for previous account: ${prevId.take(16)}...")
+                        presenceManager.stopBroadcasting(prevId)
+                    }
+
+                    // Start broadcasting for new account
+                    if (accountId != null) {
+                        println("[ACCOUNT-LIFECYCLE] Starting presence for new account: ${accountId.take(16)}...")
+                        presenceManager.startBroadcasting(accountId)
+                    } else {
+                        println("[ACCOUNT-LIFECYCLE] No account active (logged out)")
+                    }
+
+                    previousAccountId = accountId
+                } else {
+                    println("[ACCOUNT-LIFECYCLE] Account unchanged, skipping presence restart")
+                }
+            }
+        }
+
         // Load existing accounts on startup
         try {
             scope.launch {
@@ -56,6 +87,45 @@ class AccountRepository(
             println("[ACCOUNT-RESTORE] Account loading initiated")
         } catch (e: Exception) {
             println("[ACCOUNT-RESTORE] ERROR: Failed to start account loading: ${e.message}")
+        }
+    }
+
+    /**
+     * Enable peer discovery and presence settings for an account.
+     * These settings are required for proper continuous presence detection.
+     *
+     * Based on official jami-android-client analysis:
+     * - Account.peerDiscovery: Enables DHT peer discovery
+     * - Account.accountDiscovery: Enables account discovery
+     * - Account.accountPublish: Enables account publishing for discovery
+     * - Account.presenceEnabled: Enables presence information sharing
+     */
+    private suspend fun enablePeerDiscoverySettings(accountId: String) {
+        println("[PRESENCE-CONFIG] === Enabling peer discovery settings for account: ${accountId.take(16)}... ===")
+
+        try {
+            // Get current account details
+            val currentDetails = jamiBridge.getAccountDetails(accountId).toMutableMap()
+
+            // Enable peer discovery settings
+            currentDetails["Account.peerDiscovery"] = "true"
+            currentDetails["Account.accountDiscovery"] = "true"
+            currentDetails["Account.accountPublish"] = "true"
+            currentDetails["Account.presenceEnabled"] = "true"
+
+            println("[PRESENCE-CONFIG] Setting account details:")
+            println("[PRESENCE-CONFIG]   Account.peerDiscovery = true")
+            println("[PRESENCE-CONFIG]   Account.accountDiscovery = true")
+            println("[PRESENCE-CONFIG]   Account.accountPublish = true")
+            println("[PRESENCE-CONFIG]   Account.presenceEnabled = true")
+
+            // Apply the settings
+            jamiBridge.setAccountDetails(accountId, currentDetails)
+
+            println("[PRESENCE-CONFIG] ✓ Peer discovery settings enabled successfully")
+        } catch (e: Exception) {
+            println("[PRESENCE-CONFIG] ✗ Failed to enable peer discovery settings: ${e.message}")
+            e.printStackTrace()
         }
     }
 
@@ -71,10 +141,10 @@ class AccountRepository(
 
             if (accountIds.isNotEmpty()) {
                 val accountId = accountIds.first()
-                println("[ACCOUNT-RESTORE] Setting current account to: $accountId")
-                _currentAccountId.value = accountId
+                println("[ACCOUNT-RESTORE] Found account: $accountId")
 
-                // Load account details
+                // Load account details BEFORE setting currentAccountId
+                // This ensures accountState.jamiId is available when repositories react to the change
                 println("[ACCOUNT-RESTORE] Loading account details for: $accountId")
                 val details = jamiBridge.getAccountDetails(accountId)
                 println("[ACCOUNT-RESTORE] Account details loaded: displayName='${details["Account.displayName"]}', username='${details["Account.username"]}'")
@@ -109,6 +179,9 @@ class AccountRepository(
                     println("[ACCOUNT-RESTORE] ✓ TURN enabled (turn.jami.net)")
                 }
 
+                // Enable peer discovery and presence settings (includes accountPublish, peerDiscovery, etc.)
+                enablePeerDiscoverySettings(accountId)
+
                 println("[ACCOUNT-RESTORE] Loading volatile details for: $accountId")
                 val volatileDetails = jamiBridge.getVolatileAccountDetails(accountId)
                 val regStatus = volatileDetails["Account.registrationStatus"]
@@ -134,6 +207,11 @@ class AccountRepository(
                 println("[JAMI-ID] Account loaded - Jami ID (40-char): $accountId")
                 println("[JAMI-ID] Share this ID with others to receive contact requests")
                 println("═══════════════════════════════════════════════════════════════")
+
+                // Set currentAccountId AFTER accountState is fully loaded
+                // This ensures repositories have access to jamiId when they react
+                println("[ACCOUNT-RESTORE] Setting current account ID: $accountId")
+                _currentAccountId.value = accountId
             } else {
                 println("[ACCOUNT-RESTORE] No accounts found - setting empty state")
                 _accountState.value = AccountState(isLoaded = true)
@@ -159,6 +237,9 @@ class AccountRepository(
         println("[ACCOUNT-CREATE] Calling jamiBridge.createAccount()...")
         val accountId = jamiBridge.createAccount(displayName)
         println("[ACCOUNT-CREATE] jamiBridge.createAccount() returned accountId='$accountId'")
+
+        // Enable peer discovery and presence settings for new account
+        enablePeerDiscoverySettings(accountId)
 
         println("[ACCOUNT-CREATE] Setting current account ID to: $accountId")
         _currentAccountId.value = accountId
@@ -249,6 +330,9 @@ class AccountRepository(
 
         val accountId = jamiBridge.importAccount(archivePath, password)
         println("[ACCOUNT-IMPORT] Account imported with ID: $accountId")
+
+        // Enable peer discovery and presence settings for imported account
+        enablePeerDiscoverySettings(accountId)
 
         _currentAccountId.value = accountId
 
@@ -493,6 +577,9 @@ class AccountRepository(
         // Activate the account
         println("[ACCOUNT-RELOGIN] Activating account...")
         jamiBridge.setAccountActive(accountId, true)
+
+        // Enable peer discovery and presence settings for reactivated account
+        enablePeerDiscoverySettings(accountId)
 
         // Set as current account
         _currentAccountId.value = accountId

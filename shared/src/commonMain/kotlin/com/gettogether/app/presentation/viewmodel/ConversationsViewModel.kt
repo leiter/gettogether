@@ -150,10 +150,13 @@ class ConversationsViewModel(
             ?: ""
         val initial = title.firstOrNull()?.uppercase() ?: "?"
 
-        // For one-to-one conversations, use the participant's avatar
+        // For one-to-one conversations, use the OTHER participant's avatar (not self)
         // For group conversations, avatarUri will be null (use initial fallback)
+        val userJamiId = accountRepository.accountState.value.jamiId
         val conversationAvatar = if (!isGroup && participants.isNotEmpty()) {
-            participants.first().avatarUri
+            // Find the other participant (not the current user)
+            val otherParticipant = participants.firstOrNull { it.uri != userJamiId }
+            otherParticipant?.avatarUri
         } else {
             null
         }

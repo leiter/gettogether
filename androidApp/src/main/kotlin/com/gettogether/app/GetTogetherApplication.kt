@@ -1,12 +1,15 @@
 package com.gettogether.app
 
 import android.app.Application
+import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.data.repository.PresenceManager
 import com.gettogether.app.di.jamiBridgeModule
 import com.gettogether.app.di.platformModule
 import com.gettogether.app.di.sharedModule
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
+import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.NotificationHelper
 import com.gettogether.app.service.CallNotificationManager
 import kotlinx.coroutines.CoroutineScope
@@ -14,6 +17,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.inject
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
@@ -56,6 +60,11 @@ class GetTogetherApplication : Application() {
         android.util.Log.d("GetTogetherApp", "→ Setting up incoming call listener...")
         setupIncomingCallListener()
         android.util.Log.i("GetTogetherApp", "✓ Incoming call listener setup")
+
+        // Setup app lifecycle shutdown hook for presence cleanup
+        android.util.Log.d("GetTogetherApp", "→ Setting up app lifecycle shutdown hook...")
+        setupShutdownHook()
+        android.util.Log.i("GetTogetherApp", "✓ Shutdown hook configured")
 
         android.util.Log.d("GetTogetherApp", "=== Application onCreate() completed ===")
     }
@@ -106,7 +115,18 @@ class GetTogetherApplication : Application() {
         )
     }
 
+    /**
+     * Sets up lifecycle hooks for presence management.
+     * Note: Offline publishing removed - it was corrupting account state via broken JamiService.publish() API.
+     * Presence polling is managed by ContactRepository based on AppLifecycleManager.isInForeground.
+     */
+    private fun setupShutdownHook() {
+        // Removed offline publishing - it corrupted account registration via buggy JamiService.publish()
+        // Polling lifecycle is handled by ContactRepositoryImpl listening to AppLifecycleManager.isInForeground
+    }
+
     override fun onTerminate() {
+        android.util.Log.w("GetTogetherApp", "[APP-LIFECYCLE] onTerminate() called (note: only called in emulator, not real devices)")
         scope.cancel()
         super.onTerminate()
     }

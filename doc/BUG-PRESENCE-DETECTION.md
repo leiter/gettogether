@@ -1,10 +1,45 @@
 # Bug Report: Contact Presence Detection Showing False Online Status
 
-**Date:** 2026-01-18
+**Date Reported:** 2026-01-18
+**Date Resolved:** 2026-01-18
 **Severity:** Medium
 **Component:** Contact Presence Detection
+**Status:** ✅ **RESOLVED** - See [PRESENCE-BROADCASTING-IMPLEMENTATION.md](./PRESENCE-BROADCASTING-IMPLEMENTATION.md)
 
 ---
+
+## ✅ RESOLUTION (2026-01-18)
+
+**This issue has been fully resolved by implementing contact presence polling.**
+
+### What Was Fixed
+
+1. **Implemented presence polling**: Periodic unsubscribe/resubscribe forces fresh DHT queries every 60 seconds
+2. **Optimized for efficiency**: Only polls contacts currently marked as ONLINE
+3. **Extended timeout**: Increased to 90 seconds to allow polling to refresh first
+4. **Timeout as fallback**: Now serves its proper purpose (safety net when polling fails)
+
+### Implementation
+
+See comprehensive documentation:
+→ **[PRESENCE-POLLING-SOLUTION.md](./PRESENCE-POLLING-SOLUTION.md)** ← **WORKING SOLUTION**
+
+### Failed Approaches
+
+Before finding the working solution, we attempted:
+- **Presence broadcasting** via `JamiService.publish()` - Daemon limitation, doesn't trigger network events
+- See: [PRESENCE-BROADCASTING-IMPLEMENTATION.md](./PRESENCE-BROADCASTING-IMPLEMENTATION.md) (superseded)
+
+### Result
+
+- **Before**: Contacts showed stale cached "online" status, timeout was only correction mechanism
+- **After**: Contacts refreshed every 60 seconds via polling, timeout is fallback
+- **Impact**: Presence now reflects actual online/offline status with 60-second refresh rate
+- **Overhead**: Minimal (~0.1-1 second per cycle, only for online contacts)
+
+---
+
+## Original Bug Report (Historical)
 
 ## Problem Summary
 

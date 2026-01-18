@@ -3,6 +3,7 @@ package com.gettogether.app.di
 import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.ContactRepositoryImpl
 import com.gettogether.app.data.repository.ConversationRepositoryImpl
+import com.gettogether.app.data.repository.PresenceManager
 import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
@@ -30,12 +31,18 @@ val sharedModule = module {
         createJamiBridge().also { println("Koin: JamiBridge created") }
     }
 
+    // Presence Manager (create before AccountRepository since it depends on it)
+    single {
+        println("Koin: Creating PresenceManager")
+        PresenceManager(get()).also { println("Koin: PresenceManager created") }
+    }
+
     // Repositories
     single {
         println("Koin: Creating AccountRepository")
-        AccountRepository(get()).also { println("Koin: AccountRepository created") }
+        AccountRepository(get(), get()).also { println("Koin: AccountRepository created") }
     }
-    single { ContactRepositoryImpl(get(), get(), get(), getOrNull()) }
+    single { ContactRepositoryImpl(get(), get(), get(), get(), getOrNull()) }
     single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }
     single { ConversationRepositoryImpl(get(), get(), get(), get(), getOrNull(), getOrNull()) }
 

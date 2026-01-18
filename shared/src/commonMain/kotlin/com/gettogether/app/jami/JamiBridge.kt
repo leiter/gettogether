@@ -163,6 +163,15 @@ interface JamiBridge {
      */
     suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean)
 
+    /**
+     * Publish our own presence status to the network.
+     * This announces to other contacts whether we are online or offline.
+     * @param accountId The account ID
+     * @param isOnline true for online, false for offline
+     * @param note Optional status note/message
+     */
+    suspend fun publishPresence(accountId: String, isOnline: Boolean, note: String = "")
+
     // =========================================================================
     // Conversation Management
     // =========================================================================

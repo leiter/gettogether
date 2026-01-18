@@ -85,6 +85,7 @@ kotlin {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.core.ktx)
+            implementation(libs.androidx.lifecycle.process)
             implementation(libs.androidx.exifinterface)
             implementation(libs.ktor.client.android)
             implementation(libs.koin.android)

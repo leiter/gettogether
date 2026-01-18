@@ -92,6 +92,7 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
     private external fun nativeDiscardTrustRequest(accountId: String, from: String)
     private external fun nativeGetTrustRequests(accountId: String): Array<Map<String, String>>
     private external fun nativeSubscribeBuddy(accountId: String, uri: String, flag: Boolean)
+    private external fun nativePublishPresence(accountId: String, isOnline: Boolean, note: String)
 
     // Conversations
     private external fun nativeGetConversations(accountId: String): Array<String>
@@ -347,6 +348,14 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
             nativeSubscribeBuddy(accountId, uri, flag)
         } catch (e: UnsatisfiedLinkError) {
             android.util.Log.w(TAG, "subscribeBuddy: native method not available")
+        }
+    }
+
+    override suspend fun publishPresence(accountId: String, isOnline: Boolean, note: String): Unit = withContext(Dispatchers.IO) {
+        try {
+            nativePublishPresence(accountId, isOnline, note)
+        } catch (e: UnsatisfiedLinkError) {
+            android.util.Log.w(TAG, "publishPresence: native method not available")
         }
     }
 

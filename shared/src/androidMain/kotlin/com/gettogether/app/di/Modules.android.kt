@@ -12,7 +12,9 @@ import com.gettogether.app.jami.AndroidJamiBridge
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
 import com.gettogether.app.jami.JamiBridge
+import android.app.Application
 import com.gettogether.app.platform.AndroidContactAvatarStorage
+import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.CallServiceBridge
 import com.gettogether.app.platform.ContactAvatarStorage
 import com.gettogether.app.platform.ExportPathProvider
@@ -25,6 +27,14 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 
 actual val platformModule: Module = module {
+    // App lifecycle manager (must be created early)
+    single {
+        println("Koin: Creating AppLifecycleManager")
+        AppLifecycleManager(androidContext() as Application).also {
+            println("Koin: AppLifecycleManager created")
+        }
+    }
+
     // Android-specific dependencies
     single { CallServiceBridge(androidContext()) }
     single { NotificationHelper(androidContext()) }
