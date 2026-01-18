@@ -1,8 +1,9 @@
 # Presence Polling Solution - Contact Online Status Detection
 
 **Date:** 2026-01-18
+**Last Updated:** 2026-01-18
 **Status:** ✅ **IMPLEMENTED & TESTED**
-**Phase:** Phase 2C (Final Working Solution)
+**Phase:** Phase 2C (Final Working Solution) + Stale Event Filtering Fix
 
 ---
 
@@ -11,6 +12,8 @@
 Successfully implemented **contact presence polling** using periodic unsubscribe/resubscribe cycles to force fresh DHT queries. This provides continuous online status updates without relying solely on timeout mechanisms.
 
 **Result**: Contacts show accurate online/offline status with ~60-second refresh rate.
+
+**Update (2026-01-18)**: Added **stale event filtering** to prevent oscillation bug caused by daemon returning cached presence data.
 
 ---
 
@@ -357,6 +360,152 @@ val accountId = accountRepository.currentAccountId.value ?: return
 
 ---
 
+## Critical Fix: Stale Event Filtering (2026-01-18)
+
+### The Oscillation Problem
+
+After initial implementation, a critical bug emerged: contacts would **oscillate between online/offline** every ~10 seconds:
+
+```
+Timeline (Bug):
+0s    - Contact shows OFFLINE (correct start)
+60s   - Poll fires → subscribeBuddy → daemon returns ONLINE (stale!)
+60s   - Contact shows ONLINE (incorrect!)
+90s   - Timeout fires → Contact shows OFFLINE
+150s  - Poll fires → daemon returns ONLINE (stale!)
+150s  - Contact shows ONLINE (incorrect!)
+...
+```
+
+**Root Cause**: The Jami daemon returns **cached presence data** immediately after `subscribeBuddy()` is called. This cache can be stale (from hours/days ago when contact was last seen online).
+
+### Solution: Subscribe Timestamp Tracking
+
+Track when subscribeBuddy was called and ignore ONLINE events that arrive within 2 seconds:
+
+#### Constants Added
+
+```kotlin
+companion object {
+    private const val SUBSCRIBE_IGNORE_WINDOW_MS = 2_000L // Ignore events within 2s of subscribe
+}
+```
+
+#### Subscribe Timestamp Map
+
+```kotlin
+private val _lastSubscribeTimestamp = MutableStateFlow<Map<String, Long>>(emptyMap())
+```
+
+#### Recording Timestamp (BEFORE subscribeBuddy)
+
+**Critical**: Timestamp MUST be recorded BEFORE calling subscribeBuddy, not after:
+
+```kotlin
+contacts.forEach { contact ->
+    try {
+        // Record subscribe timestamp BEFORE calling subscribeBuddy
+        val now = Clock.System.now().toEpochMilliseconds()
+        _lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+
+        println("  → Subscribing to: ${contact.uri.take(16)}...")
+        jamiBridge.subscribeBuddy(accountId, contact.uri, true)
+    } catch (e: Exception) {
+        println("  ✗ Failed to subscribe: ${e.message}")
+    }
+}
+```
+
+#### Filtering in PresenceChanged Handler
+
+```kotlin
+is JamiContactEvent.PresenceChanged -> {
+    if (event.accountId == accountId) {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val lastSubscribeTime = _lastSubscribeTimestamp.value[event.uri] ?: 0L
+        val timeSinceSubscribe = now - lastSubscribeTime
+        val isLikelyFromPolling = timeSinceSubscribe < SUBSCRIBE_IGNORE_WINDOW_MS
+
+        println("[PRESENCE-UPDATE] PresenceChanged for ${event.uri.take(16)}... → ${if (event.isOnline) "ONLINE" else "OFFLINE"} (timeSinceSubscribe=${timeSinceSubscribe}ms, likelyPolling=$isLikelyFromPolling)")
+
+        // CRITICAL: Ignore ALL stale ONLINE events from polling/subscribe
+        if (event.isOnline && isLikelyFromPolling) {
+            println("[PRESENCE-UPDATE]   → Ignoring stale ONLINE from polling (daemon cache)")
+            return
+        }
+
+        _onlineStatusCache.value = _onlineStatusCache.value + (event.uri to event.isOnline)
+        if (event.isOnline) {
+            println("[PRESENCE-UPDATE]   → Real network ONLINE event, updating timestamp")
+            _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
+        }
+        // ... update contact in cache
+    }
+}
+```
+
+### Additional Fixes
+
+#### 1. Skip Immediate Poll on App Start
+
+Prevents stale cache from being triggered immediately:
+
+```kotlin
+private fun startPolling() {
+    pollingJob?.cancel()
+    pollingJob = scope.launch {
+        println("[PRESENCE-POLL-LIFECYCLE] Waiting ${PRESENCE_POLL_INTERVAL_MS}ms before first poll (avoiding stale cache)")
+        kotlinx.coroutines.delay(PRESENCE_POLL_INTERVAL_MS)  // Wait before first poll
+        while (true) {
+            pollContactPresence()
+            kotlinx.coroutines.delay(PRESENCE_POLL_INTERVAL_MS)
+        }
+    }
+}
+```
+
+#### 2. Cache Clearing on Account Change
+
+Fresh state when switching accounts or on app start:
+
+```kotlin
+if (accountId != null) {
+    println("ContactRepository: Clearing online status caches for fresh start")
+    _onlineStatusCache.value = emptyMap()
+    _lastPresenceTimestamp.value = emptyMap()
+    _lastSubscribeTimestamp.value = emptyMap()
+    // ... load contacts
+}
+```
+
+#### 3. LaunchedEffect for Contacts Screen Refresh
+
+Added to ContactsTab.kt to trigger refresh when screen is displayed:
+
+```kotlin
+LaunchedEffect(Unit) {
+    viewModel.refresh()
+    trustRequestsViewModel.refresh()
+}
+```
+
+### Result After Fix
+
+```
+Timeline (Fixed):
+0s    - Contact shows OFFLINE (correct start)
+60s   - Poll fires → subscribeBuddy → daemon returns ONLINE (stale!)
+60s   - [FILTERED] Stale ONLINE ignored (timeSinceSubscribe < 2000ms)
+60s   - Contact stays OFFLINE (correct!)
+...
+When contact actually comes online:
+Xs    - Real network event arrives (timeSinceSubscribe > 2000ms)
+Xs    - Contact shows ONLINE (correct!)
+Xs+90s- Timeout would fire BUT contact was refreshed by subsequent poll
+```
+
+---
+
 ## Integration with Existing Systems
 
 ### Works With Phase 1 (SharedFlow Optimization)
@@ -504,6 +653,10 @@ adb logcat | grep -E "(\[PRESENCE-POLL\]|PresenceChanged|Presence timeout)"
 ✅ **Timeout as fallback** (90 seconds)
 ✅ **Minimal overhead** (<1 second per cycle)
 ✅ **Production tested** (5+ minutes, 100% success)
+✅ **Stale event filtering** (ignore daemon cache within 2s of subscribe) - NEW
+✅ **Skip immediate poll** (avoid stale cache on app start) - NEW
+✅ **Cache clearing on account change** (fresh state) - NEW
+✅ **LaunchedEffect refresh on Contacts screen** - NEW
 
 ### Key Innovation
 

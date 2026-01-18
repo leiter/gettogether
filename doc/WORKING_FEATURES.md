@@ -1,7 +1,7 @@
 # Working Features - letsJam App
 
-**Last Updated:** 2026-01-17
-**Status:** Production Ready Features (Updated post filepicker-jamibridge merge)
+**Last Updated:** 2026-01-18
+**Status:** Production Ready Features (Updated with presence detection improvements)
 
 ---
 
@@ -83,11 +83,16 @@
 - ✅ Pull-to-refresh contact list
 - ✅ Search/filter contacts (if implemented)
 
-### Presence Detection
+### Presence Detection (Improved - 2026-01-18)
 - ✅ **Same Network (mDNS):** Automatic online/offline detection
-- ✅ **Cross-Network (DHT):** Activity-based presence (marks online when messages received)
-- ✅ Presence timeout (60 seconds - marks offline if no activity)
+- ✅ **Cross-Network (DHT):** Activity-based presence with periodic polling
+- ✅ **Presence polling** (60-second cycle) - Unsubscribe/resubscribe forces fresh DHT queries
+- ✅ **Stale event filtering** - Ignores cached ONLINE events from daemon (within 2s of subscribe)
+- ✅ **Presence timeout** (90 seconds) - Fallback safety net for offline detection
+- ✅ **Fresh start on app launch** - Cache clearing ensures accurate initial state
+- ✅ **LaunchedEffect refresh** - Contacts screen auto-refreshes on display
 - ✅ Visual online indicators (green dot in contact list)
+- 📄 See: `doc/PRESENCE-POLLING-SOLUTION.md` for full technical details
 
 ---
 
@@ -347,6 +352,21 @@
 
 ## 🎯 Recently Completed Features
 
+### January 18, 2026
+- ✅ **Presence Detection Improvements**
+  - Fixed oscillation bug (contacts flipping between online/offline)
+  - Stale event filtering via subscribe timestamp tracking
+  - Skip immediate poll on app start to avoid stale cache
+  - Cache clearing on account change for fresh state
+  - LaunchedEffect on Contacts screen for auto-refresh
+  - Files: `ContactRepositoryImpl.kt`, `ContactsTab.kt`
+  - Docs: `doc/PRESENCE-POLLING-SOLUTION.md`, `doc/BUG-PRESENCE-DETECTION.md`
+
+- ✅ **Conversation List Item Bug Fix**
+  - Fixed avatar showing wrong person (self instead of other participant)
+  - Fixed display name timing issue with jamiId
+  - Files: `ConversationsViewModel.kt`, `AccountRepository.kt`
+
 ### January 17, 2026
 - ✅ **Account Backup & Restore** (filepicker-jamibridge merge)
   - Export account to encrypted backup file
@@ -374,9 +394,10 @@
 - ✅ **Pull-to-Refresh**
   - Fixed hanging issues on all list screens
 
-- ✅ **Presence Detection**
+- ✅ **Presence Detection** (further improved 2026-01-18)
   - Timeout mechanism for offline detection
   - Activity-based presence for cross-network scenarios
+  - See January 18, 2026 for additional improvements
 
 ---
 

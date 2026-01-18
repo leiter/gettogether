@@ -35,7 +35,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -57,12 +56,6 @@ fun ContactsTab(
 ) {
     val state by viewModel.state.collectAsState()
     val trustRequestsState by trustRequestsViewModel.state.collectAsState()
-
-    // Refresh contacts when screen is first displayed
-    LaunchedEffect(Unit) {
-        viewModel.refresh()
-        trustRequestsViewModel.refresh()
-    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(

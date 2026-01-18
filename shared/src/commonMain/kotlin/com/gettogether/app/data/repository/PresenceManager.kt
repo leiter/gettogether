@@ -51,9 +51,10 @@ class PresenceManager(
         val job = scope.launch {
             try {
                 // Immediately announce we're online
+                // RFC 3863 PIDF requires "open" or "closed" as the basic status
                 println("[PRESENCE-MANAGER] → Publishing initial ONLINE presence")
                 val timestamp = Clock.System.now().toEpochMilliseconds()
-                jamiBridge.publishPresence(accountId, isOnline = true, note = "")
+                jamiBridge.publishPresence(accountId, isOnline = true, note = "open")
                 println("[PRESENCE-MANAGER] ✓ Initial presence published with timestamp: $timestamp")
 
                 // Start periodic heartbeat
@@ -64,7 +65,7 @@ class PresenceManager(
                     println("[PRESENCE-MANAGER] → Heartbeat: Publishing ONLINE presence")
                     try {
                         val heartbeatTimestamp = Clock.System.now().toEpochMilliseconds()
-                        jamiBridge.publishPresence(accountId, isOnline = true, note = "")
+                        jamiBridge.publishPresence(accountId, isOnline = true, note = "open")
                         println("[PRESENCE-MANAGER] ✓ Heartbeat published with timestamp: $heartbeatTimestamp")
                     } catch (e: Exception) {
                         println("[PRESENCE-MANAGER] ✗ Heartbeat failed: ${e.message}")
@@ -96,11 +97,12 @@ class PresenceManager(
         }
 
         // Publish offline (best-effort)
+        // RFC 3863 PIDF requires "open" or "closed" as the basic status
         scope.launch {
             try {
                 val timestamp = Clock.System.now().toEpochMilliseconds()
                 println("[PRESENCE-MANAGER] → Publishing OFFLINE presence with timestamp: $timestamp")
-                jamiBridge.publishPresence(accountId, isOnline = false, note = "")
+                jamiBridge.publishPresence(accountId, isOnline = false, note = "closed")
                 println("[PRESENCE-MANAGER] ✓ Offline presence published")
             } catch (e: Exception) {
                 println("[PRESENCE-MANAGER] ✗ Failed to publish offline: ${e.message}")

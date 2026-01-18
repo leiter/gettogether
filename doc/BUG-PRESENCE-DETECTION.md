@@ -8,9 +8,9 @@
 
 ---
 
-## ✅ RESOLUTION (2026-01-18)
+## ✅ RESOLUTION (2026-01-18, Updated 2026-01-18)
 
-**This issue has been fully resolved by implementing contact presence polling.**
+**This issue has been fully resolved by implementing contact presence polling with stale event filtering.**
 
 ### What Was Fixed
 
@@ -18,11 +18,42 @@
 2. **Optimized for efficiency**: Only polls contacts currently marked as ONLINE
 3. **Extended timeout**: Increased to 90 seconds to allow polling to refresh first
 4. **Timeout as fallback**: Now serves its proper purpose (safety net when polling fails)
+5. **Stale event filtering**: Subscribe timestamp tracking to ignore stale daemon cache responses (NEW)
+6. **Skip immediate poll**: Avoid triggering stale cache on app start (NEW)
+7. **Cache clearing on account change**: Fresh state when switching accounts (NEW)
 
 ### Implementation
 
 See comprehensive documentation:
 → **[PRESENCE-POLLING-SOLUTION.md](./PRESENCE-POLLING-SOLUTION.md)** ← **WORKING SOLUTION**
+
+### Critical Fix: Stale Event Filtering (2026-01-18)
+
+The polling solution initially caused an **oscillation bug** where contacts would flip between online/offline every ~10 seconds:
+
+1. Polling triggers unsubscribe/resubscribe
+2. Daemon immediately returns **stale cached ONLINE** (not real network state)
+3. App updates contact to ONLINE
+4. 90 seconds later, timeout fires → contact goes OFFLINE
+5. Repeat...
+
+**Solution**: Track subscribe timestamps and ignore stale ONLINE events:
+
+```kotlin
+// Record timestamp BEFORE calling subscribeBuddy
+val now = Clock.System.now().toEpochMilliseconds()
+_lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+jamiBridge.subscribeBuddy(accountId, contact.uri, true)
+
+// In PresenceChanged handler:
+val timeSinceSubscribe = now - lastSubscribeTime
+val isLikelyFromPolling = timeSinceSubscribe < SUBSCRIBE_IGNORE_WINDOW_MS // 2 seconds
+
+if (event.isOnline && isLikelyFromPolling) {
+    // Ignore stale ONLINE from daemon cache
+    return
+}
+```
 
 ### Failed Approaches
 
@@ -33,8 +64,8 @@ Before finding the working solution, we attempted:
 ### Result
 
 - **Before**: Contacts showed stale cached "online" status, timeout was only correction mechanism
-- **After**: Contacts refreshed every 60 seconds via polling, timeout is fallback
-- **Impact**: Presence now reflects actual online/offline status with 60-second refresh rate
+- **After**: Contacts start OFFLINE, show ONLINE only from real network events, timeout as fallback
+- **Impact**: Presence now reflects actual online/offline status accurately
 - **Overhead**: Minimal (~0.1-1 second per cycle, only for online contacts)
 
 ---
