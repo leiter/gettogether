@@ -4,7 +4,7 @@
 
 export ANDROID_SDK_ROOT=/home/mandroid/Android/Sdk
 export ANDROID_HOME=$ANDROID_SDK_ROOT
-export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973
+export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.14206865
 export ANDROID_NDK=$ANDROID_NDK_HOME
 export ANDROID_NDK_ROOT=$ANDROID_NDK_HOME
 
@@ -14,6 +14,9 @@ export ANDROID_API=24
 
 # Add NDK toolchain to PATH
 export PATH=$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+
+# Add SDK cmake to PATH
+export PATH=$ANDROID_SDK_ROOT/cmake/4.1.2/bin:$PATH
 
 # Add extras/tools to PATH
 export PATH=/home/mandroid/Videos/letsJam/jami-daemon/extras/tools/build/bin:$PATH
@@ -26,3 +29,4 @@ echo "  ANDROID_NDK_HOME: $ANDROID_NDK_HOME"
 echo "  ANDROID_ABI:      $ANDROID_ABI"
 echo "  ANDROID_API:      $ANDROID_API"
 echo "  JAMI_DAEMON_DIR:  $JAMI_DAEMON_DIR"
+echo "  CMAKE:            $(cmake --version | head -1)"

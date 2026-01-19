@@ -8,7 +8,7 @@ echo "=================================="
 # Set all required environment variables
 export ANDROID_SDK_ROOT=/home/mandroid/Android/Sdk
 export ANDROID_HOME=$ANDROID_SDK_ROOT
-export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/27.0.12077973
+export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/29.0.14206865
 export ANDROID_NDK=$ANDROID_NDK_HOME
 export ANDROID_ABI=x86_64
 export ANDROID_API=24
@@ -19,6 +19,9 @@ INSTALL_PREFIX=$JAMI_DIR/contrib/x86_64-linux-android
 
 # Add both NDK bin and toolchain wrappers to PATH
 export PATH=$INSTALL_PREFIX/bin:$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+
+# Add SDK cmake to PATH
+export PATH=$ANDROID_SDK_ROOT/cmake/4.1.2/bin:$PATH
 
 echo "Environment:"
 echo "  NDK: $ANDROID_NDK_HOME"

@@ -65,6 +65,20 @@ class ConversationRepositoryImpl(
             }
         }
 
+        // Re-refresh conversations when contacts are updated (to get proper display names/avatars)
+        scope.launch {
+            contactRepository._contactsCache.collect { contactsMap ->
+                val accountId = accountRepository.currentAccountId.value
+                if (accountId != null && contactsMap[accountId]?.isNotEmpty() == true) {
+                    // Only refresh if we already have conversations cached (avoid initial double-load)
+                    if (_conversationsCache.value[accountId]?.isNotEmpty() == true) {
+                        println("ConversationRepository: Contacts updated, refreshing conversations for proper display names")
+                        refreshConversations(accountId)
+                    }
+                }
+            }
+        }
+
         // Auto-save conversations when cache changes
         scope.launch {
             _conversationsCache.collect { conversationsMap ->
