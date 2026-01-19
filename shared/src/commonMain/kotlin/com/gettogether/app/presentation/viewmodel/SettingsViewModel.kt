@@ -211,7 +211,7 @@ class SettingsViewModel(
     }
 
     fun hideEditProfileDialog() {
-        _state.update { it.copy(showEditProfileDialog = false, error = null) }
+        _state.update { it.copy(showEditProfileDialog = false, selectedAvatarUri = null, avatarCleared = false, error = null) }
     }
 
     private fun RegistrationState.toDisplayString(): String {
@@ -323,7 +323,7 @@ class SettingsViewModel(
     }
 
     fun clearSelectedAvatar() {
-        _state.update { it.copy(selectedAvatarUri = null) }
+        _state.update { it.copy(selectedAvatarUri = null, avatarCleared = true) }
     }
 
     /**
@@ -331,6 +331,7 @@ class SettingsViewModel(
      */
     fun updateProfileWithAvatar(displayName: String, avatarUri: String?) {
         viewModelScope.launch {
+            val avatarCleared = _state.value.avatarCleared
             _state.update { it.copy(isUpdatingProfile = true, isProcessingAvatar = true, error = null) }
 
             var processedAvatarPath: String? = null
@@ -357,20 +358,39 @@ class SettingsViewModel(
 
             _state.update { it.copy(isProcessingAvatar = false) }
 
+            // Determine what avatar action to take:
+            // - If new avatar selected: use processedAvatarPath
+            // - If user clicked "Remove": clear the avatar (pass clearAvatar=true)
+            // - Otherwise: keep existing avatar (don't update settingsRepository)
+            val shouldClearAvatar = avatarCleared && processedAvatarPath == null
+            val avatarChanged = processedAvatarPath != null || shouldClearAvatar
+
             // Update profile with processed avatar
             try {
-                accountRepository.updateProfile(displayName, processedAvatarPath)
-                // Persist avatar path so it survives app restarts
-                settingsRepository.updateAvatarPath(processedAvatarPath)
+                accountRepository.updateProfile(displayName, processedAvatarPath, clearAvatar = shouldClearAvatar)
+
+                // Only persist avatar path if avatar was actually changed
+                if (avatarChanged) {
+                    settingsRepository.updateAvatarPath(processedAvatarPath)
+                }
+
+                // Determine the avatar URI to show in state
+                val newAvatarUri = when {
+                    processedAvatarPath != null -> processedAvatarPath
+                    shouldClearAvatar -> null
+                    else -> _state.value.userProfile.avatarUri // Keep existing
+                }
+
                 _state.update {
                     it.copy(
                         userProfile = it.userProfile.copy(
                             displayName = displayName,
-                            avatarUri = processedAvatarPath
+                            avatarUri = newAvatarUri
                         ),
                         isUpdatingProfile = false,
                         showEditProfileDialog = false,
                         selectedAvatarUri = null,
+                        avatarCleared = false,
                         profileUpdateSuccess = "Profile updated successfully"
                     )
                 }

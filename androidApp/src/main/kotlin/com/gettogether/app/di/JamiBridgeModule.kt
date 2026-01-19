@@ -2,6 +2,7 @@ package com.gettogether.app.di
 
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.SwigJamiBridge
+import com.gettogether.app.network.NetworkMonitor
 import org.koin.android.ext.koin.androidContext
 import org.koin.dsl.module
 
@@ -11,4 +12,5 @@ import org.koin.dsl.module
  */
 val jamiBridgeModule = module {
     single<JamiBridge> { SwigJamiBridge(androidContext()) }
+    single { NetworkMonitor(androidContext(), get(), get()) }
 }

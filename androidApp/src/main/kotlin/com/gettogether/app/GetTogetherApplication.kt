@@ -9,6 +9,7 @@ import com.gettogether.app.di.sharedModule
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
+import com.gettogether.app.network.NetworkMonitor
 import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.NotificationHelper
 import com.gettogether.app.service.CallNotificationManager
@@ -55,6 +56,12 @@ class GetTogetherApplication : Application() {
         val daemonManager: DaemonManager by inject()
         daemonManager.start()
         android.util.Log.i("GetTogetherApp", "✓ Daemon start initiated (check DaemonManager logs for status)")
+
+        // Start network monitor (after daemon)
+        android.util.Log.d("GetTogetherApp", "→ Starting network monitor...")
+        val networkMonitor: NetworkMonitor by inject()
+        networkMonitor.start()
+        android.util.Log.i("GetTogetherApp", "✓ Network monitor started")
 
         // Setup global incoming call listener
         android.util.Log.d("GetTogetherApp", "→ Setting up incoming call listener...")

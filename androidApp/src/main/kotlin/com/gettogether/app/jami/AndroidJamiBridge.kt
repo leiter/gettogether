@@ -471,6 +471,15 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
         JamiService.setAccountActive(accountId, active)
     }
 
+    override suspend fun connectivityChanged() {
+        withContext(Dispatchers.IO) {
+            if (!nativeLoaded) return@withContext
+            Log.i(TAG, "[CONNECTIVITY] Notifying daemon about network change...")
+            JamiService.connectivityChanged()
+            Log.i(TAG, "[CONNECTIVITY] Daemon notified")
+        }
+    }
+
     override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext
         JamiService.updateProfile(accountId, displayName, avatarPath ?: "", "image/png", 0)

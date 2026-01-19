@@ -270,6 +270,12 @@ class IOSJamiBridge : JamiBridge {
         }
     }
 
+    override suspend fun connectivityChanged() {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: connectivityChanged (stub)")
+        }
+    }
+
     override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) {
         withContext(Dispatchers.Default) {
             NSLog("$TAG: updateProfile: $accountId, name=$displayName")

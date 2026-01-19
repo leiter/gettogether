@@ -360,16 +360,30 @@ class ConversationRepositoryImpl(
             // First try to get contact from cache (has custom names and proper display names)
             val cachedContact = contactsMap[member.uri]
 
-            val displayName = if (cachedContact != null) {
-                // Use cached contact's display name
-                cachedContact.displayName
+            // Check if cached display name is a real name or just a truncated URI fallback
+            val cachedDisplayName = cachedContact?.displayName
+            val hasRealDisplayName = cachedDisplayName != null &&
+                cachedDisplayName.isNotBlank() &&
+                cachedDisplayName != member.uri.take(8) &&  // Not a truncated URI
+                !cachedDisplayName.matches(Regex("^[0-9a-f]{8}$"))  // Not an 8-char hex string
+
+            val displayName = if (hasRealDisplayName) {
+                // Use cached contact's real display name
+                cachedDisplayName!!
             } else {
-                // Fall back to getting from bridge
+                // Fall back to getting from bridge (contact details may have profile info)
                 try {
                     val details = jamiBridge.getContactDetails(accountId, member.uri)
-                    details["displayName"]?.takeIf { it.isNotBlank() } ?: member.uri.take(8)
+                    val detailsName = details["displayName"]?.takeIf { it.isNotBlank() }
+                    if (detailsName != null) {
+                        // Update the cached contact with the real name
+                        println("ConversationRepository: Got real displayName from contactDetails: $detailsName for ${member.uri.take(8)}...")
+                        detailsName
+                    } else {
+                        cachedDisplayName ?: member.uri.take(8)
+                    }
                 } catch (e: Exception) {
-                    member.uri.take(8)
+                    cachedDisplayName ?: member.uri.take(8)
                 }
             }
 

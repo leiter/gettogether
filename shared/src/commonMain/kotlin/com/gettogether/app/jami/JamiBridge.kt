@@ -97,6 +97,12 @@ interface JamiBridge {
     suspend fun setAccountActive(accountId: String, active: Boolean)
 
     /**
+     * Notify daemon about network connectivity change.
+     * Should be called when network state changes (WiFi <-> Mobile, network lost/regained).
+     */
+    suspend fun connectivityChanged()
+
+    /**
      * Update account profile (display name and avatar).
      */
     suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?)

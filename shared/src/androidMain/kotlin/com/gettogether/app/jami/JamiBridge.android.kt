@@ -255,6 +255,13 @@ class AndroidJamiBridge(private val context: Context) : JamiBridge {
         nativeSetAccountActive(accountId, active)
     }
 
+    override suspend fun connectivityChanged() {
+        withContext(Dispatchers.IO) {
+            android.util.Log.i(TAG, "[CONNECTIVITY] connectivityChanged() - stub implementation")
+            // This is a stub - the actual implementation is in SwigJamiBridge
+        }
+    }
+
     override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) =
         withContext(Dispatchers.IO) {
             nativeUpdateProfile(accountId, displayName, avatarPath ?: "", "", 0)

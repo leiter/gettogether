@@ -674,6 +674,13 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         JamiService.setAccountActive(accountId, active)
     }
 
+    override suspend fun connectivityChanged() = withContext(Dispatchers.IO) {
+        if (!nativeLoaded) return@withContext
+        Log.i(TAG, "[CONNECTIVITY] Notifying daemon about network change...")
+        JamiService.connectivityChanged()
+        Log.i(TAG, "[CONNECTIVITY] Daemon notified")
+    }
+
     override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext
         JamiService.updateProfile(accountId, displayName, avatarPath ?: "", "image/png", 0)
@@ -842,7 +849,9 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> {
         if (!nativeLoaded) return emptyMap()
-        return stringMapToKotlin(JamiService.conversationInfos(accountId, conversationId))
+        val info = stringMapToKotlin(JamiService.conversationInfos(accountId, conversationId))
+        Log.d(TAG, "getConversationInfo: convId=${conversationId.take(8)}... info=$info")
+        return info
     }
 
     override suspend fun updateConversationInfo(accountId: String, conversationId: String, info: Map<String, String>) = withContext(Dispatchers.IO) {
@@ -856,6 +865,7 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         val result = mutableListOf<ConversationMember>()
         for (i in 0 until members.size) {
             val map = stringMapToKotlin(members[i])
+            Log.d(TAG, "getConversationMembers: member[$i] = $map")
             val role = when (map["role"]?.uppercase()) {
                 "ADMIN" -> MemberRole.ADMIN
                 "MEMBER" -> MemberRole.MEMBER

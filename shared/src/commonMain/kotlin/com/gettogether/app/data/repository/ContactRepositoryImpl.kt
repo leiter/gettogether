@@ -49,6 +49,9 @@ class ContactRepositoryImpl(
     // Cache for last subscribe timestamp by contact URI (to detect stale daemon cache responses)
     private val _lastSubscribeTimestamp = MutableStateFlow<Map<String, Long>>(emptyMap())
 
+    // Track which contacts we've already subscribed to (to avoid re-setting timestamp on refresh)
+    private val _subscribedContacts = mutableSetOf<String>()
+
     // Cache for trust requests by account
     private val _trustRequestsCache = MutableStateFlow<Map<String, List<TrustRequest>>>(emptyMap())
 
@@ -79,6 +82,7 @@ class ContactRepositoryImpl(
                     _onlineStatusCache.value = emptyMap()
                     _lastPresenceTimestamp.value = emptyMap()
                     _lastSubscribeTimestamp.value = emptyMap()
+                    _subscribedContacts.clear()
 
                     // Load persisted contacts first (for displayName, avatar, customName)
                     loadPersistedContacts(accountId)
@@ -89,6 +93,7 @@ class ContactRepositoryImpl(
                     // Account logged out - clean up shared flows to free resources
                     println("ContactRepository: Clearing shared flows (account logout)")
                     sharedContactFlows.clear()
+                    _subscribedContacts.clear()
                 }
             }
         }
@@ -351,12 +356,19 @@ class ContactRepositoryImpl(
             println("ContactRepository: → Subscribing to presence for all contacts...")
             contacts.forEach { contact ->
                 try {
-                    // Record subscribe timestamp BEFORE calling subscribeBuddy
-                    // This ensures the stale filter catches immediate daemon responses
-                    val now = Clock.System.now().toEpochMilliseconds()
-                    _lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+                    val isFirstSubscribe = !_subscribedContacts.contains(contact.uri)
 
-                    println("  → Subscribing to: ${contact.uri.take(16)}...")
+                    // Only record subscribe timestamp on FIRST subscribe
+                    // This prevents the stale filter from blocking real presence updates on refresh
+                    if (isFirstSubscribe) {
+                        val now = Clock.System.now().toEpochMilliseconds()
+                        _lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+                        _subscribedContacts.add(contact.uri)
+                        println("  → First subscribe to: ${contact.uri.take(16)}...")
+                    } else {
+                        println("  → Re-subscribing to: ${contact.uri.take(16)}... (no timestamp update)")
+                    }
+
                     jamiBridge.subscribeBuddy(accountId, contact.uri, true)
                 } catch (e: Exception) {
                     println("  ✗ Failed to subscribe: ${e.message}")
@@ -456,6 +468,12 @@ class ContactRepositoryImpl(
                     if (event.isOnline) {
                         println("[PRESENCE-UPDATE]   → Real network ONLINE event, updating timestamp")
                         _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
+
+                        // Trigger profile sync when contact comes online
+                        // This ensures they receive our updated profile even if they missed earlier updates
+                        scope.launch {
+                            triggerProfileSyncToContact(event.uri)
+                        }
                     }
 
                     // Update contact in cache
@@ -520,11 +538,14 @@ class ContactRepositoryImpl(
 
                 if (event.accountId == accountId) {
                     scope.launch {
-                        // Save avatar if present
+                        // Save avatar if present, or clear it if contact removed their avatar
                         var avatarPath: String? = null
                         if (event.avatarBase64 != null && avatarStorage != null) {
                             avatarPath = avatarStorage.saveContactAvatar(event.contactUri, event.avatarBase64)
                             println("[CONTACT-EVENT]   Avatar saved to: $avatarPath")
+                        } else {
+                            // Contact has no avatar - clear any cached avatar
+                            println("[CONTACT-EVENT]   No avatar in profile - clearing cached avatar")
                         }
 
                         // Update contact in cache with new profile info
@@ -533,9 +554,10 @@ class ContactRepositoryImpl(
 
                         if (existingContact != null) {
                             // Update existing contact
+                            // Note: avatarPath is null if contact has no avatar - this clears old avatar
                             val updatedContact = existingContact.copy(
                                 displayName = event.displayName ?: existingContact.displayName,
-                                avatarUri = avatarPath ?: existingContact.avatarUri
+                                avatarUri = avatarPath
                             )
                             val updatedContacts = currentContacts.map { contact ->
                                 if (contact.uri == event.contactUri) updatedContact else contact
@@ -696,6 +718,52 @@ class ContactRepositoryImpl(
             newCache[accountId] = updatedContacts
             _contactsCache.value = newCache
             println("ContactRepository: Cache updated, flow should emit now")
+        }
+    }
+
+    // Track last profile sync time to debounce rapid online/offline events
+    private var lastProfileSyncTimestamp: Long = 0
+    private val PROFILE_SYNC_DEBOUNCE_MS = 5_000L // Minimum 5 seconds between profile syncs
+
+    /**
+     * Trigger sending our profile to a contact that just came online.
+     *
+     * When a contact comes online, we want to ensure they have our latest profile,
+     * especially if they were offline when we last updated our profile.
+     *
+     * The daemon's sendProfileToPeers() only sends to currently connected peers,
+     * so contacts who were offline during a profile update won't receive it automatically.
+     * This method triggers a profile push by calling updateProfile with current values.
+     */
+    private suspend fun triggerProfileSyncToContact(contactUri: String) {
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        // Debounce to avoid excessive profile syncs when multiple contacts come online
+        if (now - lastProfileSyncTimestamp < PROFILE_SYNC_DEBOUNCE_MS) {
+            println("[PROFILE-SYNC] Debouncing profile sync for ${contactUri.take(16)}... (too soon since last sync)")
+            return
+        }
+
+        try {
+            val currentProfile = accountRepository.accountState.value
+            val displayName = currentProfile.displayName
+
+            if (displayName.isBlank()) {
+                println("[PROFILE-SYNC] Skipping profile sync - no display name set")
+                return
+            }
+
+            println("[PROFILE-SYNC] Contact ${contactUri.take(16)}... came online - triggering profile push")
+            println("[PROFILE-SYNC]   Current displayName: '$displayName'")
+
+            // Call updateProfile to trigger sendProfileToPeers()
+            // This will send our profile to all connected peers including the newly online contact
+            accountRepository.updateProfile(displayName, null)
+
+            lastProfileSyncTimestamp = now
+            println("[PROFILE-SYNC] ✓ Profile push triggered successfully")
+        } catch (e: Exception) {
+            println("[PROFILE-SYNC] ✗ Failed to trigger profile sync: ${e.message}")
         }
     }
 

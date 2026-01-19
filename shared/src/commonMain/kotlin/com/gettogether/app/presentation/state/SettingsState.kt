@@ -13,6 +13,7 @@ data class SettingsState(
     val isUpdatingProfile: Boolean = false,
     val profileUpdateSuccess: String? = null,
     val selectedAvatarUri: String? = null,
+    val avatarCleared: Boolean = false, // True when user explicitly clicks "Remove" to clear avatar
     val isProcessingAvatar: Boolean = false,
     // Export account
     val showExportDialog: Boolean = false,

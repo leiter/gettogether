@@ -22,7 +22,8 @@ import kotlinx.coroutines.withTimeout
  */
 class AccountRepository(
     private val jamiBridge: JamiBridge,
-    private val presenceManager: PresenceManager
+    private val presenceManager: PresenceManager,
+    private val settingsRepository: SettingsRepository? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -46,6 +47,16 @@ class AccountRepository(
             println("[ACCOUNT-RESTORE] Account events collection started successfully")
         } catch (e: Exception) {
             println("[ACCOUNT-RESTORE] ERROR: Failed to start account events collection: ${e.message}")
+        }
+
+        // Observe avatar path from settings to keep AccountState in sync
+        settingsRepository?.let { settings ->
+            scope.launch {
+                settings.avatarPath.collect { avatarPath ->
+                    _accountState.value = _accountState.value.copy(avatarPath = avatarPath)
+                    println("[ACCOUNT] Avatar path synced from settings: $avatarPath")
+                }
+            }
         }
 
         // Watch account changes and manage presence broadcasting
@@ -302,6 +313,17 @@ class AccountRepository(
                     username = username,
                     jamiId = username.ifEmpty { accountId }
                 )
+
+                // Create vCard profile with the display name (inside NonCancellable to ensure completion)
+                // This is essential for profile exchange with contacts
+                try {
+                    println("[ACCOUNT-CREATE] Creating vCard profile with displayName='$displayName'...")
+                    jamiBridge.updateProfile(accountId, displayName, null)
+                    println("[ACCOUNT-CREATE] ✓ vCard profile created successfully")
+                } catch (e: Exception) {
+                    println("[ACCOUNT-CREATE] ⚠ vCard creation failed (non-fatal): ${e.message}")
+                    // Non-fatal - account was still created, profile can be updated later
+                }
             } catch (e: Exception) {
                 println("[ACCOUNT-CREATE] ⚠ Registration wait exception: ${e.message}")
                 // Continue anyway - account was created, may just need time to register
@@ -433,12 +455,30 @@ class AccountRepository(
 
     /**
      * Update the profile (display name and avatar) for the current account.
+     *
+     * @param displayName The new display name
+     * @param avatarPath The avatar file path. If null, uses the currently stored avatar path.
+     * @param clearAvatar If true, explicitly clears the avatar (sets to null even if avatarPath is null)
      */
-    suspend fun updateProfile(displayName: String, avatarPath: String? = null) {
+    suspend fun updateProfile(displayName: String, avatarPath: String? = null, clearAvatar: Boolean = false) {
         val accountId = _currentAccountId.value ?: return
-        jamiBridge.updateProfile(accountId, displayName, avatarPath)
 
-        _accountState.value = _accountState.value.copy(displayName = displayName)
+        // Determine the avatar path to use:
+        // - If avatarPath is provided, use it
+        // - If clearAvatar is true, use null (clear the avatar)
+        // - Otherwise, use the currently stored avatar path
+        val effectiveAvatarPath = when {
+            avatarPath != null -> avatarPath
+            clearAvatar -> null
+            else -> _accountState.value.avatarPath
+        }
+
+        jamiBridge.updateProfile(accountId, displayName, effectiveAvatarPath)
+
+        _accountState.value = _accountState.value.copy(
+            displayName = displayName,
+            avatarPath = effectiveAvatarPath
+        )
     }
 
     /**
@@ -661,7 +701,14 @@ class AccountRepository(
                 println("[ACCOUNT-EVENT]   Current account ID: ${_currentAccountId.value}")
                 println("[ACCOUNT-EVENT]   Is for current account: ${event.accountId == _currentAccountId.value}")
 
-                if (event.accountId == _currentAccountId.value) {
+                // If we don't have a current account but daemon reports one, reload accounts
+                // This handles the case where daemon initializes after our initial account load
+                if (_currentAccountId.value == null && event.accountId.isNotEmpty()) {
+                    println("[ACCOUNT-EVENT] No current account but daemon reports account ${event.accountId.take(8)}... - reloading accounts")
+                    scope.launch {
+                        loadAccounts()
+                    }
+                } else if (event.accountId == _currentAccountId.value) {
                     val oldState = _accountState.value.registrationState
                     _accountState.value = _accountState.value.copy(
                         registrationState = event.state
@@ -731,5 +778,6 @@ data class AccountState(
     val jamiId: String = "",
     val registrationState: RegistrationState = RegistrationState.UNREGISTERED,
     val isLoaded: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val avatarPath: String? = null
 )

@@ -161,6 +161,7 @@ fun SettingsTab(
             currentDisplayName = state.userProfile.displayName,
             currentAvatarUri = state.userProfile.avatarUri,
             selectedAvatarUri = state.selectedAvatarUri,
+            avatarCleared = state.avatarCleared,
             isUpdating = state.isUpdatingProfile,
             isProcessingAvatar = state.isProcessingAvatar,
             error = state.error,
@@ -670,6 +671,7 @@ private fun EditProfileDialog(
     currentDisplayName: String,
     currentAvatarUri: String?,
     selectedAvatarUri: String?,
+    avatarCleared: Boolean,
     isUpdating: Boolean,
     isProcessingAvatar: Boolean,
     error: String?,
@@ -679,7 +681,12 @@ private fun EditProfileDialog(
     onClearAvatar: () -> Unit
 ) {
     var displayName by remember { mutableStateOf(currentDisplayName) }
-    val avatarToShow = selectedAvatarUri ?: currentAvatarUri
+    // Show avatar preview: new selection > current (unless cleared) > null
+    val avatarToShow = when {
+        selectedAvatarUri != null -> selectedAvatarUri
+        avatarCleared -> null  // User clicked Remove - show no avatar
+        else -> currentAvatarUri
+    }
 
     AlertDialog(
         onDismissRequest = { if (!isUpdating) onDismiss() },
@@ -718,7 +725,8 @@ private fun EditProfileDialog(
                         }
                     }
 
-                    if (selectedAvatarUri != null || currentAvatarUri != null) {
+                    // Show Remove button only if there's an avatar to remove (and not already cleared)
+                    if (!avatarCleared && (selectedAvatarUri != null || currentAvatarUri != null)) {
                         Spacer(modifier = Modifier.width(16.dp))
                         TextButton(
                             onClick = onClearAvatar,
