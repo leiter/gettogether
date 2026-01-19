@@ -81,6 +81,13 @@ kotlin {
             implementation(libs.kermit)
         }
 
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+            implementation(kotlin("test-common"))
+            implementation(kotlin("test-annotations-common"))
+            implementation(libs.kotlinx.coroutines.test)
+        }
+
         androidMain.dependencies {
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
@@ -89,6 +96,15 @@ kotlin {
             implementation(libs.androidx.exifinterface)
             implementation(libs.ktor.client.android)
             implementation(libs.koin.android)
+        }
+
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(kotlin("test-junit"))
+                implementation(libs.junit)
+                implementation(libs.truth)
+                implementation(libs.kotlinx.coroutines.test)
+            }
         }
 
         iosMain.dependencies {

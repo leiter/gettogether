@@ -8,6 +8,9 @@ import kotlinx.serialization.json.Json
 
 /**
  * Android implementation of ContactPersistence using SharedPreferences.
+ *
+ * Uses ContactPersistenceDto internally to avoid persisting volatile fields
+ * like isBanned and isOnline, which should be fetched fresh from the daemon.
  */
 class AndroidContactPersistence(context: Context) : ContactPersistence {
 
@@ -23,18 +26,53 @@ class AndroidContactPersistence(context: Context) : ContactPersistence {
 
     override suspend fun saveContacts(accountId: String, contacts: List<Contact>) {
         val key = getContactsKey(accountId)
-        val jsonString = json.encodeToString(contacts)
+        // Convert to DTOs to exclude volatile fields (isBanned, isOnline)
+        val dtos = contacts.toPersistenceDtos()
+        println("[CONTACT-PERSIST] Saving ${dtos.size} contacts for account: $accountId")
+        dtos.forEach { d ->
+            println("[CONTACT-PERSIST]   - ${d.displayName}: avatarUri=${d.avatarUri?.take(50) ?: "null"}")
+        }
+        val jsonString = json.encodeToString(dtos)
         prefs.edit().putString(key, jsonString).apply()
+        println("[CONTACT-PERSIST] ✓ Saved, JSON length: ${jsonString.length}")
     }
 
     override suspend fun loadContacts(accountId: String): List<Contact> {
         val key = getContactsKey(accountId)
-        val jsonString = prefs.getString(key, null) ?: return emptyList()
+        val jsonString = prefs.getString(key, null)
+        if (jsonString == null) {
+            println("[CONTACT-PERSIST] No persisted contacts found for account: $accountId")
+            return emptyList()
+        }
+        println("[CONTACT-PERSIST] Loading contacts, JSON length: ${jsonString.length}")
         return try {
-            json.decodeFromString<List<Contact>>(jsonString)
+            // Try to deserialize as DTOs first (new format)
+            val dtos = json.decodeFromString<List<ContactPersistenceDto>>(jsonString)
+            val contacts = dtos.toContacts()
+            println("[CONTACT-PERSIST] ✓ Loaded ${contacts.size} contacts as DTOs")
+            contacts.forEach { c ->
+                println("[CONTACT-PERSIST]   - ${c.displayName}: avatarUri=${c.avatarUri?.take(50) ?: "null"}")
+            }
+            contacts
         } catch (e: Exception) {
-            // If deserialization fails, return empty list
-            emptyList()
+            println("[CONTACT-PERSIST] DTO deserialization failed: ${e.message}, trying old format...")
+            // Fall back to old Contact format for migration
+            try {
+                val contacts = json.decodeFromString<List<Contact>>(jsonString)
+                println("[CONTACT-PERSIST] ✓ Loaded ${contacts.size} contacts as old Contact format, migrating...")
+                // Re-save in new DTO format for future loads
+                saveContacts(accountId, contacts)
+                // Return with volatile fields reset to defaults
+                val result = contacts.map { it.copy(isBanned = false, isOnline = false) }
+                result.forEach { c ->
+                    println("[CONTACT-PERSIST]   - ${c.displayName}: avatarUri=${c.avatarUri?.take(50) ?: "null"}")
+                }
+                result
+            } catch (e2: Exception) {
+                println("[CONTACT-PERSIST] ✗ Both formats failed: ${e2.message}")
+                // If both fail, return empty list
+                emptyList()
+            }
         }
     }
 

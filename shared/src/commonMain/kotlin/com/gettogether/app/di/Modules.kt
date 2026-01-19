@@ -44,7 +44,7 @@ val sharedModule = module {
     }
     single { ContactRepositoryImpl(get(), get(), get(), get(), getOrNull()) }
     single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }
-    single { ConversationRepositoryImpl(get(), get(), get(), get(), getOrNull(), getOrNull()) }
+    single { ConversationRepositoryImpl(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull()) }
 
     // ViewModels
     // Using factory for CreateAccountViewModel to work around iOS koinViewModel issue

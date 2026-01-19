@@ -7,6 +7,9 @@ import platform.Foundation.NSUserDefaults
 
 /**
  * iOS implementation of ContactPersistence using UserDefaults.
+ *
+ * Uses ContactPersistenceDto internally to avoid persisting volatile fields
+ * like isBanned and isOnline, which should be fetched fresh from the daemon.
  */
 class IosContactPersistence : ContactPersistence {
 
@@ -19,7 +22,9 @@ class IosContactPersistence : ContactPersistence {
 
     override suspend fun saveContacts(accountId: String, contacts: List<Contact>) {
         val key = getContactsKey(accountId)
-        val jsonString = json.encodeToString(contacts)
+        // Convert to DTOs to exclude volatile fields (isBanned, isOnline)
+        val dtos = contacts.toPersistenceDtos()
+        val jsonString = json.encodeToString(dtos)
         userDefaults.setObject(jsonString, forKey = key)
         userDefaults.synchronize()
     }
@@ -28,10 +33,21 @@ class IosContactPersistence : ContactPersistence {
         val key = getContactsKey(accountId)
         val jsonString = userDefaults.stringForKey(key) ?: return emptyList()
         return try {
-            json.decodeFromString<List<Contact>>(jsonString)
+            // Try to deserialize as DTOs first (new format)
+            val dtos = json.decodeFromString<List<ContactPersistenceDto>>(jsonString)
+            dtos.toContacts()
         } catch (e: Exception) {
-            // If deserialization fails, return empty list
-            emptyList()
+            // Fall back to old Contact format for migration
+            try {
+                val contacts = json.decodeFromString<List<Contact>>(jsonString)
+                // Re-save in new DTO format for future loads
+                saveContacts(accountId, contacts)
+                // Return with volatile fields reset to defaults
+                contacts.map { it.copy(isBanned = false, isOnline = false) }
+            } catch (e2: Exception) {
+                // If both fail, return empty list
+                emptyList()
+            }
         }
     }
 

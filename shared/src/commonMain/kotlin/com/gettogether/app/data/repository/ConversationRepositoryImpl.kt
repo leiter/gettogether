@@ -8,6 +8,8 @@ import com.gettogether.app.domain.model.MessageType
 import com.gettogether.app.domain.repository.ConversationRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiConversationEvent
+import com.gettogether.app.platform.ImageProcessingResult
+import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationConstants
 import com.gettogether.app.platform.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +31,8 @@ class ConversationRepositoryImpl(
     private val conversationPersistence: com.gettogether.app.data.persistence.ConversationPersistence,
     private val contactRepository: ContactRepositoryImpl,
     private val notificationHelper: NotificationHelper? = null,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val imageProcessor: ImageProcessor? = null
 ) : ConversationRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -167,46 +170,130 @@ class ConversationRepositoryImpl(
         conversationId: String,
         content: String
     ): Result<Message> {
-        return try {
-            println("ConversationRepository.sendMessage: accountId=$accountId, conversationId=$conversationId, content='$content'")
-            jamiBridge.sendMessage(accountId, conversationId, content, null)
-            println("ConversationRepository.sendMessage: jamiBridge.sendMessage completed")
+        return sendMessageWithRetry(accountId, conversationId, content)
+    }
 
-            val message = Message(
-                id = Clock.System.now().toEpochMilliseconds().toString(),
-                conversationId = conversationId,
-                authorId = accountId,
-                content = content,
-                timestamp = Clock.System.now(),
-                status = MessageStatus.SENT,
-                type = MessageType.TEXT
-            )
+    /**
+     * Send a message with retry logic for ban-related errors.
+     *
+     * Ban errors are often temporary (e.g., due to stale ban state) and can be
+     * resolved by refreshing the contact's ban status and retrying.
+     *
+     * @param maxRetries Maximum number of retry attempts (default: 3)
+     * @param initialDelayMs Initial delay before first retry in milliseconds (default: 1000)
+     */
+    private suspend fun sendMessageWithRetry(
+        accountId: String,
+        conversationId: String,
+        content: String,
+        maxRetries: Int = 3,
+        initialDelayMs: Long = 1000
+    ): Result<Message> {
+        var lastException: Exception? = null
+        var currentDelay = initialDelayMs
 
-            // Add to cache (sorted by timestamp)
-            val key = "$accountId:$conversationId"
-            val currentMessages = _messagesCache.value[key] ?: emptyList()
-            val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
-            _messagesCache.value = _messagesCache.value + (key to updatedMessages)
-            println("ConversationRepository.sendMessage: Message added to cache, total messages=${updatedMessages.size}")
+        for (attempt in 0..maxRetries) {
+            try {
+                if (attempt > 0) {
+                    println("ConversationRepository.sendMessage: Retry attempt $attempt/$maxRetries after ${currentDelay}ms delay")
+                }
+                println("ConversationRepository.sendMessage: accountId=$accountId, conversationId=$conversationId, content='$content'")
+                jamiBridge.sendMessage(accountId, conversationId, content, null)
+                println("ConversationRepository.sendMessage: jamiBridge.sendMessage completed")
 
-            Result.success(message)
+                val message = Message(
+                    id = Clock.System.now().toEpochMilliseconds().toString(),
+                    conversationId = conversationId,
+                    authorId = accountId,
+                    content = content,
+                    timestamp = Clock.System.now(),
+                    status = MessageStatus.SENT,
+                    type = MessageType.TEXT
+                )
+
+                // Add to cache (sorted by timestamp)
+                val key = "$accountId:$conversationId"
+                val currentMessages = _messagesCache.value[key] ?: emptyList()
+                val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
+                _messagesCache.value = _messagesCache.value + (key to updatedMessages)
+                println("ConversationRepository.sendMessage: Message added to cache, total messages=${updatedMessages.size}")
+
+                return Result.success(message)
+            } catch (e: Exception) {
+                lastException = e
+                println("ConversationRepository.sendMessage: Exception - ${e.message}")
+
+                // Only retry for ban-related errors
+                if (!BanErrorDetector.isBanRelatedError(e)) {
+                    println("ConversationRepository.sendMessage: Non-ban error, not retrying")
+                    return Result.failure(e)
+                }
+
+                // Don't retry if we've exhausted retries
+                if (attempt >= maxRetries) {
+                    println("ConversationRepository.sendMessage: Max retries ($maxRetries) reached, giving up")
+                    break
+                }
+
+                // Attempt to refresh contact ban status before retrying
+                println("ConversationRepository.sendMessage: Ban-related error detected, refreshing contact status...")
+                refreshContactBanStatus(accountId, conversationId)
+
+                // Exponential backoff delay before retry
+                kotlinx.coroutines.delay(currentDelay)
+                currentDelay *= 2  // Double delay for next retry
+            }
+        }
+
+        return Result.failure(lastException ?: Exception("Send message failed after retries"))
+    }
+
+    /**
+     * Refresh the ban status of contacts in a conversation.
+     *
+     * This queries the daemon for the current ban status and updates the
+     * contact repository cache to ensure we have fresh state.
+     */
+    private suspend fun refreshContactBanStatus(accountId: String, conversationId: String) {
+        try {
+            // Get conversation members
+            val members = jamiBridge.getConversationMembers(accountId, conversationId)
+            println("ConversationRepository: Refreshing ban status for ${members.size} members")
+
+            // Refresh contacts from daemon (this will update ban status)
+            contactRepository.refreshContacts(accountId)
+
+            println("ConversationRepository: Contact ban status refreshed")
         } catch (e: Exception) {
-            println("ConversationRepository.sendMessage: Exception - ${e.message}")
-            Result.failure(e)
+            println("ConversationRepository: Failed to refresh contact ban status: ${e.message}")
+            // Continue anyway, the retry might still work
         }
     }
 
     override suspend fun createGroupConversation(
         accountId: String,
         title: String,
-        participantIds: List<String>
+        participantIds: List<String>,
+        avatarUri: String?
     ): Result<Conversation> {
         return try {
             val conversationId = jamiBridge.startConversation(accountId)
 
-            // Update conversation info with title
+            // Process avatar if provided (compress to avoid PJ_ETOOLONG error - see issue #1071)
+            val processedAvatarPath = avatarUri?.let { uri ->
+                processAvatarForGroup(uri)
+            }
+
+            // Update conversation info with title and optional avatar
+            val conversationInfo = mutableMapOf<String, String>()
             if (title.isNotBlank()) {
-                jamiBridge.updateConversationInfo(accountId, conversationId, mapOf("title" to title))
+                conversationInfo["title"] = title
+            }
+            if (processedAvatarPath != null) {
+                conversationInfo["avatar"] = processedAvatarPath
+            }
+            if (conversationInfo.isNotEmpty()) {
+                jamiBridge.updateConversationInfo(accountId, conversationId, conversationInfo)
             }
 
             // Add participants
@@ -231,6 +318,48 @@ class ConversationRepositoryImpl(
             Result.success(conversation)
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    /**
+     * Process an avatar image for group creation.
+     *
+     * Compresses the avatar to avoid "PJ_ETOOLONG" errors when setting
+     * conversation info with large images (issue #1071).
+     *
+     * @param avatarUri The source avatar URI
+     * @return The processed avatar file path, or null if processing fails
+     */
+    private suspend fun processAvatarForGroup(avatarUri: String): String? {
+        if (imageProcessor == null) {
+            println("ConversationRepository: ImageProcessor not available, skipping avatar compression")
+            return null
+        }
+
+        return try {
+            println("ConversationRepository: Processing avatar for group: $avatarUri")
+
+            // Compress to 128x128 and target 50KB to ensure it fits in conversation info
+            // Group avatars are smaller than profile avatars to reduce sync overhead
+            val result = imageProcessor.processImage(
+                sourceUri = avatarUri,
+                maxSize = 128,      // Smaller than profile avatars
+                targetSizeKB = 50   // More aggressive compression
+            )
+
+            when (result) {
+                is ImageProcessingResult.Success -> {
+                    println("ConversationRepository: ✓ Avatar processed: ${result.filePath} (${result.sizeBytes} bytes)")
+                    result.filePath
+                }
+                is ImageProcessingResult.Error -> {
+                    println("ConversationRepository: ✗ Avatar processing failed: ${result.message}")
+                    null
+                }
+            }
+        } catch (e: Exception) {
+            println("ConversationRepository: ✗ Avatar processing exception: ${e.message}")
+            null
         }
     }
 
