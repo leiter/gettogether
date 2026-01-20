@@ -683,7 +683,18 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     override suspend fun updateProfile(accountId: String, displayName: String, avatarPath: String?) = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext
-        JamiService.updateProfile(accountId, displayName, avatarPath ?: "", "image/png", 0)
+        // Determine MIME type based on file extension
+        // IMPORTANT: If avatarPath is null/empty, pass empty mimeType to preserve existing photo
+        // The daemon removes existing photo when fileType is non-empty but avatar path is invalid
+        val mimeType = when {
+            avatarPath.isNullOrEmpty() -> "" // Preserve existing photo - don't enter photo processing block
+            avatarPath.endsWith(".jpg", ignoreCase = true) -> "image/jpeg"
+            avatarPath.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
+            avatarPath.endsWith(".png", ignoreCase = true) -> "image/png"
+            else -> "image/jpeg" // Default for valid paths without recognized extension
+        }
+        Log.d(TAG, "updateProfile: accountId=$accountId, displayName=$displayName, avatarPath=$avatarPath, mimeType=$mimeType")
+        JamiService.updateProfile(accountId, displayName, avatarPath ?: "", mimeType, 0)
     }
 
     override suspend fun registerName(accountId: String, name: String, password: String): Boolean = withContext(Dispatchers.IO) {

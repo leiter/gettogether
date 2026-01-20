@@ -8,6 +8,7 @@ import com.gettogether.app.domain.model.MessageType
 import com.gettogether.app.domain.repository.ConversationRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiConversationEvent
+import com.gettogether.app.jami.MemberEventType
 import com.gettogether.app.platform.ImageProcessingResult
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationConstants
@@ -58,8 +59,9 @@ class ConversationRepositoryImpl(
         scope.launch {
             accountRepository.currentAccountId.collect { accountId ->
                 if (accountId != null) {
+                    // TODO: SharedPrefs persistence disabled - might be deleted
                     // Load persisted conversations first
-                    loadPersistedConversations(accountId)
+                    // loadPersistedConversations(accountId)
                     // Then refresh from Jami
                     refreshConversations(accountId)
                     // Also refresh conversation requests
@@ -75,60 +77,62 @@ class ConversationRepositoryImpl(
                 if (accountId != null && contactsMap[accountId]?.isNotEmpty() == true) {
                     // Only refresh if we already have conversations cached (avoid initial double-load)
                     if (_conversationsCache.value[accountId]?.isNotEmpty() == true) {
-                        println("ConversationRepository: Contacts updated, refreshing conversations for proper display names")
+                        println("ConversationRepository: Contacts updated, refreshing conversations for display names/avatars")
                         refreshConversations(accountId)
                     }
                 }
             }
         }
 
+        // TODO: SharedPrefs persistence disabled - might be deleted
         // Auto-save conversations when cache changes
-        scope.launch {
-            _conversationsCache.collect { conversationsMap ->
-                println("ConversationRepository: Auto-save conversations triggered (${conversationsMap.size} accounts)")
-                conversationsMap.forEach { (accountId, conversations) ->
-                    println("  → Saving ${conversations.size} conversations for account $accountId")
-                    try {
-                        conversationPersistence.saveConversations(accountId, conversations)
-                        println("  ✓ Saved conversations for account $accountId")
-                    } catch (e: Exception) {
-                        println("  ✗ Failed to save conversations: ${e.message}")
-                    }
-                }
-            }
-        }
+        // scope.launch {
+        //     _conversationsCache.collect { conversationsMap ->
+        //         println("ConversationRepository: Auto-save conversations triggered (${conversationsMap.size} accounts)")
+        //         conversationsMap.forEach { (accountId, conversations) ->
+        //             println("  → Saving ${conversations.size} conversations for account $accountId")
+        //             try {
+        //                 conversationPersistence.saveConversations(accountId, conversations)
+        //                 println("  ✓ Saved conversations for account $accountId")
+        //             } catch (e: Exception) {
+        //                 println("  ✗ Failed to save conversations: ${e.message}")
+        //             }
+        //         }
+        //     }
+        // }
 
+        // TODO: SharedPrefs persistence disabled - might be deleted
         // Auto-save messages when cache changes
-        scope.launch {
-            _messagesCache.collect { messagesMap ->
-                println("ConversationRepository: Auto-save messages triggered (${messagesMap.size} conversations)")
-                if (messagesMap.isEmpty()) {
-                    println("ConversationRepository: No messages to save (cache is empty)")
-                }
-                messagesMap.forEach { (key, messages) ->
-                    println("ConversationRepository: Processing key='$key', messages=${messages.size}")
-                    val parts = key.split(":")
-                    if (parts.size == 2) {
-                        val accountId = parts[0]
-                        val conversationId = parts[1]
-                        if (messages.isNotEmpty()) {
-                            println("  → Saving ${messages.size} messages for conversation $conversationId")
-                            try {
-                                conversationPersistence.saveMessages(accountId, conversationId, messages)
-                                println("  ✓ Saved messages for conversation $conversationId")
-                            } catch (e: Exception) {
-                                println("  ✗ Failed to save messages: ${e.message}")
-                                e.printStackTrace()
-                            }
-                        } else {
-                            println("  → Conversation $conversationId has 0 messages, skipping save")
-                        }
-                    } else {
-                        println("  ✗ Invalid key format: '$key' (expected 'accountId:conversationId')")
-                    }
-                }
-            }
-        }
+        // scope.launch {
+        //     _messagesCache.collect { messagesMap ->
+        //         println("ConversationRepository: Auto-save messages triggered (${messagesMap.size} conversations)")
+        //         if (messagesMap.isEmpty()) {
+        //             println("ConversationRepository: No messages to save (cache is empty)")
+        //         }
+        //         messagesMap.forEach { (key, messages) ->
+        //             println("ConversationRepository: Processing key='$key', messages=${messages.size}")
+        //             val parts = key.split(":")
+        //             if (parts.size == 2) {
+        //                 val accountId = parts[0]
+        //                 val conversationId = parts[1]
+        //                 if (messages.isNotEmpty()) {
+        //                     println("  → Saving ${messages.size} messages for conversation $conversationId")
+        //                     try {
+        //                         conversationPersistence.saveMessages(accountId, conversationId, messages)
+        //                         println("  ✓ Saved messages for conversation $conversationId")
+        //                     } catch (e: Exception) {
+        //                         println("  ✗ Failed to save messages: ${e.message}")
+        //                         e.printStackTrace()
+        //                     }
+        //                 } else {
+        //                     println("  → Conversation $conversationId has 0 messages, skipping save")
+        //                 }
+        //             } else {
+        //                 println("  ✗ Invalid key format: '$key' (expected 'accountId:conversationId')")
+        //             }
+        //         }
+        //     }
+        // }
     }
 
     override fun getConversations(accountId: String): Flow<List<Conversation>> {
@@ -154,8 +158,9 @@ class ConversationRepositoryImpl(
         scope.launch {
             val key = "$accountId:$conversationId"
             if (_messagesCache.value[key].isNullOrEmpty()) {
+                // TODO: SharedPrefs persistence disabled - might be deleted
                 // Load persisted messages first
-                loadPersistedMessages(accountId, conversationId)
+                // loadPersistedMessages(accountId, conversationId)
                 // Then load from Jami
                 loadMessages(accountId, conversationId)
             }
@@ -312,8 +317,7 @@ class ConversationRepositoryImpl(
 
             // Add to cache
             val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
-            _conversationsCache.value = _conversationsCache.value +
-                (accountId to (currentConversations + conversation))
+            _conversationsCache.value += (accountId to (currentConversations + conversation))
 
             Result.success(conversation)
         } catch (e: Exception) {
@@ -427,11 +431,12 @@ class ConversationRepositoryImpl(
                 hasOtherParticipants
             }
 
+            // TODO: SharedPrefs persistence disabled - might be deleted
             // Load persisted messages for filtered conversations only
-            println("ConversationRepository: Loading persisted messages for ${filteredConversations.size} conversations")
-            filteredConversations.forEach { conversation ->
-                loadPersistedMessages(accountId, conversation.id)
-            }
+            // println("ConversationRepository: Loading persisted messages for ${filteredConversations.size} conversations")
+            // filteredConversations.forEach { conversation ->
+            //     loadPersistedMessages(accountId, conversation.id)
+            // }
 
             // Update conversations with lastMessage from loaded messages
             // Keep conversations even if they have no messages yet (for new accepted conversations)
@@ -649,6 +654,27 @@ class ConversationRepositoryImpl(
                 }
             }
 
+            is JamiConversationEvent.ConversationMemberEvent -> {
+                println("ConversationRepository: Member event - ${event.event} for ${event.memberUri} in ${event.conversationId}")
+                when (event.event) {
+                    MemberEventType.JOIN -> {
+                        // Refresh the conversation to get updated member list
+                        scope.launch {
+                            refreshConversations(accountId)
+                        }
+                    }
+                    MemberEventType.LEAVE, MemberEventType.BAN -> {
+                        // Refresh conversations when member leaves or is banned
+                        scope.launch {
+                            refreshConversations(accountId)
+                        }
+                    }
+                    MemberEventType.UNBAN -> {
+                        // No action needed for unban, member still not in conversation
+                    }
+                }
+            }
+
             else -> { /* Handle other events */ }
         }
     }
@@ -818,50 +844,52 @@ class ConversationRepositoryImpl(
         }
     }
 
-    /**
-     * Load persisted conversations from storage.
-     */
-    private suspend fun loadPersistedConversations(accountId: String) {
-        println("ConversationRepository: loadPersistedConversations() for account: $accountId")
-        try {
-            val persistedConversations = conversationPersistence.loadConversations(accountId)
-            println("ConversationRepository: ✓ Loaded ${persistedConversations.size} persisted conversations")
-            if (persistedConversations.isNotEmpty()) {
-                persistedConversations.forEach { conversation ->
-                    println("  - ${conversation.title} (${conversation.id.take(16)}...)")
-                }
-                _conversationsCache.value = _conversationsCache.value + (accountId to persistedConversations)
-                println("ConversationRepository: ✓ Added persisted conversations to cache")
-            } else {
-                println("ConversationRepository: No persisted conversations found")
-            }
-        } catch (e: Exception) {
-            println("ConversationRepository: ✗ Failed to load persisted conversations: ${e.message}")
-            e.printStackTrace()
-        }
-    }
+    // TODO: SharedPrefs persistence disabled - might be deleted
+    // /**
+    //  * Load persisted conversations from storage.
+    //  */
+    // private suspend fun loadPersistedConversations(accountId: String) {
+    //     println("ConversationRepository: loadPersistedConversations() for account: $accountId")
+    //     try {
+    //         val persistedConversations = conversationPersistence.loadConversations(accountId)
+    //         println("ConversationRepository: ✓ Loaded ${persistedConversations.size} persisted conversations")
+    //         if (persistedConversations.isNotEmpty()) {
+    //             persistedConversations.forEach { conversation ->
+    //                 println("  - ${conversation.title} (${conversation.id.take(16)}...)")
+    //             }
+    //             _conversationsCache.value = _conversationsCache.value + (accountId to persistedConversations)
+    //             println("ConversationRepository: ✓ Added persisted conversations to cache")
+    //         } else {
+    //             println("ConversationRepository: No persisted conversations found")
+    //         }
+    //     } catch (e: Exception) {
+    //         println("ConversationRepository: ✗ Failed to load persisted conversations: ${e.message}")
+    //         e.printStackTrace()
+    //     }
+    // }
 
-    /**
-     * Load persisted messages from storage.
-     */
-    private suspend fun loadPersistedMessages(accountId: String, conversationId: String) {
-        println("ConversationRepository: loadPersistedMessages() for conversation: $conversationId")
-        try {
-            val persistedMessages = conversationPersistence.loadMessages(accountId, conversationId)
-            println("ConversationRepository: ✓ Loaded ${persistedMessages.size} persisted messages")
-            if (persistedMessages.isNotEmpty()) {
-                val key = "$accountId:$conversationId"
-                val sortedMessages = persistedMessages.sortedBy { it.timestamp }
-                _messagesCache.value = _messagesCache.value + (key to sortedMessages)
-                println("ConversationRepository: ✓ Added persisted messages to cache (sorted)")
-            } else {
-                println("ConversationRepository: No persisted messages found")
-            }
-        } catch (e: Exception) {
-            println("ConversationRepository: ✗ Failed to load persisted messages: ${e.message}")
-            e.printStackTrace()
-        }
-    }
+    // TODO: SharedPrefs persistence disabled - might be deleted
+    // /**
+    //  * Load persisted messages from storage.
+    //  */
+    // private suspend fun loadPersistedMessages(accountId: String, conversationId: String) {
+    //     println("ConversationRepository: loadPersistedMessages() for conversation: $conversationId")
+    //     try {
+    //         val persistedMessages = conversationPersistence.loadMessages(accountId, conversationId)
+    //         println("ConversationRepository: ✓ Loaded ${persistedMessages.size} persisted messages")
+    //         if (persistedMessages.isNotEmpty()) {
+    //             val key = "$accountId:$conversationId"
+    //             val sortedMessages = persistedMessages.sortedBy { it.timestamp }
+    //             _messagesCache.value = _messagesCache.value + (key to sortedMessages)
+    //             println("ConversationRepository: ✓ Added persisted messages to cache (sorted)")
+    //         } else {
+    //             println("ConversationRepository: No persisted messages found")
+    //         }
+    //     } catch (e: Exception) {
+    //         println("ConversationRepository: ✗ Failed to load persisted messages: ${e.message}")
+    //         e.printStackTrace()
+    //     }
+    // }
 
     /**
      * Get pending conversation requests as a reactive Flow.

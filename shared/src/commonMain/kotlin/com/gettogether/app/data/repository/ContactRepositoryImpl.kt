@@ -2,15 +2,18 @@ package com.gettogether.app.data.repository
 
 import com.gettogether.app.domain.model.Contact
 import com.gettogether.app.domain.repository.ContactRepository
+import com.gettogether.app.jami.DataPathProvider
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
 import com.gettogether.app.platform.AppLifecycleManager
-import com.gettogether.app.platform.ContactAvatarStorage
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,7 +31,7 @@ class ContactRepositoryImpl(
     private val accountRepository: AccountRepository,
     private val contactPersistence: com.gettogether.app.data.persistence.ContactPersistence,
     private val lifecycleManager: AppLifecycleManager,
-    private val avatarStorage: ContactAvatarStorage? = null
+    private val dataPathProvider: DataPathProvider? = null
 ) : ContactRepository {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -63,6 +66,28 @@ class ContactRepositoryImpl(
         private const val PRESENCE_POLL_INTERVAL_MS = 60_000L // 60 seconds - base poll interval (for online contacts)
         private const val OFFLINE_POLL_INTERVAL_MS = 300_000L // 5 minutes - poll interval for offline contacts (less frequent)
         private const val SUBSCRIBE_IGNORE_WINDOW_MS = 2_000L // Ignore presence updates within 2 seconds of subscribe (likely stale cache)
+    }
+
+    /**
+     * Compute the path to the daemon's vCard file for a contact.
+     *
+     * The daemon stores contact profiles at:
+     * {filesDir}/{accountId}/profiles/{base64(contactUri)}.vcf
+     *
+     * Note: dataPathProvider.getDataPath() returns {filesDir}/jami (daemon config dir),
+     * but profiles are stored in the parent directory ({filesDir}).
+     *
+     * These vCard files contain the contact's display name and base64-encoded avatar.
+     * Coil's VCardFetcher extracts the avatar directly from these files.
+     */
+    @OptIn(ExperimentalEncodingApi::class)
+    private fun getContactVCardPath(accountId: String, contactUri: String): String? {
+        val daemonPath = dataPathProvider?.getDataPath() ?: return null
+        // Daemon stores profiles in parent of daemon config path
+        // daemonPath = {filesDir}/jami, profiles at {filesDir}/{accountId}/profiles/
+        val filesDir = daemonPath.substringBeforeLast("/jami")
+        val encodedUri = Base64.encode(contactUri.encodeToByteArray())
+        return "$filesDir/$accountId/profiles/$encodedUri.vcf"
     }
 
     init {
@@ -444,8 +469,7 @@ class ContactRepositoryImpl(
 
                             val currentContacts = _contactsCache.value[accountId] ?: emptyList()
                             if (currentContacts.none { it.uri == event.uri }) {
-                                _contactsCache.value = _contactsCache.value +
-                                    (accountId to (currentContacts + contact))
+                                _contactsCache.value += (accountId to (currentContacts + contact))
                                 println("[CONTACT-EVENT] ✓ Contact added to cache: ${event.uri}")
 
                                 // Persist updated contacts
@@ -471,8 +495,7 @@ class ContactRepositoryImpl(
                     scope.launch {
                         val currentContacts = _contactsCache.value[accountId] ?: emptyList()
                         val previousCount = currentContacts.size
-                        _contactsCache.value = _contactsCache.value +
-                            (accountId to currentContacts.filter { it.uri != event.uri })
+                        _contactsCache.value += (accountId to currentContacts.filter { it.uri != event.uri })
                         val newCount = (_contactsCache.value[accountId] ?: emptyList()).size
                         println("[CONTACT-EVENT] ✓ Contact removed from cache: $previousCount -> $newCount contacts")
 
@@ -526,7 +549,7 @@ class ContactRepositoryImpl(
                             contact
                         }
                     }
-                    _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
+                    _contactsCache.value += (accountId to updatedContacts)
                 }
             }
 
@@ -553,8 +576,7 @@ class ContactRepositoryImpl(
                     val currentRequests = _trustRequestsCache.value[accountId] ?: emptyList()
                     // Only add if not already in the list
                     if (currentRequests.none { it.from == event.from }) {
-                        _trustRequestsCache.value = _trustRequestsCache.value +
-                            (accountId to (currentRequests + trustRequest))
+                        _trustRequestsCache.value += (accountId to (currentRequests + trustRequest))
                         println("[CONTACT-EVENT] ✓ Trust request added to cache from: ${event.from}")
                         println("[CONTACT-EVENT]   Total pending requests: ${currentRequests.size + 1}")
                     } else {
@@ -579,15 +601,15 @@ class ContactRepositoryImpl(
 
                 if (event.accountId == accountId) {
                     scope.launch {
-                        // Save avatar if present
-                        var avatarPath: String? = null
-                        var hasAvatarInProfile = false
-                        if (event.avatarBase64 != null && avatarStorage != null) {
-                            avatarPath = avatarStorage.saveContactAvatar(event.contactUri, event.avatarBase64)
-                            hasAvatarInProfile = true
-                            println("[CONTACT-EVENT]   Avatar saved to: $avatarPath")
+                        // Get the vCard path where daemon stores the contact's profile
+                        // The vCard contains the avatar - Coil's VCardFetcher extracts it
+                        val vCardPath = getContactVCardPath(accountId, event.contactUri)
+                        val hasAvatarInProfile = event.avatarBase64 != null
+
+                        if (vCardPath != null) {
+                            println("[CONTACT-EVENT]   vCard path: $vCardPath")
                         } else {
-                            println("[CONTACT-EVENT]   No avatar in profile event")
+                            println("[CONTACT-EVENT]   Warning: Could not compute vCard path (dataPathProvider not available)")
                         }
 
                         // Update contact in cache with new profile info
@@ -599,17 +621,18 @@ class ContactRepositoryImpl(
                             // IMPORTANT: Only update avatarUri if profile actually contained avatar data
                             // If profile has no avatar, preserve existing avatar (might be from previous sync)
                             // This prevents clearing avatar when contact sends incomplete profile during startup
-                            val newAvatarUri = if (hasAvatarInProfile) avatarPath else existingContact.avatarUri
+                            val newAvatarUri = if (hasAvatarInProfile && vCardPath != null) vCardPath else existingContact.avatarUri
                             val updatedContact = existingContact.copy(
                                 displayName = event.displayName ?: existingContact.displayName,
-                                avatarUri = newAvatarUri
+                                avatarUri = newAvatarUri,
+                                profileVersion = existingContact.profileVersion + 1  // Force StateFlow emission
                             )
                             val updatedContacts = currentContacts.map { contact ->
                                 if (contact.uri == event.contactUri) updatedContact else contact
                             }
-                            _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
-                            println("[CONTACT-EVENT] ✓ Contact profile updated: ${event.contactUri}")
-                            println("[CONTACT-EVENT]   Avatar: ${if (hasAvatarInProfile) "updated to $avatarPath" else "preserved existing: ${existingContact.avatarUri}"}")
+                            _contactsCache.value += (accountId to updatedContacts)
+                            println("[CONTACT-EVENT] ✓ Contact profile updated: ${event.contactUri} (version=${updatedContact.profileVersion})")
+                            println("[CONTACT-EVENT]   Avatar: ${if (hasAvatarInProfile) "using vCard: $vCardPath" else "preserved existing: ${existingContact.avatarUri}"}")
 
                             // Persist updated contacts to storage
                             persistContacts(accountId)
@@ -619,12 +642,11 @@ class ContactRepositoryImpl(
                                 id = event.contactUri,
                                 uri = event.contactUri,
                                 displayName = event.displayName ?: event.contactUri.take(8),
-                                avatarUri = avatarPath,
+                                avatarUri = if (hasAvatarInProfile) vCardPath else null,
                                 isOnline = _onlineStatusCache.value[event.contactUri] ?: false,
                                 isBanned = false
                             )
-                            _contactsCache.value = _contactsCache.value +
-                                (accountId to (currentContacts + newContact))
+                            _contactsCache.value += (accountId to (currentContacts + newContact))
                             println("[CONTACT-EVENT] ✓ New contact created from profile: ${event.contactUri}")
 
                             // Persist updated contacts to storage
@@ -670,8 +692,10 @@ class ContactRepositoryImpl(
 
             // Remove from trust requests cache
             val currentRequests = _trustRequestsCache.value[accountId] ?: emptyList()
-            _trustRequestsCache.value = _trustRequestsCache.value +
-                (accountId to currentRequests.filter { it.from != contactUri })
+            _trustRequestsCache.value += (accountId to currentRequests.filter { it.from != contactUri })
+
+            // Give daemon time to commit to git before refreshing
+            delay(500)
 
             // Refresh contacts to get the newly added contact
             refreshContacts(accountId)

@@ -1,6 +1,10 @@
 package com.gettogether.app
 
 import android.app.Application
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import com.gettogether.app.coil.VCardFetcher
+import com.gettogether.app.coil.VCardMapper
 import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.PresenceManager
 import com.gettogether.app.di.jamiBridgeModule
@@ -39,6 +43,18 @@ class GetTogetherApplication : Application() {
             modules(sharedModule, platformModule, jamiBridgeModule)
         }
         android.util.Log.i("GetTogetherApp", "✓ Koin started successfully")
+
+        // Set up Coil with VCard fetcher for loading avatars from daemon's vCard files
+        android.util.Log.d("GetTogetherApp", "→ Setting up Coil ImageLoader...")
+        SingletonImageLoader.setSafe {
+            ImageLoader.Builder(this)
+                .components {
+                    add(VCardMapper())  // Maps .vcf paths to VCardData
+                    add(VCardFetcher.Factory())  // Extracts avatars from vCard files
+                }
+                .build()
+        }
+        android.util.Log.i("GetTogetherApp", "✓ Coil ImageLoader configured with VCardFetcher")
 
         // Initialize notification channels
         android.util.Log.d("GetTogetherApp", "→ Initializing notification helper...")

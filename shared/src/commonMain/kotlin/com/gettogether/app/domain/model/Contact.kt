@@ -10,7 +10,8 @@ data class Contact(
     val customName: String? = null,  // User-defined custom name (takes priority over displayName)
     val avatarUri: String? = null,
     val isOnline: Boolean = false,
-    val isBanned: Boolean = false
+    val isBanned: Boolean = false,
+    val profileVersion: Long = 0  // Incremented on profile updates to force StateFlow emission
 ) {
     /**
      * Returns the effective display name for this contact.
