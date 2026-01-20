@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 
 data class ContactsState(
     val contacts: List<ContactUiItem> = emptyList(),
+    val blockedContacts: List<ContactUiItem> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val hasAccount: Boolean = false
@@ -48,6 +49,7 @@ class ContactsViewModel(
                         it.copy(
                             hasAccount = false,
                             contacts = emptyList(),
+                            blockedContacts = emptyList(),
                             isLoading = false
                         )
                     }
@@ -62,14 +64,16 @@ class ContactsViewModel(
 
             try {
                 contactRepository.getContacts(accountId).collect { contacts ->
-                    val uiItems = contacts
+                    val allUiItems = contacts.map { it.toUiItem() }
+                    val activeContacts = allUiItems
                         .filter { !it.isBanned }
-                        .map { it.toUiItem() }
                         .sortedWith(compareByDescending<ContactUiItem> { it.isOnline }.thenBy { it.name })
+                    val blockedContacts = allUiItems.filter { it.isBanned }
 
                     _state.update {
                         it.copy(
-                            contacts = uiItems,
+                            contacts = activeContacts,
+                            blockedContacts = blockedContacts,
                             isLoading = false
                         )
                     }
@@ -109,6 +113,13 @@ class ContactsViewModel(
         val accountId = accountRepository.currentAccountId.value ?: return
         viewModelScope.launch {
             contactRepository.removeContact(accountId, contactId)
+        }
+    }
+
+    fun unblockContact(contactUri: String) {
+        val accountId = accountRepository.currentAccountId.value ?: return
+        viewModelScope.launch {
+            contactRepository.unblockContact(accountId, contactUri)
         }
     }
 

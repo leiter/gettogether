@@ -16,19 +16,26 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,6 +44,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -57,89 +67,134 @@ fun ContactsTab(
     val state by viewModel.state.collectAsState()
     val trustRequestsState by trustRequestsViewModel.state.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Contacts") },
-            actions = {
-                IconButton(onClick = onAddContact) {
+    var showMenu by remember { mutableStateOf(false) }
+    var showBlockedDialog by remember { mutableStateOf(false) }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Contacts") },
+                actions = {
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More options"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Blocked") },
+                                onClick = {
+                                    showMenu = false
+                                    showBlockedDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Block,
+                                        contentDescription = null
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            if (state.hasAccount) {
+                FloatingActionButton(onClick = onAddContact) {
                     Icon(
-                        imageVector = Icons.Default.Add,
+                        imageVector = Icons.Default.PersonAdd,
                         contentDescription = "Add contact"
                     )
                 }
             }
-        )
-
-        when {
-            state.isLoading && state.contacts.isEmpty() -> {
-                LoadingPlaceholder()
-            }
-            !state.hasAccount -> {
-                NoAccountPlaceholder()
-            }
-            state.contacts.isEmpty() && trustRequestsState.requests.isEmpty() -> {
-                PullToRefreshBox(
-                    isRefreshing = state.isLoading,
-                    onRefresh = {
-                        viewModel.refresh()
-                        trustRequestsViewModel.refresh()
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    LazyColumn(
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            when {
+                state.isLoading && state.contacts.isEmpty() -> {
+                    LoadingPlaceholder()
+                }
+                !state.hasAccount -> {
+                    NoAccountPlaceholder()
+                }
+                state.contacts.isEmpty() && trustRequestsState.requests.isEmpty() -> {
+                    PullToRefreshBox(
+                        isRefreshing = state.isLoading,
+                        onRefresh = {
+                            viewModel.refresh()
+                            trustRequestsViewModel.refresh()
+                        },
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        item {
-                            EmptyContactsPlaceholder()
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            item {
+                                EmptyContactsPlaceholder()
+                            }
                         }
                     }
                 }
-            }
-            else -> {
-                PullToRefreshBox(
-                    isRefreshing = state.isLoading,
-                    onRefresh = {
-                        viewModel.refresh()
-                        trustRequestsViewModel.refresh()
-                    },
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    LazyColumn(
+                else -> {
+                    PullToRefreshBox(
+                        isRefreshing = state.isLoading,
+                        onRefresh = {
+                            viewModel.refresh()
+                            trustRequestsViewModel.refresh()
+                        },
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        // Trust requests section
-                        if (trustRequestsState.requests.isNotEmpty()) {
-                            item(key = "trust_requests_header") {
-                                TrustRequestsHeader(count = trustRequestsState.requests.size)
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            // Trust requests section
+                            if (trustRequestsState.requests.isNotEmpty()) {
+                                item(key = "trust_requests_header") {
+                                    TrustRequestsHeader(count = trustRequestsState.requests.size)
+                                }
+
+                                items(
+                                    trustRequestsState.requests,
+                                    key = { "trust_request_${it.from}" }
+                                ) { request ->
+                                    TrustRequestItem(
+                                        request = request,
+                                        onAccept = { trustRequestsViewModel.acceptRequest(request.from) },
+                                        onReject = { trustRequestsViewModel.rejectRequest(request.from) }
+                                    )
+                                }
+
+                                item(key = "divider") {
+                                    Divider(modifier = Modifier.padding(vertical = 8.dp))
+                                }
                             }
 
-                            items(
-                                trustRequestsState.requests,
-                                key = { "trust_request_${it.from}" }
-                            ) { request ->
-                                TrustRequestItem(
-                                    request = request,
-                                    onAccept = { trustRequestsViewModel.acceptRequest(request.from) },
-                                    onReject = { trustRequestsViewModel.rejectRequest(request.from) }
+                            // Contacts section
+                            items(state.contacts, key = { it.id }) { contact ->
+                                ContactItem(
+                                    contact = contact,
+                                    onClick = { onContactClick(contact.id) }
                                 )
                             }
-
-                            item(key = "divider") {
-                                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                            }
-                        }
-
-                        // Contacts section
-                        items(state.contacts, key = { it.id }) { contact ->
-                            ContactItem(
-                                contact = contact,
-                                onClick = { onContactClick(contact.id) }
-                            )
                         }
                     }
                 }
             }
         }
+    }
+
+    if (showBlockedDialog) {
+        BlockedContactsDialog(
+            blockedContacts = state.blockedContacts,
+            onUnblock = { uri -> viewModel.unblockContact(uri) },
+            onDismiss = { showBlockedDialog = false }
+        )
     }
 }
 
@@ -371,4 +426,56 @@ private fun TrustRequestItem(
             }
         }
     }
+}
+
+@Composable
+private fun BlockedContactsDialog(
+    blockedContacts: List<ContactUiItem>,
+    onUnblock: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Blocked Contacts") },
+        text = {
+            if (blockedContacts.isEmpty()) {
+                Text(
+                    text = "No blocked contacts",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyColumn {
+                    items(blockedContacts, key = { it.id }) { contact ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            ContactAvatarImage(
+                                avatarUri = contact.avatarUri,
+                                displayName = contact.name,
+                                size = 40.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = contact.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { onUnblock(contact.uri) }) {
+                                Text("Unblock")
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
