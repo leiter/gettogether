@@ -32,6 +32,7 @@ fun HomeScreen(
     onNavigateToContact: (String) -> Unit,
     onStartNewConversation: () -> Unit,
     onAddContact: () -> Unit,
+    onNavigateToBlockedContacts: () -> Unit,
     onSignedOut: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.Conversations) }
@@ -68,7 +69,8 @@ fun HomeScreen(
                 )
                 HomeTab.Contacts -> ContactsTab(
                     onContactClick = onNavigateToContact,
-                    onAddContact = onAddContact
+                    onAddContact = onAddContact,
+                    onNavigateToBlockedContacts = onNavigateToBlockedContacts
                 )
                 HomeTab.Settings -> SettingsTab(
                     onSignedOut = onSignedOut

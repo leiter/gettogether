@@ -7,6 +7,7 @@ import com.gettogether.app.data.repository.PresenceManager
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
 import com.gettogether.app.presentation.viewmodel.AddContactViewModel
+import com.gettogether.app.presentation.viewmodel.BlockedContactsViewModel
 import com.gettogether.app.presentation.viewmodel.CallViewModel
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
@@ -56,6 +57,7 @@ val sharedModule = module {
     viewModel { ConversationsViewModel(get(), get()) }
     viewModel { ConversationRequestsViewModel(get(), get()) }
     viewModel { ContactsViewModel(get(), get()) }
+    viewModel { BlockedContactsViewModel(get(), get()) }
     viewModel { TrustRequestsViewModel(get(), get()) }
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }

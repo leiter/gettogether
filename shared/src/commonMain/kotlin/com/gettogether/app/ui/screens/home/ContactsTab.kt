@@ -21,9 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -38,7 +36,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -61,6 +58,7 @@ import org.koin.compose.viewmodel.koinViewModel
 fun ContactsTab(
     onContactClick: (String) -> Unit,
     onAddContact: () -> Unit,
+    onNavigateToBlockedContacts: () -> Unit,
     viewModel: ContactsViewModel = koinViewModel(),
     trustRequestsViewModel: TrustRequestsViewModel = koinViewModel()
 ) {
@@ -68,7 +66,6 @@ fun ContactsTab(
     val trustRequestsState by trustRequestsViewModel.state.collectAsState()
 
     var showMenu by remember { mutableStateOf(false) }
-    var showBlockedDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -90,7 +87,7 @@ fun ContactsTab(
                                 text = { Text("Blocked") },
                                 onClick = {
                                     showMenu = false
-                                    showBlockedDialog = true
+                                    onNavigateToBlockedContacts()
                                 },
                                 leadingIcon = {
                                     Icon(
@@ -189,13 +186,6 @@ fun ContactsTab(
         }
     }
 
-    if (showBlockedDialog) {
-        BlockedContactsDialog(
-            blockedContacts = state.blockedContacts,
-            onUnblock = { uri -> viewModel.unblockContact(uri) },
-            onDismiss = { showBlockedDialog = false }
-        )
-    }
 }
 
 @Composable
@@ -428,54 +418,3 @@ private fun TrustRequestItem(
     }
 }
 
-@Composable
-private fun BlockedContactsDialog(
-    blockedContacts: List<ContactUiItem>,
-    onUnblock: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Blocked Contacts") },
-        text = {
-            if (blockedContacts.isEmpty()) {
-                Text(
-                    text = "No blocked contacts",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                LazyColumn {
-                    items(blockedContacts, key = { it.id }) { contact ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ContactAvatarImage(
-                                avatarUri = contact.avatarUri,
-                                displayName = contact.name,
-                                size = 40.dp
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = contact.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.weight(1f)
-                            )
-                            TextButton(onClick = { onUnblock(contact.uri) }) {
-                                Text("Unblock")
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        }
-    )
-}
