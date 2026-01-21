@@ -650,6 +650,53 @@ Implement "Clear conversation data" option that:
 
 ---
 
-**Document Version:** 2026-01-17 (Updated post filepicker-jamibridge merge)
-**Last Code Changes:** 2026-01-17 (Account management, export/import, logout all complete)
+---
+
+## Future / Parked Ideas
+
+### Audit CancellationException handling
+**Status:** Pending
+**Priority:** LOW
+
+Many `catch (e: Exception)` blocks in suspend functions swallow `CancellationException`, which breaks coroutine cancellation. This can lead to coroutines that don't cancel properly and potential resource leaks.
+
+**Pattern to fix:**
+```kotlin
+// Before (bad)
+catch (e: Exception) {
+    // handle error
+}
+
+// After (good)
+catch (e: CancellationException) {
+    throw e  // Don't swallow cancellation
+} catch (e: Exception) {
+    // handle error
+}
+```
+
+**Files to audit:**
+- [ ] `ContactRepositoryImpl.kt` (partially fixed)
+- [ ] `ConversationRepositoryImpl.kt`
+- [ ] `AccountRepository.kt`
+- [ ] `SelfConversationSync.kt`
+- [ ] All ViewModels
+
+---
+
+### Cross-device sync prototype
+**Branch:** `feature/sync-self-conversation-prototype`
+
+A more complex sync framework implementation was prototyped but parked in favor of a simpler approach.
+The prototype uses a handler-based architecture with multiple sync handlers for different entity types.
+See the branch for reference if more advanced sync capabilities are needed in the future.
+
+**Current implementation:** Simple attribute sync via self-conversations (`SelfConversationSync.kt`)
+- Syncs contact custom names across devices
+- Uses JSON messages in self-conversations (auto-synced by Jami daemon)
+
+---
+
+**Document Version:** 2026-01-21 (Updated with cross-device sync)
+**Last Code Changes:** 2026-01-21 (Simple attribute sync via self-conversations)
 **Next Review:** After testing incoming calls and message notifications

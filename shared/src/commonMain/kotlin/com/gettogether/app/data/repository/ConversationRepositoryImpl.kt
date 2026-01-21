@@ -73,7 +73,7 @@ class ConversationRepositoryImpl(
 
         // Re-refresh conversations when contacts are updated (to get proper display names/avatars)
         scope.launch {
-            contactRepository._contactsCache.collect { contactsMap ->
+            contactRepository.internalContactsCache.collect { contactsMap ->
                 val accountId = accountRepository.currentAccountId.value
                 if (accountId != null && contactsMap[accountId]?.isNotEmpty() == true) {
                     // Only refresh if we already have conversations cached (avoid initial double-load)
@@ -516,7 +516,7 @@ class ConversationRepositoryImpl(
         val userJamiId = accountRepository.accountState.value.jamiId
 
         // Get cached contacts for proper display names and custom names
-        val cachedContacts = contactRepository._contactsCache.value[accountId] ?: emptyList()
+        val cachedContacts = contactRepository.internalContactsCache.value[accountId] ?: emptyList()
         val contactsMap = cachedContacts.associateBy { it.uri }
 
         // Get contact display names for participants
@@ -1145,7 +1145,7 @@ class ConversationRepositoryImpl(
 
         try {
             // First try to get contact from our repository (has better data: custom name, display name, avatar)
-            val contacts = contactRepository._contactsCache.value[accountId] ?: emptyList()
+            val contacts = contactRepository.internalContactsCache.value[accountId] ?: emptyList()
             val contact = contacts.find { it.uri == authorId }
 
             // Get contact name - prefer custom name, then display name from contact, then daemon details

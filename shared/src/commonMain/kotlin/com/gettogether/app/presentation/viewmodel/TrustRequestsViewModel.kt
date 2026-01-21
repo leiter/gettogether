@@ -176,7 +176,7 @@ class TrustRequestsViewModel(
 
             try {
                 println("[TRUST-REJECT] → Calling contactRepository.rejectTrustRequest(block=$block)...")
-                val result = contactRepository.rejectTrustRequest(accountId, from, block)
+                val result = contactRepository.rejectTrustRequest(accountId, from)
                 if (result.isFailure) {
                     println("[TRUST-REJECT] ✗ Reject failed: ${result.exceptionOrNull()?.message}")
                     _state.update {

@@ -39,7 +39,7 @@ class ContactRepositoryImpl(
     private var pollingJob: Job? = null
 
     // Cache for contacts by account
-    internal val _contactsCache = MutableStateFlow<Map<String, List<Contact>>>(emptyMap())
+    internal val internalContactsCache = MutableStateFlow<Map<String, List<Contact>>>(emptyMap())
 
     // Cache for online status by contact URI
     private val _onlineStatusCache = MutableStateFlow<Map<String, Boolean>>(emptyMap())
@@ -130,7 +130,7 @@ class ContactRepositoryImpl(
         // Periodic presence timeout checker
         scope.launch {
             while (true) {
-                kotlinx.coroutines.delay(10_000) // Check every 10 seconds
+                delay(10_000) // Check every 10 seconds
                 checkPresenceTimeouts()
             }
         }
@@ -152,7 +152,7 @@ class ContactRepositoryImpl(
 
         // Auto-save contacts when cache changes
         scope.launch {
-            _contactsCache.collect { contactsMap ->
+            internalContactsCache.collect { contactsMap ->
                 println("ContactRepository: Auto-save triggered (${contactsMap.size} accounts)")
                 contactsMap.forEach { (accountId, contacts) ->
                     println("  → Saving ${contacts.size} contacts for account $accountId")
@@ -170,11 +170,11 @@ class ContactRepositoryImpl(
     override fun getContacts(accountId: String): Flow<List<Contact>> {
         // Trigger refresh if not cached
         scope.launch {
-            if (_contactsCache.value[accountId].isNullOrEmpty()) {
+            if (internalContactsCache.value[accountId].isNullOrEmpty()) {
                 refreshContacts(accountId)
 
                 // If still empty after refresh, wait for daemon to initialize
-                if (_contactsCache.value[accountId].isNullOrEmpty()) {
+                if (internalContactsCache.value[accountId].isNullOrEmpty()) {
                     procrastinate(
                         delayMs = 500,
                         condition = { jamiBridge.getContacts(accountId).isNotEmpty() },
@@ -188,7 +188,7 @@ class ContactRepositoryImpl(
         // This optimizes the flow so that multiple subscribers share the same transformation
         // instead of each creating their own map{} operation
         return sharedContactFlows.getOrPut(accountId) {
-            _contactsCache.map { cache ->
+            internalContactsCache.map { cache ->
                 val contacts = cache[accountId] ?: emptyList()
                 // Apply online status from cache
                 contacts.map { contact ->
@@ -229,9 +229,9 @@ class ContactRepositoryImpl(
             )
 
             // Add to cache
-            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+            val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
             if (currentContacts.none { it.uri == uri }) {
-                _contactsCache.value = _contactsCache.value + (accountId to (currentContacts + contact))
+                internalContactsCache.value += (accountId to (currentContacts + contact))
             }
 
             Result.success(contact)
@@ -245,9 +245,8 @@ class ContactRepositoryImpl(
             jamiBridge.removeContact(accountId, contactId, ban = false)
 
             // Remove from cache
-            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
-            _contactsCache.value = _contactsCache.value +
-                (accountId to currentContacts.filter { it.id != contactId && it.uri != contactId })
+            val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
+            internalContactsCache.value += (accountId to currentContacts.filter { it.id != contactId && it.uri != contactId })
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -260,7 +259,7 @@ class ContactRepositoryImpl(
             jamiBridge.removeContact(accountId, contactId, ban = true)
 
             // Update cache to mark as banned
-            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+            val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
             val updatedContacts = currentContacts.map { contact ->
                 if (contact.id == contactId || contact.uri == contactId) {
                     contact.copy(isBanned = true)
@@ -268,7 +267,7 @@ class ContactRepositoryImpl(
                     contact
                 }
             }
-            _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
+            internalContactsCache.value = internalContactsCache.value + (accountId to updatedContacts)
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -282,7 +281,7 @@ class ContactRepositoryImpl(
             jamiBridge.addContact(accountId, contactId)
 
             // Update cache to mark as not banned
-            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+            val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
             val updatedContacts = currentContacts.map { contact ->
                 if (contact.id == contactId || contact.uri == contactId) {
                     contact.copy(isBanned = false)
@@ -290,7 +289,7 @@ class ContactRepositoryImpl(
                     contact
                 }
             }
-            _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
+            internalContactsCache.value += (accountId to updatedContacts)
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -301,7 +300,7 @@ class ContactRepositoryImpl(
     override suspend fun updateCustomName(accountId: String, contactId: String, customName: String): Result<Unit> {
         return try {
             // Update custom name in cache
-            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+            val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
             val updatedContacts = currentContacts.map { contact ->
                 if (contact.id == contactId || contact.uri == contactId) {
                     contact.copy(customName = customName.takeIf { it.isNotBlank() })
@@ -309,7 +308,7 @@ class ContactRepositoryImpl(
                     contact
                 }
             }
-            _contactsCache.value = _contactsCache.value + (accountId to updatedContacts)
+            internalContactsCache.value += (accountId to updatedContacts)
 
             // Custom name is automatically saved to persistence via the auto-save flow in init{}
             println("ContactRepository: ✓ Updated custom name for contact $contactId to: $customName")
@@ -360,7 +359,7 @@ class ContactRepositoryImpl(
                     persistedContacts
                 }
 
-                _contactsCache.value = _contactsCache.value + (accountId to contactsWithBanStatus)
+                internalContactsCache.value += (accountId to contactsWithBanStatus)
                 println("ContactRepository: ✓ Added persisted contacts to cache with daemon ban status")
             } else {
                 println("ContactRepository: No persisted contacts found")
@@ -383,7 +382,7 @@ class ContactRepositoryImpl(
             println("ContactRepository: ✓ Received ${jamiContacts.size} contacts from Jami")
 
             // Get existing contacts to preserve custom names
-            val existingContacts = _contactsCache.value[accountId] ?: emptyList()
+            val existingContacts = internalContactsCache.value[accountId] ?: emptyList()
             val existingContactsMap = existingContacts.associateBy { it.uri }
 
             val contacts = jamiContacts.map { jamiContact ->
@@ -395,9 +394,7 @@ class ContactRepositoryImpl(
 
                 // Preserve displayName from existing contact if daemon returns blank
                 // (profile events update displayName with actual contact name)
-                val displayName = if (jamiContact.displayName.isNotBlank()) {
-                    jamiContact.displayName
-                } else {
+                val displayName = jamiContact.displayName.ifBlank {
                     existingContact?.displayName ?: jamiContact.uri.take(8)
                 }
 
@@ -414,7 +411,7 @@ class ContactRepositoryImpl(
                     isBanned = jamiContact.isBanned
                 )
             }
-            _contactsCache.value += (accountId to contacts)
+            internalContactsCache.value += (accountId to contacts)
             println("ContactRepository: ✓ Updated cache with ${contacts.size} contacts")
 
             // Persist contacts (preserves avatarUri from existing contacts)
@@ -477,9 +474,9 @@ class ContactRepositoryImpl(
                                 isBanned = false
                             )
 
-                            val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+                            val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
                             if (currentContacts.none { it.uri == event.uri }) {
-                                _contactsCache.value += (accountId to (currentContacts + contact))
+                                internalContactsCache.value += (accountId to (currentContacts + contact))
                                 println("[CONTACT-EVENT] ✓ Contact added to cache: ${event.uri}")
 
                                 // Persist updated contacts
@@ -503,7 +500,7 @@ class ContactRepositoryImpl(
 
                 if (event.accountId == accountId) {
                     scope.launch {
-                        val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+                        val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
 
                         if (event.banned) {
                             // Contact was blocked - keep in cache but mark as banned
@@ -526,13 +523,13 @@ class ContactRepositoryImpl(
                             } else {
                                 updatedContacts
                             }
-                            _contactsCache.value += (accountId to finalContacts)
+                            internalContactsCache.value += (accountId to finalContacts)
                             println("[CONTACT-EVENT] ✓ Contact marked as banned: ${event.uri}")
                         } else {
                             // Contact was removed (not blocked) - remove from cache
                             val previousCount = currentContacts.size
-                            _contactsCache.value += (accountId to currentContacts.filter { it.uri != event.uri })
-                            val newCount = (_contactsCache.value[accountId] ?: emptyList()).size
+                            internalContactsCache.value += (accountId to currentContacts.filter { it.uri != event.uri })
+                            val newCount = (internalContactsCache.value[accountId] ?: emptyList()).size
                             println("[CONTACT-EVENT] ✓ Contact removed from cache: $previousCount -> $newCount contacts")
                         }
 
@@ -563,12 +560,12 @@ class ContactRepositoryImpl(
                     }
 
                     // Update online status cache
-                    _onlineStatusCache.value = _onlineStatusCache.value + (event.uri to event.isOnline)
+                    _onlineStatusCache.value += (event.uri to event.isOnline)
 
                     // Update timestamp for real ONLINE events
                     if (event.isOnline) {
                         println("[PRESENCE-UPDATE]   → Real network ONLINE event, updating timestamp")
-                        _lastPresenceTimestamp.value = _lastPresenceTimestamp.value + (event.uri to now)
+                        _lastPresenceTimestamp.value += (event.uri to now)
 
                         // Trigger profile sync when contact comes online
                         // This ensures they receive our updated profile even if they missed earlier updates
@@ -578,7 +575,7 @@ class ContactRepositoryImpl(
                     }
 
                     // Update contact in cache
-                    val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+                    val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
                     val updatedContacts = currentContacts.map { contact ->
                         if (contact.uri == event.uri) {
                             contact.copy(isOnline = event.isOnline)
@@ -586,7 +583,7 @@ class ContactRepositoryImpl(
                             contact
                         }
                     }
-                    _contactsCache.value += (accountId to updatedContacts)
+                    internalContactsCache.value += (accountId to updatedContacts)
                 }
             }
 
@@ -650,7 +647,7 @@ class ContactRepositoryImpl(
                         }
 
                         // Update contact in cache with new profile info
-                        val currentContacts = _contactsCache.value[accountId] ?: emptyList()
+                        val currentContacts = internalContactsCache.value[accountId] ?: emptyList()
                         val existingContact = currentContacts.find { it.uri == event.contactUri }
 
                         if (existingContact != null) {
@@ -667,7 +664,7 @@ class ContactRepositoryImpl(
                             val updatedContacts = currentContacts.map { contact ->
                                 if (contact.uri == event.contactUri) updatedContact else contact
                             }
-                            _contactsCache.value += (accountId to updatedContacts)
+                            internalContactsCache.value += (accountId to updatedContacts)
                             println("[CONTACT-EVENT] ✓ Contact profile updated: ${event.contactUri} (version=${updatedContact.profileVersion})")
                             println("[CONTACT-EVENT]   Avatar: ${if (hasAvatarInProfile) "using vCard: $vCardPath" else "preserved existing: ${existingContact.avatarUri}"}")
 
@@ -683,7 +680,7 @@ class ContactRepositoryImpl(
                                 isOnline = _onlineStatusCache.value[event.contactUri] ?: false,
                                 isBanned = false
                             )
-                            _contactsCache.value += (accountId to (currentContacts + newContact))
+                            internalContactsCache.value += (accountId to (currentContacts + newContact))
                             println("[CONTACT-EVENT] ✓ New contact created from profile: ${event.contactUri}")
 
                             // Persist updated contacts to storage
@@ -700,7 +697,7 @@ class ContactRepositoryImpl(
      */
     private suspend fun persistContacts(accountId: String) {
         try {
-            val contacts = _contactsCache.value[accountId] ?: return
+            val contacts = internalContactsCache.value[accountId] ?: return
             contactPersistence.saveContacts(accountId, contacts)
             println("[CONTACT-PERSIST] ✓ Contacts persisted after profile update")
         } catch (e: Exception) {
@@ -711,11 +708,15 @@ class ContactRepositoryImpl(
     /**
      * Refresh trust requests from JamiBridge.
      */
-    suspend fun refreshTrustRequests(accountId: String) {
+    fun refreshTrustRequests(accountId: String) {
         try {
             val requests = jamiBridge.getTrustRequests(accountId)
             _trustRequestsCache.value += (accountId to requests)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            println("ContactRepository: ⚠️ refreshTrustRequests failed: ${e.message}")
+            throw e  // Don't swallow coroutine cancellation
         } catch (e: Exception) {
+            println("ContactRepository: ⚠️ refreshTrustRequests failed: ${e.message}")
             // Keep existing cache on error
         }
     }
@@ -750,7 +751,7 @@ class ContactRepositoryImpl(
      * reappearing is to block the contact. The remote device will keep re-sending
      * until blocked. Therefore, reject always blocks the contact.
      */
-    suspend fun rejectTrustRequest(accountId: String, contactUri: String, block: Boolean = false): Result<Unit> {
+    suspend fun rejectTrustRequest(accountId: String, contactUri: String): Result<Unit> {
         return try {
             // Find the trust request to get its conversation ID
             val trustRequest = _trustRequestsCache.value[accountId]?.find { it.from == contactUri }
@@ -816,7 +817,7 @@ class ContactRepositoryImpl(
         val now = Clock.System.now().toEpochMilliseconds()
         val currentTimestamps = _lastPresenceTimestamp.value
         val currentOnlineStatus = _onlineStatusCache.value
-        val currentContacts = _contactsCache.value[accountId] ?: return
+        val currentContacts = internalContactsCache.value[accountId] ?: return
 
         var statusChanged = false
         val updatedOnlineStatus = currentOnlineStatus.toMutableMap()
@@ -841,9 +842,9 @@ class ContactRepositoryImpl(
         if (statusChanged) {
             println("ContactRepository: Updating caches after presence timeout")
             _onlineStatusCache.value = updatedOnlineStatus
-            val newCache = _contactsCache.value.toMutableMap()
+            val newCache = internalContactsCache.value.toMutableMap()
             newCache[accountId] = updatedContacts
-            _contactsCache.value = newCache
+            internalContactsCache.value = newCache
             println("ContactRepository: Cache updated, flow should emit now")
         }
     }
@@ -915,7 +916,7 @@ class ContactRepositoryImpl(
      */
     private suspend fun pollContactPresence() {
         val accountId = accountRepository.currentAccountId.value ?: return
-        val contacts = _contactsCache.value[accountId] ?: return
+        val contacts = internalContactsCache.value[accountId] ?: return
 
         if (contacts.isEmpty()) {
             println("[PRESENCE-POLL] No contacts to poll")
@@ -961,14 +962,14 @@ class ContactRepositoryImpl(
 
                 // Update subscribe timestamp BEFORE resubscribing
                 // This ensures the stale filter can catch immediate daemon responses
-                _lastSubscribeTimestamp.value = _lastSubscribeTimestamp.value + (contact.uri to now)
+                _lastSubscribeTimestamp.value += (contact.uri to now)
 
                 // Re-subscribe (should force fresh DHT query)
                 jamiBridge.subscribeBuddy(accountId, contact.uri, true)
 
                 // Track poll time for offline contacts (for tiered polling)
                 if (!isOnline) {
-                    _lastOfflinePollTimestamp.value = _lastOfflinePollTimestamp.value + (contact.uri to now)
+                    _lastOfflinePollTimestamp.value += (contact.uri to now)
                 }
 
                 println("[PRESENCE-POLL]   ✓ Refreshed")
