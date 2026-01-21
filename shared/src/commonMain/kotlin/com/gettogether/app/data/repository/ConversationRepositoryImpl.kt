@@ -632,6 +632,10 @@ class ConversationRepositoryImpl(
                 val message = if (isFileMessage) {
                     // File message - extract file info
                     val fileName = msgBody["displayName"] ?: msgBody["name"] ?: "file"
+                    // Log all message body keys for debugging
+                    println("ConversationRepository: File msgBody keys=${msgBody.keys}, values=$msgBody")
+                    println("ConversationRepository: msgBody[fileId]=${msgBody["fileId"]}, msgBody[tid]=${msgBody["tid"]}")
+                    // Use fileId from message if available, like jami-android does
                     val fileId = msgBody["fileId"] ?: msgBody["tid"]?.let { "${event.message.id}_$it" } ?: event.message.id
                     // Try to get mimetype from body, fallback to determining from file extension
                     val mimeType = msgBody["mimetype"]?.takeIf { it.isNotEmpty() } ?: getMimeTypeFromFileName(fileName)

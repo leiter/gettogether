@@ -64,7 +64,25 @@ actual class FileHelper(private val context: Context) {
     }
 
     actual fun fileExists(path: String): Boolean {
-        return File(path).exists()
+        val file = File(path)
+        if (file.exists()) {
+            return true
+        }
+        // Also check for .tmp version (daemon writes .tmp while downloading)
+        val tmpFile = File("$path.tmp")
+        if (tmpFile.exists()) {
+            // Rename .tmp to final name if it seems complete (has content)
+            if (tmpFile.length() > 0) {
+                try {
+                    tmpFile.renameTo(file)
+                    return file.exists()
+                } catch (e: Exception) {
+                    // If rename fails, still return true since data exists
+                    return true
+                }
+            }
+        }
+        return false
     }
 
     actual fun getMimeType(fileName: String): String {

@@ -1224,10 +1224,11 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         ""
     }
 
-    override suspend fun acceptFileTransfer(accountId: String, conversationId: String, fileId: String, destinationPath: String) = withContext(Dispatchers.IO) {
+    override suspend fun acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String) = withContext(Dispatchers.IO) {
         Log.i(TAG, "┌─── acceptFileTransfer ───")
         Log.i(TAG, "│ accountId: ${accountId.take(8)}...")
         Log.i(TAG, "│ conversationId: ${conversationId.take(8)}...")
+        Log.i(TAG, "│ interactionId: $interactionId")
         Log.i(TAG, "│ fileId: $fileId")
         Log.i(TAG, "│ destinationPath: $destinationPath")
 
@@ -1249,8 +1250,8 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
 
         try {
-            // Note: The third parameter is interactionId, empty string means use fileId
-            JamiService.downloadFile(accountId, conversationId, "", fileId, destinationPath)
+            // Pass interactionId (messageId) and fileId to daemon - both are required
+            JamiService.downloadFile(accountId, conversationId, interactionId, fileId, destinationPath)
             Log.i(TAG, "│ JamiService.downloadFile() called")
             Log.i(TAG, "└─── acceptFileTransfer SUCCESS ───")
         } catch (e: Exception) {

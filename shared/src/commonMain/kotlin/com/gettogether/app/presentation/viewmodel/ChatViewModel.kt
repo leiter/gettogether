@@ -349,9 +349,10 @@ class ChatViewModel(
                 val destPath = fileHelper.getDownloadPath(conversationId, fileInfo.fileName)
                 println("[FILE-DOWNLOAD] │ destPath: $destPath")
 
-                // Start download
+                // Start download - pass both messageId (interactionId) and fileId
                 println("[FILE-DOWNLOAD] │ Calling jamiBridge.acceptFileTransfer()...")
-                jamiBridge.acceptFileTransfer(accountId, conversationId, fileInfo.fileId, destPath)
+                println("[FILE-DOWNLOAD] │ interactionId (messageId): $messageId")
+                jamiBridge.acceptFileTransfer(accountId, conversationId, messageId, fileInfo.fileId, destPath)
                 println("[FILE-DOWNLOAD] │ acceptFileTransfer() completed")
 
                 // Monitor download progress
@@ -375,6 +376,10 @@ class ChatViewModel(
 
         println("ChatViewModel.monitorTransferProgress: messageId=$messageId, isUpload=$isUpload")
 
+        // Get the fileId from the message for daemon path checking
+        val message = _state.value.messages.find { it.id == messageId }
+        val fileId = message?.fileInfo?.fileId ?: messageId
+
         var attempts = 0
         val maxAttempts = 300 // 5 minutes at 1 second intervals
 
@@ -389,10 +394,25 @@ class ChatViewModel(
 
                     if (info.progress >= info.totalSize) {
                         // Transfer complete
-                        println("ChatViewModel.monitorTransferProgress: Transfer complete")
+                        println("ChatViewModel.monitorTransferProgress: Transfer complete via progress")
                         updateMessageCompleted(messageId, filePath)
                         return
                     }
+                }
+
+                // Also check if file exists at our destination path (daemon might have completed)
+                if (fileHelper.fileExists(filePath)) {
+                    println("ChatViewModel.monitorTransferProgress: File exists at destPath, marking complete")
+                    updateMessageCompleted(messageId, filePath)
+                    return
+                }
+
+                // Check daemon path for symlink (daemon creates this when transfer completes)
+                val daemonPath = fileHelper.getConversationFilePath(accountId, conversationId, fileId)
+                if (daemonPath != null) {
+                    println("ChatViewModel.monitorTransferProgress: Found file at daemon path=$daemonPath, marking complete")
+                    updateMessageCompleted(messageId, daemonPath)
+                    return
                 }
 
                 delay(1000) // Poll every second
@@ -401,7 +421,7 @@ class ChatViewModel(
                 println("ChatViewModel.monitorTransferProgress: Error - ${e.message}")
                 // Check if file exists (might be complete)
                 if (fileHelper.fileExists(filePath)) {
-                    println("ChatViewModel.monitorTransferProgress: File exists, marking as complete")
+                    println("ChatViewModel.monitorTransferProgress: File exists after error, marking as complete")
                     updateMessageCompleted(messageId, filePath)
                     return
                 }
@@ -410,11 +430,16 @@ class ChatViewModel(
             }
         }
 
-        // Timeout - check if file exists
+        // Timeout - check if file exists at either location
         if (fileHelper.fileExists(filePath)) {
             updateMessageCompleted(messageId, filePath)
         } else {
-            updateMessageTransferState(messageId, FileTransferState.Failed)
+            val daemonPath = fileHelper.getConversationFilePath(accountId, conversationId, fileId)
+            if (daemonPath != null) {
+                updateMessageCompleted(messageId, daemonPath)
+            } else {
+                updateMessageTransferState(messageId, FileTransferState.Failed)
+            }
         }
     }
 

@@ -434,10 +434,13 @@ interface JamiBridge {
 
     /**
      * Accept an incoming file transfer.
+     * @param interactionId The message ID containing the transfer (required by daemon)
+     * @param fileId The unique file transfer identifier
      */
     suspend fun acceptFileTransfer(
         accountId: String,
         conversationId: String,
+        interactionId: String,
         fileId: String,
         destinationPath: String
     )
