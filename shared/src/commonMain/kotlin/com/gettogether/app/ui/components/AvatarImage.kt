@@ -80,7 +80,7 @@ fun ContactAvatarImage(
         modifier = modifier
             .size(size)
             .clip(MaterialTheme.shapes.extraLarge)
-            .background(MaterialTheme.colorScheme.secondaryContainer),
+            .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center
     ) {
         if (!avatarUri.isNullOrEmpty()) {
@@ -102,7 +102,7 @@ fun ContactAvatarImage(
                     size >= 64.dp -> MaterialTheme.typography.headlineMedium
                     else -> MaterialTheme.typography.titleMedium
                 },
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = MaterialTheme.colorScheme.onPrimaryContainer
             )
         }
     }
