@@ -13,6 +13,7 @@ import com.gettogether.app.platform.ImageProcessingResult
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationConstants
 import com.gettogether.app.platform.NotificationHelper
+import com.gettogether.app.util.procrastinate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -140,6 +141,15 @@ class ConversationRepositoryImpl(
         scope.launch {
             if (_conversationsCache.value[accountId].isNullOrEmpty()) {
                 refreshConversations(accountId)
+
+                // If still empty after refresh, wait for daemon to initialize
+                if (_conversationsCache.value[accountId].isNullOrEmpty()) {
+                    procrastinate(
+                        delayMs = 500,
+                        condition = { jamiBridge.getConversations(accountId).isNotEmpty() },
+                        onRetrySuccess = { refreshConversations(accountId) }
+                    )
+                }
             }
         }
         return _conversationsCache.map { cache ->

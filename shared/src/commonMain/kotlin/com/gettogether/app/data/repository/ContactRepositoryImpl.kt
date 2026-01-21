@@ -7,6 +7,7 @@ import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
 import com.gettogether.app.platform.AppLifecycleManager
+import com.gettogether.app.util.procrastinate
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.CoroutineScope
@@ -171,6 +172,15 @@ class ContactRepositoryImpl(
         scope.launch {
             if (_contactsCache.value[accountId].isNullOrEmpty()) {
                 refreshContacts(accountId)
+
+                // If still empty after refresh, wait for daemon to initialize
+                if (_contactsCache.value[accountId].isNullOrEmpty()) {
+                    procrastinate(
+                        delayMs = 500,
+                        condition = { jamiBridge.getContacts(accountId).isNotEmpty() },
+                        onRetrySuccess = { refreshContacts(accountId) }
+                    )
+                }
             }
         }
 
