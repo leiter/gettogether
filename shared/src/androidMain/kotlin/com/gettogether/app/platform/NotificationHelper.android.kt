@@ -7,7 +7,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
+import android.graphics.RectF
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
@@ -16,6 +24,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
+import java.io.File
 
 actual class NotificationHelper(
     private val context: Context
@@ -98,15 +108,34 @@ actual class NotificationHelper(
         contactName: String,
         message: String,
         conversationId: String,
-        timestamp: Long
+        timestamp: Long,
+        avatarPath: String?
     ) {
         if (!hasNotificationPermission()) return
 
-        // Create person for messaging style
-        val sender = Person.Builder()
+        // Load avatar bitmap if available
+        val avatarIcon: IconCompat? = avatarPath?.let { path ->
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    val bitmap = BitmapFactory.decodeFile(path)
+                    if (bitmap != null) {
+                        // Create circular bitmap for avatar
+                        val circularBitmap = createCircularBitmap(bitmap)
+                        IconCompat.createWithBitmap(circularBitmap)
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        // Create person for messaging style with avatar
+        val senderBuilder = Person.Builder()
             .setName(contactName)
             .setKey(contactId)
-            .build()
+        avatarIcon?.let { senderBuilder.setIcon(it) }
+        val sender = senderBuilder.build()
 
         // Content intent - open the conversation
         val contentIntent = createMainActivityIntent().apply {
@@ -435,5 +464,37 @@ actual class NotificationHelper(
         return Intent(context, Class.forName("com.gettogether.app.MainActivity")).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+    }
+
+    /**
+     * Create a circular bitmap from a source bitmap for notification avatar.
+     */
+    private fun createCircularBitmap(source: Bitmap): Bitmap {
+        val size = minOf(source.width, source.height)
+        val x = (source.width - size) / 2
+        val y = (source.height - size) / 2
+
+        val squaredBitmap = Bitmap.createBitmap(source, x, y, size, size)
+        if (squaredBitmap != source) {
+            source.recycle()
+        }
+
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val paint = Paint().apply {
+            isAntiAlias = true
+            shader = android.graphics.BitmapShader(
+                squaredBitmap,
+                android.graphics.Shader.TileMode.CLAMP,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+        }
+
+        val radius = size / 2f
+        canvas.drawCircle(radius, radius, radius, paint)
+
+        squaredBitmap.recycle()
+        return bitmap
     }
 }

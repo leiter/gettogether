@@ -19,7 +19,8 @@ expect class NotificationHelper {
         contactName: String,
         message: String,
         conversationId: String,
-        timestamp: Long
+        timestamp: Long,
+        avatarPath: String? = null
     )
 
     /**

@@ -429,7 +429,63 @@ On 5G mobile networks (tested on Pixel 7), the account shows UNREGISTERED becaus
 
 ---
 
-### 4.4 UI/UX Improvements ⏳
+### 4.4 Wipe Contact Data (Save Space) ⏳
+
+**Status:** Feature idea
+**Priority:** LOW
+**Impact:** Allow users to free up device storage by deleting local data for specific contacts
+
+#### Feature Description
+Allow users to wipe local data associated with a contact to reclaim storage space, without necessarily removing the contact relationship.
+
+#### Sync Behavior - What Propagates to Other Devices?
+
+| Data Type | Propagates? | Notes |
+|-----------|-------------|-------|
+| Contact relationship (add/remove) | **Yes** | Synced via account's git repo |
+| Block/unblock status | **Yes** | Synced via account's git repo |
+| Conversation messages | **No** | Local only, each device has own copy |
+| Transferred files (images, docs) | **No** | Local only |
+| Cached profile data (avatars, vCards) | **No** | Local only |
+
+#### Implementation Options
+
+| Option | What It Clears | Syncs? | Contact Preserved? |
+|--------|---------------|--------|-------------------|
+| **Clear conversation** | Messages + files | No | Yes |
+| **Delete files only** | Media/documents | No | Yes |
+| **Remove contact** | Everything | Yes | No |
+
+#### Recommended Approach
+Implement "Clear conversation data" option that:
+1. Deletes local message history for that contact
+2. Deletes transferred files (images, documents, etc.)
+3. Optionally clears cached profile data (avatar)
+4. **Keeps** the contact relationship (no sync impact)
+5. Shows storage space that will be freed before confirming
+
+#### UI Location
+- Contact details screen → "Clear local data" or "Free up space" option
+- Confirmation dialog showing estimated space savings
+- Warning that messages cannot be recovered
+
+#### Implementation Notes
+- Conversation data stored in local SQLite/Room database
+- Transferred files stored in app's files directory
+- Profile vCards stored at `{filesDir}/{accountId}/profiles/`
+- Need to calculate size before deletion for user feedback
+
+#### Action Items
+- [ ] Add "Clear local data" option to contact details screen
+- [ ] Implement storage size calculation for contact data
+- [ ] Add confirmation dialog with space savings preview
+- [ ] Implement message deletion for specific conversation
+- [ ] Implement file deletion for specific contact
+- [ ] Optional: Add "Clear all local data" in Settings for bulk cleanup
+
+---
+
+### 4.5 UI/UX Improvements ⏳
 
 **Pending Items:**
 - [ ] Add loading states during permission requests

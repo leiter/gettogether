@@ -498,13 +498,22 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             Log.d(TAG, "  bodyMap=$bodyMap")
         }
 
+        // Parse timestamp - daemon sends Unix timestamp in SECONDS, we need milliseconds
+        val rawTimestamp = bodyMap["timestamp"]?.toLongOrNull() ?: System.currentTimeMillis()
+        // If timestamp is less than 10^12, it's in seconds (before year 2001 in ms, but valid as seconds until 2286)
+        val timestampMs = if (rawTimestamp < 1_000_000_000_000L) {
+            rawTimestamp * 1000L  // Convert seconds to milliseconds
+        } else {
+            rawTimestamp  // Already in milliseconds
+        }
+
         return SwarmMessage(
             id = msg.id ?: "",
             type = msg.type ?: "",
             author = bodyMap["author"] ?: "",
             body = bodyMap,
             reactions = emptyList(),
-            timestamp = bodyMap["timestamp"]?.toLongOrNull() ?: System.currentTimeMillis(),
+            timestamp = timestampMs,
             replyTo = msg.linearizedParent,
             status = emptyMap()
         )
