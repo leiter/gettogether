@@ -1,6 +1,6 @@
 # GetTogether - Open Tasks & Known Issues
 
-**Last Updated:** 2026-01-17
+**Last Updated:** 2026-01-21
 **Version:** Consolidated from all task documents (Updated post filepicker-jamibridge merge)
 
 ---
@@ -357,10 +357,12 @@ Online/offline status updates work differently based on network configuration:
 2. **Implement periodic ping** - Adds network/battery overhead
 3. **Adjust timeout values** - Different timeouts for mDNS vs DHT
 4. **UI indication** - Show "last seen X minutes ago" instead of binary online/offline
+5. **Refine polling via DHT lookup** - Use `dht.get(jamiID)` to fetch login status, similar to how contact queries work on the contact screen. This would provide a consistent DHT-based approach for presence detection across networks.
 
 #### Investigation Tasks
 - [ ] Test official Jami apps (Android/iOS) for cross-network presence
 - [ ] Check if Jami daemon API supports active presence queries on DHT
+- [ ] Investigate using `dht.get(jamiID)` for presence polling (same as contact query screen)
 - [ ] Determine user expectations and acceptance criteria
 - [ ] Monitor battery impact of current timeout checker (runs every 10 seconds)
 
