@@ -555,6 +555,7 @@ class ChatViewModel(
 
                             val isImage = mimeType.startsWith("image/")
                             val messageType = if (isImage) ChatMessageType.Image else ChatMessageType.File
+                            println("ChatViewModel.MessagesLoaded: File message - fileName=$fileName, mimeType=$mimeType, isImage=$isImage, messageType=$messageType")
 
                             ChatMessage(
                                 id = msg.id,
@@ -587,6 +588,10 @@ class ChatViewModel(
                     }
                     _state.update { it.copy(messages = chatMessages) }
                     println("ChatViewModel.handleConversationEvent: Messages loaded, total=${chatMessages.size}")
+                    // Debug: print types of all messages
+                    chatMessages.forEach { msg ->
+                        println("ChatViewModel.MessagesLoaded: Message id=${msg.id.take(8)}, type=${msg.type}, content=${msg.content.take(30)}")
+                    }
                 } else {
                     println("ChatViewModel.handleConversationEvent: MessagesLoaded ignored - not for current conversation")
                 }
