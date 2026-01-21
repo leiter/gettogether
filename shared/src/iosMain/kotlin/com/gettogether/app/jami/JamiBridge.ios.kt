@@ -715,11 +715,12 @@ class IOSJamiBridge : JamiBridge {
     override suspend fun acceptFileTransfer(
         accountId: String,
         conversationId: String,
+        interactionId: String,
         fileId: String,
         destinationPath: String
     ) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: acceptFileTransfer: $fileId")
+            NSLog("$TAG: acceptFileTransfer: interactionId=$interactionId, fileId=$fileId")
         }
     }
 

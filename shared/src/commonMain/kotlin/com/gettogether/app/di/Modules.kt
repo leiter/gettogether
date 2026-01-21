@@ -53,7 +53,7 @@ val sharedModule = module {
         CreateAccountViewModel(get(), get()).also { println("Koin: CreateAccountViewModel created") }
     }
     viewModel { ImportAccountViewModel(get(), get()) }
-    viewModel { ChatViewModel(get(), get(), get(), get()) }
+    viewModel { ChatViewModel(get(), get(), get(), get(), get()) }
     viewModel { ConversationsViewModel(get(), get()) }
     viewModel { ConversationRequestsViewModel(get(), get()) }
     viewModel { ContactsViewModel(get(), get()) }

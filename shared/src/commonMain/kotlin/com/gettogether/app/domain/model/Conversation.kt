@@ -10,5 +10,6 @@ data class Conversation(
     val lastMessage: Message? = null,
     val unreadCount: Int = 0,
     val isGroup: Boolean = false,
-    val createdAt: Instant
+    val createdAt: Instant,
+    val version: Long = 0  // Force StateFlow emission on updates
 )

@@ -291,7 +291,47 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
     }
 
-    private val dataTransferCallback = object : DataTransferCallback() {}
+    private val dataTransferCallback = object : DataTransferCallback() {
+        override fun dataTransferEvent(accountId: String?, conversationId: String?, interactionId: String?, fileId: String?, eventCode: Int) {
+            Log.i(TAG, "┌─── dataTransferEvent CALLBACK ───")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            Log.i(TAG, "│ interactionId (messageId): $interactionId")
+            Log.i(TAG, "│ fileId: $fileId")
+            Log.i(TAG, "│ eventCode: $eventCode (${getEventCodeName(eventCode)})")
+            Log.i(TAG, "└─── End dataTransferEvent ───")
+
+            // Emit file transfer event for UI updates
+            if (accountId != null && conversationId != null) {
+                val event = JamiConversationEvent.FileTransferProgressUpdated(
+                    accountId = accountId,
+                    conversationId = conversationId,
+                    interactionId = interactionId ?: "",
+                    fileId = fileId ?: "",
+                    eventCode = eventCode
+                )
+                val emitted = _conversationEvents.tryEmit(event)
+                _events.tryEmit(event)
+                Log.i(TAG, "FileTransferProgressUpdated event emitted: $emitted")
+            }
+        }
+
+        private fun getEventCodeName(code: Int): String = when (code) {
+            0 -> "INVALID"
+            1 -> "CREATED"
+            2 -> "UNSUPPORTED"
+            3 -> "WAIT_PEER_ACCEPTANCE"
+            4 -> "WAIT_HOST_ACCEPTANCE"
+            5 -> "ONGOING"
+            6 -> "FINISHED"
+            7 -> "CLOSED_BY_HOST"
+            8 -> "CLOSED_BY_PEER"
+            9 -> "INVALID_PATHNAME"
+            10 -> "UNJOINABLE_PEER"
+            11 -> "TIMEOUT_EXPIRED"
+            else -> "UNKNOWN($code)"
+        }
+    }
     private val videoCallback = object : VideoCallback() {}
 
     private val conversationCallback = object : ConversationCallback() {
@@ -304,6 +344,34 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                 val event = JamiConversationEvent.ConversationReady(accountId, conversationId)
                 _conversationEvents.tryEmit(event)
                 _events.tryEmit(event)
+            }
+        }
+
+        override fun swarmLoaded(requestId: Long, accountId: String?, conversationId: String?, messages: net.jami.daemon.SwarmMessageVect?) {
+            Log.i(TAG, "┌─── swarmLoaded CALLBACK ───")
+            Log.i(TAG, "│ requestId: $requestId")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            Log.i(TAG, "│ messages count: ${messages?.size ?: 0}")
+            Log.i(TAG, "└─── End swarmLoaded ───")
+
+            if (accountId != null && conversationId != null && messages != null) {
+                val swarmMessages = mutableListOf<SwarmMessage>()
+                for (i in 0 until messages.size.toInt()) {
+                    val msg = messages[i]
+                    swarmMessages.add(convertSwarmMessage(msg))
+                }
+                Log.i(TAG, "swarmLoaded: Converted ${swarmMessages.size} messages")
+
+                val event = JamiConversationEvent.MessagesLoaded(
+                    requestId = requestId.toInt(),
+                    accountId = accountId,
+                    conversationId = conversationId,
+                    messages = swarmMessages
+                )
+                val emitted = _conversationEvents.tryEmit(event)
+                _events.tryEmit(event)
+                Log.i(TAG, "swarmLoaded: Event emitted=$emitted")
             }
         }
 
@@ -419,6 +487,17 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     private fun convertSwarmMessage(msg: net.jami.daemon.SwarmMessage): SwarmMessage {
         val body = msg.body
         val bodyMap = if (body != null) stringMapToKotlin(body) else emptyMap()
+
+        // Debug log to see message structure
+        val msgType = msg.type ?: ""
+        val msgBody = bodyMap["body"] ?: ""
+        if (msgBody.endsWith(".png") || msgBody.endsWith(".jpg") || msgBody.endsWith(".jpeg") ||
+            msgType.contains("data-transfer") || bodyMap.containsKey("fileId") || bodyMap.containsKey("tid")) {
+            Log.d(TAG, "convertSwarmMessage: File-like message detected!")
+            Log.d(TAG, "  msg.type='$msgType'")
+            Log.d(TAG, "  bodyMap=$bodyMap")
+        }
+
         return SwarmMessage(
             id = msg.id ?: "",
             type = msg.type ?: "",
@@ -1128,17 +1207,75 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     // File Transfer
     override suspend fun sendFile(accountId: String, conversationId: String, filePath: String, displayName: String): String = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext ""
-        JamiService.sendFile(accountId, conversationId, filePath, displayName, "")
+        Log.i(TAG, "┌─── sendFile ───")
+        Log.i(TAG, "│ accountId: ${accountId.take(8)}...")
+        Log.i(TAG, "│ conversationId: ${conversationId.take(8)}...")
+        Log.i(TAG, "│ filePath: $filePath")
+        Log.i(TAG, "│ displayName: $displayName")
+
+        // Check if file exists
+        val file = java.io.File(filePath)
+        Log.i(TAG, "│ file.exists: ${file.exists()}")
+        Log.i(TAG, "│ file.length: ${file.length()} bytes")
+        Log.i(TAG, "│ file.canRead: ${file.canRead()}")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "│ ERROR: Native library not loaded!")
+            Log.i(TAG, "└─── sendFile FAILED ───")
+            return@withContext ""
+        }
+
+        try {
+            JamiService.sendFile(accountId, conversationId, filePath, displayName, "")
+            Log.i(TAG, "│ JamiService.sendFile() called successfully")
+            Log.i(TAG, "└─── sendFile SUCCESS ───")
+        } catch (e: Exception) {
+            Log.e(TAG, "│ ERROR: ${e.message}")
+            e.printStackTrace()
+            Log.i(TAG, "└─── sendFile FAILED ───")
+        }
         ""
     }
 
-    override suspend fun acceptFileTransfer(accountId: String, conversationId: String, fileId: String, destinationPath: String) = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext
-        JamiService.downloadFile(accountId, conversationId, "", fileId, destinationPath)
+    override suspend fun acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String) = withContext(Dispatchers.IO) {
+        Log.i(TAG, "┌─── acceptFileTransfer ───")
+        Log.i(TAG, "│ accountId: ${accountId.take(8)}...")
+        Log.i(TAG, "│ conversationId: ${conversationId.take(8)}...")
+        Log.i(TAG, "│ interactionId: $interactionId")
+        Log.i(TAG, "│ fileId: $fileId")
+        Log.i(TAG, "│ destinationPath: $destinationPath")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "│ ERROR: Native library not loaded!")
+            Log.i(TAG, "└─── acceptFileTransfer FAILED ───")
+            return@withContext
+        }
+
+        // Check destination directory exists
+        val destFile = java.io.File(destinationPath)
+        val destDir = destFile.parentFile
+        Log.i(TAG, "│ destDir: ${destDir?.absolutePath}")
+        Log.i(TAG, "│ destDir.exists: ${destDir?.exists()}")
+
+        if (destDir != null && !destDir.exists()) {
+            val created = destDir.mkdirs()
+            Log.i(TAG, "│ Created destDir: $created")
+        }
+
+        try {
+            // Pass interactionId (messageId) and fileId to daemon - both are required
+            JamiService.downloadFile(accountId, conversationId, interactionId, fileId, destinationPath)
+            Log.i(TAG, "│ JamiService.downloadFile() called")
+            Log.i(TAG, "└─── acceptFileTransfer SUCCESS ───")
+        } catch (e: Exception) {
+            Log.e(TAG, "│ ERROR: ${e.message}")
+            e.printStackTrace()
+            Log.i(TAG, "└─── acceptFileTransfer FAILED ───")
+        }
     }
 
     override suspend fun cancelFileTransfer(accountId: String, conversationId: String, fileId: String) = withContext(Dispatchers.IO) {
+        Log.i(TAG, "cancelFileTransfer: accountId=${accountId.take(8)}, convId=${conversationId.take(8)}, fileId=$fileId")
         if (!nativeLoaded) return@withContext
         JamiService.cancelDataTransfer(accountId, conversationId, fileId)
     }
@@ -1149,6 +1286,12 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         val totalOut = longArrayOf(0L)
         val progressOut = longArrayOf(0L)
         JamiService.fileTransferInfo(accountId, conversationId, fileId, pathOut, totalOut, progressOut)
+
+        // Only log occasionally to avoid spam (every 10 seconds based on progress)
+        if (progressOut[0] == 0L || progressOut[0] == totalOut[0]) {
+            Log.d(TAG, "getFileTransferInfo: fileId=$fileId, path=${pathOut[0]}, total=${totalOut[0]}, progress=${progressOut[0]}")
+        }
+
         return FileTransferInfo(
             fileId = fileId,
             path = pathOut[0],

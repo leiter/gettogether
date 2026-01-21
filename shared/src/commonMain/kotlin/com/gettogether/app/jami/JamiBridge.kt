@@ -434,10 +434,13 @@ interface JamiBridge {
 
     /**
      * Accept an incoming file transfer.
+     * @param interactionId The message ID containing the transfer (required by daemon)
+     * @param fileId The unique file transfer identifier
      */
     suspend fun acceptFileTransfer(
         accountId: String,
         conversationId: String,
+        interactionId: String,
         fileId: String,
         destinationPath: String
     )
@@ -865,6 +868,22 @@ sealed class JamiConversationEvent : JamiEvent() {
         val conversationId: String,
         val messageId: String,
         val reactionId: String,
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
+    ) : JamiConversationEvent()
+
+    /**
+     * Emitted when a file transfer status changes.
+     * Event codes:
+     * - 5 = ONGOING (transfer in progress)
+     * - 6 = FINISHED (transfer completed)
+     * - Other codes indicate various states (see SwigJamiBridge.getEventCodeName)
+     */
+    data class FileTransferProgressUpdated(
+        val accountId: String,
+        val conversationId: String,
+        val interactionId: String,
+        val fileId: String,
+        val eventCode: Int,
         override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
 }

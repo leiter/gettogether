@@ -1,7 +1,7 @@
 package com.gettogether.app.ui.screens.chat
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,18 +26,22 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
@@ -50,11 +54,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import com.gettogether.app.platform.ImagePickerResult
+import com.gettogether.app.platform.provideImagePicker
 import com.gettogether.app.presentation.state.ChatMessage
+import com.gettogether.app.presentation.state.ChatMessageType
+import com.gettogether.app.presentation.state.FileTransferState
 import com.gettogether.app.presentation.state.MessageStatus
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.ui.components.ContactAvatarImage
@@ -72,6 +86,9 @@ fun ChatScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    // Image picker
+    val imagePicker = provideImagePicker()
 
     LaunchedEffect(conversationId) {
         viewModel.loadConversation(conversationId)
@@ -153,6 +170,21 @@ fun ChatScreen(
                     keyboardController?.hide()
                     viewModel.sendMessage()
                 },
+                onAttachImage = {
+                    imagePicker.pickImage { result ->
+                        when (result) {
+                            is ImagePickerResult.Success -> {
+                                viewModel.sendImage(result.uri)
+                            }
+                            is ImagePickerResult.Error -> {
+                                viewModel.setError(result.message)
+                            }
+                            ImagePickerResult.Cancelled -> {
+                                // User cancelled, do nothing
+                            }
+                        }
+                    }
+                },
                 enabled = state.canSend,
                 modifier = Modifier
                     .navigationBarsPadding()
@@ -191,7 +223,18 @@ fun ChatScreen(
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
                 items(state.messages) { message ->
-                    MessageBubble(message = message)
+                    val fileInfoStr = message.fileInfo?.let {
+                        "state=${it.transferState}, localPath=${it.localPath?.takeLast(30)}, progress=${it.progress}"
+                    } ?: "null"
+                    println("ChatScreen: Rendering id=${message.id.take(8)}, type=${message.type}, isFromMe=${message.isFromMe}, fileInfo=[$fileInfoStr]")
+                    when (message.type) {
+                        ChatMessageType.Text -> MessageBubble(message = message)
+                        ChatMessageType.Image -> ImageMessageBubble(
+                            message = message,
+                            onDownloadClick = { viewModel.downloadFile(message.id) }
+                        )
+                        ChatMessageType.File -> MessageBubble(message = message) // Fallback to text for now
+                    }
                 }
                 item { Spacer(modifier = Modifier.height(8.dp)) }
             }
@@ -300,6 +343,7 @@ private fun MessageInput(
     value: String,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
+    onAttachImage: () -> Unit,
     enabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -311,9 +355,17 @@ private fun MessageInput(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onAttachImage) {
+                Icon(
+                    imageVector = Icons.Default.Image,
+                    contentDescription = "Attach image",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             TextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -349,5 +401,209 @@ private fun MessageInput(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun ImageMessageBubble(
+    message: ChatMessage,
+    onDownloadClick: () -> Unit
+) {
+    val context = LocalPlatformContext.current
+    val fileInfo = message.fileInfo ?: return
+
+    val bubbleColor = if (message.isFromMe) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val bubbleShape = if (message.isFromMe) {
+        RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+    } else {
+        RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (message.isFromMe) Alignment.End else Alignment.Start
+    ) {
+        Surface(
+            shape = bubbleShape,
+            color = bubbleColor,
+            modifier = Modifier.widthIn(max = 280.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(200.dp)
+                    .padding(4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                when (fileInfo.transferState) {
+                    FileTransferState.Completed -> {
+                        if (fileInfo.localPath != null) {
+                            AsyncImage(
+                                model = ImageRequest.Builder(context)
+                                    .data(fileInfo.localPath)
+                                    .crossfade(true)
+                                    .build(),
+                                contentDescription = fileInfo.fileName,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.BrokenImage,
+                                contentDescription = "Image not found",
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    FileTransferState.Uploading, FileTransferState.Downloading -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { fileInfo.progress },
+                                modifier = Modifier.size(48.dp),
+                                color = if (message.isFromMe) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                }
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "${(fileInfo.progress * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (message.isFromMe) {
+                                    MaterialTheme.colorScheme.onPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                    FileTransferState.Pending -> {
+                        if (!message.isFromMe) {
+                            // Show download button for incoming images
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clickable { onDownloadClick() }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "Download",
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = fileInfo.fileName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = formatFileSize(fileInfo.fileSize),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                        } else {
+                            // Outgoing pending - waiting to start upload
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp),
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                    FileTransferState.Failed -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BrokenImage,
+                                contentDescription = "Transfer failed",
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Transfer failed",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                    FileTransferState.Cancelled -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BrokenImage,
+                                contentDescription = "Transfer cancelled",
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Cancelled",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = message.timestamp,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+
+            if (message.isFromMe) {
+                Text(
+                    text = when (message.status) {
+                        MessageStatus.Sending -> "Sending..."
+                        MessageStatus.Sent -> "Sent"
+                        MessageStatus.Delivered -> "Delivered"
+                        MessageStatus.Read -> "Read"
+                        MessageStatus.Failed -> "Failed"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (message.status == MessageStatus.Failed) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.outline
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun formatFileSize(bytes: Long): String {
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
+        bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
+        else -> "${bytes / (1024 * 1024 * 1024)} GB"
     }
 }
