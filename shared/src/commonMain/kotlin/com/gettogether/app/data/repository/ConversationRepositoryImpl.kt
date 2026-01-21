@@ -534,6 +534,17 @@ class ConversationRepositoryImpl(
                         println("ConversationRepository: Got real displayName from contactDetails: $detailsName for ${member.uri.take(8)}...")
                         detailsName
                     } else {
+                        // No displayName available - trigger conversation sync to fetch profile
+                        // Profile should arrive via ContactProfileReceived when conversation syncs
+                        println("ConversationRepository: No displayName for ${member.uri.take(8)}..., triggering conversation sync")
+                        scope.launch {
+                            try {
+                                // Load conversation messages to trigger sync (profile may arrive via conversation)
+                                jamiBridge.loadConversationMessages(accountId, conversationId, "", 1)
+                            } catch (syncError: Exception) {
+                                println("ConversationRepository: Conversation sync trigger failed: ${syncError.message}")
+                            }
+                        }
                         cachedDisplayName ?: member.uri.take(8)
                     }
                 } catch (e: Exception) {
@@ -727,8 +738,30 @@ class ConversationRepositoryImpl(
                     }
                 }
                 val sortedMessages = messages.sortedBy { it.timestamp }
-                println("ConversationRepository.MessagesLoaded: Caching ${sortedMessages.size} messages for conversation ${event.conversationId}")
-                _messagesCache.value = _messagesCache.value + (key to sortedMessages)
+
+                // Skip if all messages were filtered out (e.g., all system messages)
+                // This prevents overwriting existing cached messages with an empty list
+                if (sortedMessages.isEmpty()) {
+                    println("ConversationRepository.MessagesLoaded: All messages filtered out, preserving existing cache")
+                    return
+                }
+
+                // Merge with existing messages instead of replacing
+                // This ensures we don't lose messages from previous loads
+                val existingMessages = _messagesCache.value[key] ?: emptyList()
+                val existingIds = existingMessages.map { it.id }.toSet()
+                val newMessages = sortedMessages.filter { it.id !in existingIds }
+                val mergedMessages = (existingMessages + newMessages).sortedBy { it.timestamp }
+
+                println("ConversationRepository.MessagesLoaded: Caching ${sortedMessages.size} messages for conversation ${event.conversationId} (${newMessages.size} new, ${mergedMessages.size} total)")
+                _messagesCache.value = _messagesCache.value + (key to mergedMessages)
+
+                // Update conversation's lastMessage from merged messages
+                if (mergedMessages.isNotEmpty()) {
+                    val lastMsg = mergedMessages.last()
+                    println("ConversationRepository.MessagesLoaded: Updating lastMessage for conversation ${event.conversationId}")
+                    updateConversationLastMessage(accountId, event.conversationId, lastMsg)
+                }
             }
 
             is JamiConversationEvent.ConversationReady -> {
@@ -785,7 +818,10 @@ class ConversationRepositoryImpl(
             println("ConversationRepository.updateConversationLastMessage: Conversation $conversationId not in cache, loading it")
             try {
                 val conversation = loadConversation(accountId, conversationId)
-                val conversationWithMessage = conversation.copy(lastMessage = message)
+                val conversationWithMessage = conversation.copy(
+                    lastMessage = message,
+                    version = conversation.version + 1
+                )
                 _conversationsCache.value = _conversationsCache.value +
                     (accountId to (currentConversations + conversationWithMessage))
                 println("ConversationRepository.updateConversationLastMessage: Added new conversation to cache with message")
@@ -796,7 +832,10 @@ class ConversationRepositoryImpl(
             // Conversation exists - update it
             val updatedConversations = currentConversations.map { conv ->
                 if (conv.id == conversationId) {
-                    conv.copy(lastMessage = message)
+                    conv.copy(
+                        lastMessage = message,
+                        version = conv.version + 1
+                    )
                 } else {
                     conv
                 }
