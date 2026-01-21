@@ -961,6 +961,9 @@ sealed class JamiContactEvent : JamiEvent() {
 // =============================================================================
 
 /**
- * Create a platform-specific JamiBridge implementation.
+ * Creates a platform-specific JamiBridge implementation.
+ * On Android, this is overridden by jamiBridgeModule with SwigJamiBridge.
+ * On iOS, this returns IOSJamiBridge.
  */
 expect fun createJamiBridge(): JamiBridge
+

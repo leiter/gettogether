@@ -8,10 +8,8 @@ import com.gettogether.app.data.persistence.setContactPersistence
 import com.gettogether.app.data.repository.AndroidSettingsRepository
 import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.data.repository.setSettingsRepository
-import com.gettogether.app.jami.AndroidJamiBridge
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
-import com.gettogether.app.jami.JamiBridge
 import android.app.Application
 import com.gettogether.app.platform.AndroidContactAvatarStorage
 import com.gettogether.app.platform.AppLifecycleManager
@@ -68,6 +66,6 @@ actual val platformModule: Module = module {
 
     // Jami daemon bridge and lifecycle
     single { DataPathProvider(androidContext()) }
-    single<JamiBridge> { AndroidJamiBridge(androidContext()) }
+    // JamiBridge is provided by jamiBridgeModule (SwigJamiBridge)
     single { DaemonManager(get(), get()) }
 }

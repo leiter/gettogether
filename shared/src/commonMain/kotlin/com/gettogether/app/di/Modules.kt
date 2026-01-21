@@ -4,15 +4,14 @@ import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.ContactRepositoryImpl
 import com.gettogether.app.data.repository.ConversationRepositoryImpl
 import com.gettogether.app.data.repository.PresenceManager
-import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.createJamiBridge
 import com.gettogether.app.presentation.viewmodel.AddContactViewModel
 import com.gettogether.app.presentation.viewmodel.CallViewModel
+import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
 import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
 import com.gettogether.app.presentation.viewmodel.ContactsViewModel
-import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.presentation.viewmodel.ConversationRequestsViewModel
 import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
