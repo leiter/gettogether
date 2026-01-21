@@ -291,7 +291,34 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         }
     }
 
-    private val dataTransferCallback = object : DataTransferCallback() {}
+    private val dataTransferCallback = object : DataTransferCallback() {
+        override fun dataTransferEvent(accountId: String?, conversationId: String?, interactionId: String?, fileId: String?, eventCode: Int) {
+            Log.i(TAG, "┌─── dataTransferEvent CALLBACK ───")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            Log.i(TAG, "│ interactionId (messageId): $interactionId")
+            Log.i(TAG, "│ fileId: $fileId")
+            Log.i(TAG, "│ eventCode: $eventCode (${getEventCodeName(eventCode)})")
+            Log.i(TAG, "└─── End dataTransferEvent ───")
+            // TODO: Emit file transfer events when needed
+        }
+
+        private fun getEventCodeName(code: Int): String = when (code) {
+            0 -> "INVALID"
+            1 -> "CREATED"
+            2 -> "UNSUPPORTED"
+            3 -> "WAIT_PEER_ACCEPTANCE"
+            4 -> "WAIT_HOST_ACCEPTANCE"
+            5 -> "ONGOING"
+            6 -> "FINISHED"
+            7 -> "CLOSED_BY_HOST"
+            8 -> "CLOSED_BY_PEER"
+            9 -> "INVALID_PATHNAME"
+            10 -> "UNJOINABLE_PEER"
+            11 -> "TIMEOUT_EXPIRED"
+            else -> "UNKNOWN($code)"
+        }
+    }
     private val videoCallback = object : VideoCallback() {}
 
     private val conversationCallback = object : ConversationCallback() {
@@ -304,6 +331,34 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                 val event = JamiConversationEvent.ConversationReady(accountId, conversationId)
                 _conversationEvents.tryEmit(event)
                 _events.tryEmit(event)
+            }
+        }
+
+        override fun swarmLoaded(requestId: Long, accountId: String?, conversationId: String?, messages: net.jami.daemon.SwarmMessageVect?) {
+            Log.i(TAG, "┌─── swarmLoaded CALLBACK ───")
+            Log.i(TAG, "│ requestId: $requestId")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            Log.i(TAG, "│ messages count: ${messages?.size ?: 0}")
+            Log.i(TAG, "└─── End swarmLoaded ───")
+
+            if (accountId != null && conversationId != null && messages != null) {
+                val swarmMessages = mutableListOf<SwarmMessage>()
+                for (i in 0 until messages.size.toInt()) {
+                    val msg = messages[i]
+                    swarmMessages.add(convertSwarmMessage(msg))
+                }
+                Log.i(TAG, "swarmLoaded: Converted ${swarmMessages.size} messages")
+
+                val event = JamiConversationEvent.MessagesLoaded(
+                    requestId = requestId.toInt(),
+                    accountId = accountId,
+                    conversationId = conversationId,
+                    messages = swarmMessages
+                )
+                val emitted = _conversationEvents.tryEmit(event)
+                _events.tryEmit(event)
+                Log.i(TAG, "swarmLoaded: Event emitted=$emitted")
             }
         }
 
@@ -419,6 +474,17 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     private fun convertSwarmMessage(msg: net.jami.daemon.SwarmMessage): SwarmMessage {
         val body = msg.body
         val bodyMap = if (body != null) stringMapToKotlin(body) else emptyMap()
+
+        // Debug log to see message structure
+        val msgType = msg.type ?: ""
+        val msgBody = bodyMap["body"] ?: ""
+        if (msgBody.endsWith(".png") || msgBody.endsWith(".jpg") || msgBody.endsWith(".jpeg") ||
+            msgType.contains("data-transfer") || bodyMap.containsKey("fileId") || bodyMap.containsKey("tid")) {
+            Log.d(TAG, "convertSwarmMessage: File-like message detected!")
+            Log.d(TAG, "  msg.type='$msgType'")
+            Log.d(TAG, "  bodyMap=$bodyMap")
+        }
+
         return SwarmMessage(
             id = msg.id ?: "",
             type = msg.type ?: "",
@@ -1128,8 +1194,14 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     // File Transfer
     override suspend fun sendFile(accountId: String, conversationId: String, filePath: String, displayName: String): String = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext ""
+        Log.i(TAG, "sendFile: accountId=$accountId, conversationId=$conversationId")
+        Log.i(TAG, "sendFile: filePath=$filePath, displayName=$displayName")
+        if (!nativeLoaded) {
+            Log.e(TAG, "sendFile: Native library not loaded!")
+            return@withContext ""
+        }
         JamiService.sendFile(accountId, conversationId, filePath, displayName, "")
+        Log.i(TAG, "sendFile: JamiService.sendFile() called successfully")
         ""
     }
 

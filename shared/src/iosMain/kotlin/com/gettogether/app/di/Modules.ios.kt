@@ -11,6 +11,7 @@ import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
 import com.gettogether.app.platform.CallServiceBridge
 import com.gettogether.app.platform.ExportPathProvider
+import com.gettogether.app.platform.FileHelper
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationHelper
 import org.koin.core.module.Module
@@ -21,6 +22,7 @@ actual val platformModule: Module = module {
     single { CallServiceBridge() }
     single { NotificationHelper() }
     single { ImageProcessor() }
+    single { FileHelper() }
     single { ExportPathProvider() }
     single<SettingsRepository> { createSettingsRepository() }
 

@@ -16,6 +16,7 @@ import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.CallServiceBridge
 import com.gettogether.app.platform.ContactAvatarStorage
 import com.gettogether.app.platform.ExportPathProvider
+import com.gettogether.app.platform.FileHelper
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationHelper
 import com.gettogether.app.platform.PermissionManager
@@ -40,6 +41,9 @@ actual val platformModule: Module = module {
 
     // Image handling
     single { ImageProcessor(androidContext()) }
+
+    // File helper for chat attachments
+    single { FileHelper(androidContext()) }
 
     // Export path provider
     single { ExportPathProvider(androidContext()) }

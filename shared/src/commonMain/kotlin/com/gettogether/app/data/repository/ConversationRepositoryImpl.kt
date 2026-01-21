@@ -592,9 +592,20 @@ class ConversationRepositoryImpl(
             is JamiConversationEvent.MessageReceived -> {
                 println("ConversationRepository.handleConversationEvent: MessageReceived - accountId=$accountId, conversationId=${event.conversationId}, messageId=${event.message.id}, author=${event.message.author}, content=${event.message.body["body"]}")
 
-                // Skip system messages that don't have a body (conversation created, member joined, etc.)
-                val messageBody = event.message.body["body"]
-                if (messageBody.isNullOrBlank()) {
+                val msgBody = event.message.body
+                val msgType = event.message.type
+
+                // Check if this is a file message
+                // Note: the type can be in msg.type OR in msgBody["type"]
+                val bodyType = msgBody["type"] ?: ""
+                val isFileMessage = msgType == "application/data-transfer+json" ||
+                        bodyType == "application/data-transfer+json" ||
+                        msgBody.containsKey("fileId") ||
+                        msgBody.containsKey("tid")
+
+                // Skip system messages that don't have content
+                val messageBody = msgBody["body"]
+                if (!isFileMessage && messageBody.isNullOrBlank()) {
                     println("ConversationRepository: Skipping system message without body")
                     return
                 }
@@ -606,15 +617,37 @@ class ConversationRepositoryImpl(
                 } else {
                     event.message.timestamp  // Already in milliseconds
                 }
-                val message = Message(
-                    id = event.message.id,
-                    conversationId = event.conversationId,
-                    authorId = event.message.author,
-                    content = messageBody,
-                    timestamp = Instant.fromEpochMilliseconds(timestampMillis),
-                    status = MessageStatus.DELIVERED,
-                    type = MessageType.TEXT
-                )
+
+                val message = if (isFileMessage) {
+                    // File message - extract file info
+                    val fileName = msgBody["displayName"] ?: msgBody["name"] ?: "file"
+                    // Try to get mimetype from body, fallback to determining from file extension
+                    val mimeType = msgBody["mimetype"]?.takeIf { it.isNotEmpty() } ?: getMimeTypeFromFileName(fileName)
+                    val isImage = mimeType.startsWith("image/")
+
+                    println("ConversationRepository: File message detected - fileName=$fileName, mimeType=$mimeType, isImage=$isImage")
+
+                    Message(
+                        id = event.message.id,
+                        conversationId = event.conversationId,
+                        authorId = event.message.author,
+                        content = fileName, // Store filename as content for file messages
+                        timestamp = Instant.fromEpochMilliseconds(timestampMillis),
+                        status = MessageStatus.DELIVERED,
+                        type = if (isImage) MessageType.IMAGE else MessageType.FILE
+                    )
+                } else {
+                    // Text message
+                    Message(
+                        id = event.message.id,
+                        conversationId = event.conversationId,
+                        authorId = event.message.author,
+                        content = messageBody ?: "",
+                        timestamp = Instant.fromEpochMilliseconds(timestampMillis),
+                        status = MessageStatus.DELIVERED,
+                        type = MessageType.TEXT
+                    )
+                }
 
                 val currentMessages = _messagesCache.value[key] ?: emptyList()
                 if (currentMessages.none { it.id == message.id }) {
@@ -627,7 +660,7 @@ class ConversationRepositoryImpl(
                         accountId = accountId,
                         conversationId = event.conversationId,
                         authorId = event.message.author,
-                        messageText = messageBody,
+                        messageText = message.content,
                         timestamp = timestampMillis
                     )
                 } else {
@@ -640,19 +673,61 @@ class ConversationRepositoryImpl(
 
             is JamiConversationEvent.MessagesLoaded -> {
                 val key = "$accountId:${event.conversationId}"
+                println("ConversationRepository.MessagesLoaded: Processing ${event.messages.size} messages")
+
+                // Skip empty message loads - the daemon sometimes sends empty callbacks
+                if (event.messages.isEmpty()) {
+                    println("ConversationRepository.MessagesLoaded: Skipping empty message load")
+                    return
+                }
+
                 val messages = event.messages.mapNotNull { msg ->
-                    val body = msg.body["body"] ?: return@mapNotNull null
-                    Message(
-                        id = msg.id,
-                        conversationId = event.conversationId,
-                        authorId = msg.author,
-                        content = body,
-                        timestamp = Instant.fromEpochMilliseconds(msg.timestamp),
-                        status = MessageStatus.DELIVERED,
-                        type = MessageType.TEXT
-                    )
+                    val msgBody = msg.body
+                    val msgType = msg.type
+
+                    // Check if this is a file message
+                    // Note: the type can be in msg.type OR in msgBody["type"]
+                    val bodyType = msgBody["type"] ?: ""
+                    val isFileMessage = msgType == "application/data-transfer+json" ||
+                            bodyType == "application/data-transfer+json" ||
+                            msgBody.containsKey("fileId") ||
+                            msgBody.containsKey("tid")
+
+                    val textBody = msgBody["body"]
+
+                    // Skip system messages that don't have content
+                    if (!isFileMessage && textBody.isNullOrBlank()) {
+                        return@mapNotNull null
+                    }
+
+                    if (isFileMessage) {
+                        val fileName = msgBody["displayName"] ?: msgBody["name"] ?: "file"
+                        val mimeType = msgBody["mimetype"]?.takeIf { it.isNotEmpty() } ?: getMimeTypeFromFileName(fileName)
+                        val isImage = mimeType.startsWith("image/")
+
+                        Message(
+                            id = msg.id,
+                            conversationId = event.conversationId,
+                            authorId = msg.author,
+                            content = fileName,
+                            timestamp = Instant.fromEpochMilliseconds(msg.timestamp),
+                            status = MessageStatus.DELIVERED,
+                            type = if (isImage) MessageType.IMAGE else MessageType.FILE
+                        )
+                    } else {
+                        Message(
+                            id = msg.id,
+                            conversationId = event.conversationId,
+                            authorId = msg.author,
+                            content = textBody ?: "",
+                            timestamp = Instant.fromEpochMilliseconds(msg.timestamp),
+                            status = MessageStatus.DELIVERED,
+                            type = MessageType.TEXT
+                        )
+                    }
                 }
                 val sortedMessages = messages.sortedBy { it.timestamp }
+                println("ConversationRepository.MessagesLoaded: Caching ${sortedMessages.size} messages for conversation ${event.conversationId}")
                 _messagesCache.value = _messagesCache.value + (key to sortedMessages)
             }
 
@@ -1035,6 +1110,29 @@ class ConversationRepositoryImpl(
         } catch (e: Exception) {
             println("ConversationRepository: Failed to show message notification: ${e.message}")
             // Don't throw - notification failure shouldn't break message handling
+        }
+    }
+
+    /**
+     * Determine MIME type from file name extension.
+     */
+    private fun getMimeTypeFromFileName(fileName: String): String {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        return when (extension) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "gif" -> "image/gif"
+            "webp" -> "image/webp"
+            "heic", "heif" -> "image/heic"
+            "bmp" -> "image/bmp"
+            "svg" -> "image/svg+xml"
+            "mp4" -> "video/mp4"
+            "mov" -> "video/quicktime"
+            "avi" -> "video/x-msvideo"
+            "pdf" -> "application/pdf"
+            "doc" -> "application/msword"
+            "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            else -> "application/octet-stream"
         }
     }
 }
