@@ -300,7 +300,20 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             Log.i(TAG, "│ fileId: $fileId")
             Log.i(TAG, "│ eventCode: $eventCode (${getEventCodeName(eventCode)})")
             Log.i(TAG, "└─── End dataTransferEvent ───")
-            // TODO: Emit file transfer events when needed
+
+            // Emit file transfer event for UI updates
+            if (accountId != null && conversationId != null) {
+                val event = JamiConversationEvent.FileTransferProgressUpdated(
+                    accountId = accountId,
+                    conversationId = conversationId,
+                    interactionId = interactionId ?: "",
+                    fileId = fileId ?: "",
+                    eventCode = eventCode
+                )
+                val emitted = _conversationEvents.tryEmit(event)
+                _events.tryEmit(event)
+                Log.i(TAG, "FileTransferProgressUpdated event emitted: $emitted")
+            }
         }
 
         private fun getEventCodeName(code: Int): String = when (code) {

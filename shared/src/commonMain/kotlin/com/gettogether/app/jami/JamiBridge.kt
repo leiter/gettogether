@@ -870,6 +870,22 @@ sealed class JamiConversationEvent : JamiEvent() {
         val reactionId: String,
         override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiConversationEvent()
+
+    /**
+     * Emitted when a file transfer status changes.
+     * Event codes:
+     * - 5 = ONGOING (transfer in progress)
+     * - 6 = FINISHED (transfer completed)
+     * - Other codes indicate various states (see SwigJamiBridge.getEventCodeName)
+     */
+    data class FileTransferProgressUpdated(
+        val accountId: String,
+        val conversationId: String,
+        val interactionId: String,
+        val fileId: String,
+        val eventCode: Int,
+        override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
+    ) : JamiConversationEvent()
 }
 
 data class SwarmMessage(

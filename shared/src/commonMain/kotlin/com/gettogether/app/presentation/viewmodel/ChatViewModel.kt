@@ -384,6 +384,12 @@ class ChatViewModel(
         val maxAttempts = 300 // 5 minutes at 1 second intervals
 
         while (attempts < maxAttempts) {
+            // Check if already completed (event-driven update may have fired)
+            val currentMessage = _state.value.messages.find { it.id == messageId }
+            if (currentMessage?.fileInfo?.transferState == FileTransferState.Completed) {
+                println("ChatViewModel.monitorTransferProgress: Already completed via event, exiting early")
+                return
+            }
             try {
                 val info = jamiBridge.getFileTransferInfo(accountId, conversationId, messageId)
 
@@ -624,6 +630,40 @@ class ChatViewModel(
                 // MessagesLoaded is handled by the repository subscription in loadConversation()
                 // which properly checks daemon file paths. Do not duplicate handling here.
                 println("ChatViewModel.handleConversationEvent: MessagesLoaded (handled by repository subscription)")
+            }
+            is JamiConversationEvent.FileTransferProgressUpdated -> {
+                println("[FILE-TRANSFER-EVENT] FileTransferProgressUpdated: conversationId=${event.conversationId}, eventCode=${event.eventCode}")
+                if (event.conversationId == _state.value.conversationId) {
+                    when (event.eventCode) {
+                        6 -> { // FINISHED - transfer completed
+                            println("[FILE-TRANSFER-EVENT] Transfer FINISHED for interactionId=${event.interactionId}, fileId=${event.fileId}")
+                            val accountId = accountRepository.currentAccountId.value
+                            if (accountId != null) {
+                                // Use fileId if available, fallback to interactionId
+                                val fileIdForPath = event.fileId.ifEmpty { event.interactionId }
+                                val daemonPath = fileHelper.getConversationFilePath(
+                                    accountId, event.conversationId, fileIdForPath
+                                )
+                                println("[FILE-TRANSFER-EVENT] daemonPath=$daemonPath")
+                                if (daemonPath != null) {
+                                    // Find message by interactionId (messageId) and mark complete
+                                    val messageId = event.interactionId
+                                    println("[FILE-TRANSFER-EVENT] Marking message $messageId as completed with path=$daemonPath")
+                                    updateMessageCompleted(messageId, daemonPath)
+                                } else {
+                                    println("[FILE-TRANSFER-EVENT] daemonPath is null, cannot mark complete yet")
+                                }
+                            }
+                        }
+                        5 -> { // ONGOING - transfer in progress
+                            println("[FILE-TRANSFER-EVENT] Transfer ONGOING for interactionId=${event.interactionId}")
+                            // Optional: could query getFileTransferInfo for progress percentage
+                        }
+                        else -> {
+                            println("[FILE-TRANSFER-EVENT] Other event code: ${event.eventCode}")
+                        }
+                    }
+                }
             }
             else -> { /* Handle other events */ }
         }
