@@ -4,6 +4,7 @@ import com.gettogether.app.domain.model.ExistingAccount
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiAccountEvent
 import com.gettogether.app.jami.RegistrationState
+import com.gettogether.app.util.procrastinate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -224,8 +225,21 @@ class AccountRepository(
                 println("[ACCOUNT-RESTORE] Setting current account ID: $accountId")
                 _currentAccountId.value = accountId
             } else {
-                println("[ACCOUNT-RESTORE] No accounts found - setting empty state")
-                _accountState.value = AccountState(isLoaded = true)
+                // Brief delay to allow daemon initialization events to arrive
+                // This prevents Welcome screen flicker when daemon hasn't fully initialized yet
+                println("[ACCOUNT-RESTORE] No accounts found initially - waiting for daemon to initialize...")
+                val found = procrastinate(
+                    delayMs = 500,
+                    condition = { jamiBridge.getAccountIds().isNotEmpty() },
+                    onRetrySuccess = {
+                        println("[ACCOUNT-RESTORE] Found accounts after delay - reloading")
+                        loadAccounts()
+                    }
+                )
+                if (!found) {
+                    println("[ACCOUNT-RESTORE] No accounts found after delay - setting empty state")
+                    _accountState.value = AccountState(isLoaded = true)
+                }
             }
         } catch (e: Exception) {
             println("[ACCOUNT-RESTORE] ERROR: Exception during loadAccounts(): ${e.message}")

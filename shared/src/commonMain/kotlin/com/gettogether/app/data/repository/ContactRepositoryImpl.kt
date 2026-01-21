@@ -7,6 +7,7 @@ import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiContactEvent
 import com.gettogether.app.jami.TrustRequest
 import com.gettogether.app.platform.AppLifecycleManager
+import com.gettogether.app.util.procrastinate
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlinx.coroutines.CoroutineScope
@@ -171,6 +172,15 @@ class ContactRepositoryImpl(
         scope.launch {
             if (_contactsCache.value[accountId].isNullOrEmpty()) {
                 refreshContacts(accountId)
+
+                // If still empty after refresh, wait for daemon to initialize
+                if (_contactsCache.value[accountId].isNullOrEmpty()) {
+                    procrastinate(
+                        delayMs = 500,
+                        condition = { jamiBridge.getContacts(accountId).isNotEmpty() },
+                        onRetrySuccess = { refreshContacts(accountId) }
+                    )
+                }
             }
         }
 
@@ -494,10 +504,37 @@ class ContactRepositoryImpl(
                 if (event.accountId == accountId) {
                     scope.launch {
                         val currentContacts = _contactsCache.value[accountId] ?: emptyList()
-                        val previousCount = currentContacts.size
-                        _contactsCache.value += (accountId to currentContacts.filter { it.uri != event.uri })
-                        val newCount = (_contactsCache.value[accountId] ?: emptyList()).size
-                        println("[CONTACT-EVENT] ✓ Contact removed from cache: $previousCount -> $newCount contacts")
+
+                        if (event.banned) {
+                            // Contact was blocked - keep in cache but mark as banned
+                            val updatedContacts = currentContacts.map { contact ->
+                                if (contact.uri == event.uri) {
+                                    contact.copy(isBanned = true)
+                                } else {
+                                    contact
+                                }
+                            }
+                            // If contact wasn't in cache, add it as banned
+                            val contactExists = currentContacts.any { it.uri == event.uri }
+                            val finalContacts = if (!contactExists) {
+                                updatedContacts + Contact(
+                                    id = event.uri,
+                                    uri = event.uri,
+                                    displayName = event.uri.take(8),
+                                    isBanned = true
+                                )
+                            } else {
+                                updatedContacts
+                            }
+                            _contactsCache.value += (accountId to finalContacts)
+                            println("[CONTACT-EVENT] ✓ Contact marked as banned: ${event.uri}")
+                        } else {
+                            // Contact was removed (not blocked) - remove from cache
+                            val previousCount = currentContacts.size
+                            _contactsCache.value += (accountId to currentContacts.filter { it.uri != event.uri })
+                            val newCount = (_contactsCache.value[accountId] ?: emptyList()).size
+                            println("[CONTACT-EVENT] ✓ Contact removed from cache: $previousCount -> $newCount contacts")
+                        }
 
                         // Persist updated contacts
                         persistContacts(accountId)

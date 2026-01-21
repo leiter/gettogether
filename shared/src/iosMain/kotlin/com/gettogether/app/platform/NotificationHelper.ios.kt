@@ -139,8 +139,10 @@ actual class NotificationHelper {
         contactName: String,
         message: String,
         conversationId: String,
-        timestamp: Long
+        timestamp: Long,
+        avatarPath: String?
     ) {
+        // Note: avatarPath is not used on iOS - avatar support requires different approach via Contacts framework
         val content = UNMutableNotificationContent()
         content.setTitle(contactName)
         content.setBody(message)

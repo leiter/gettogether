@@ -94,9 +94,10 @@ fun ChatScreen(
         viewModel.loadConversation(conversationId)
     }
 
+    // With reverseLayout=true, index 0 is at bottom, so scroll to 0 for newest
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
-            listState.animateScrollToItem(state.messages.size - 1)
+            listState.animateScrollToItem(0)
         }
     }
 
@@ -219,10 +220,14 @@ fun ChatScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
                     .padding(horizontal = 16.dp),
+                reverseLayout = true,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // With reverseLayout=true, items are rendered bottom-to-top
+                // First item in code = visually at bottom
                 item { Spacer(modifier = Modifier.height(8.dp)) }
-                items(state.messages) { message ->
+                // So we reverse the list: newest first (index 0) appears at bottom
+                items(state.messages.reversed()) { message ->
                     val fileInfoStr = message.fileInfo?.let {
                         "state=${it.transferState}, localPath=${it.localPath?.takeLast(30)}, progress=${it.progress}"
                     } ?: "null"

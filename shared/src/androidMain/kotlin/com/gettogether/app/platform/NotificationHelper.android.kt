@@ -7,7 +7,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
+import android.graphics.RectF
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
@@ -16,6 +24,9 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
+import java.io.File
+import android.util.Base64
 
 actual class NotificationHelper(
     private val context: Context
@@ -98,15 +109,40 @@ actual class NotificationHelper(
         contactName: String,
         message: String,
         conversationId: String,
-        timestamp: Long
+        timestamp: Long,
+        avatarPath: String?
     ) {
         if (!hasNotificationPermission()) return
 
-        // Create person for messaging style
-        val sender = Person.Builder()
+        // Load avatar bitmap if available
+        val avatarIcon: IconCompat? = avatarPath?.let { path ->
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    val bitmap = if (path.endsWith(".vcf", ignoreCase = true)) {
+                        // vCard file - extract base64 photo data
+                        extractAvatarFromVCard(file)
+                    } else {
+                        // Direct image file
+                        BitmapFactory.decodeFile(path)
+                    }
+                    if (bitmap != null) {
+                        // Create circular bitmap for avatar
+                        val circularBitmap = createCircularBitmap(bitmap)
+                        IconCompat.createWithBitmap(circularBitmap)
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+
+        // Create person for messaging style with avatar
+        val senderBuilder = Person.Builder()
             .setName(contactName)
             .setKey(contactId)
-            .build()
+        avatarIcon?.let { senderBuilder.setIcon(it) }
+        val sender = senderBuilder.build()
 
         // Content intent - open the conversation
         val contentIntent = createMainActivityIntent().apply {
@@ -435,5 +471,65 @@ actual class NotificationHelper(
         return Intent(context, Class.forName("com.gettogether.app.MainActivity")).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
+    }
+
+    /**
+     * Extract avatar bitmap from a vCard file.
+     * vCard files contain PHOTO field with base64-encoded image data.
+     */
+    private fun extractAvatarFromVCard(file: File): Bitmap? {
+        return try {
+            val content = file.readText()
+
+            // Extract PHOTO field - format: PHOTO;ENCODING=BASE64;TYPE=PNG:base64data...
+            val photoPattern = Regex(
+                "(?i)PHOTO;[^:]*:([A-Za-z0-9+/=\\s]+?)(?=\r?\n[A-Z]|\r?\nEND:)",
+                RegexOption.DOT_MATCHES_ALL
+            )
+
+            val match = photoPattern.find(content)
+            if (match != null) {
+                // Remove whitespace from base64 data
+                val base64Data = match.groupValues[1].replace(Regex("\\s"), "")
+                val imageBytes = Base64.decode(base64Data, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Create a circular bitmap from a source bitmap for notification avatar.
+     */
+    private fun createCircularBitmap(source: Bitmap): Bitmap {
+        val size = minOf(source.width, source.height)
+        val x = (source.width - size) / 2
+        val y = (source.height - size) / 2
+
+        val squaredBitmap = Bitmap.createBitmap(source, x, y, size, size)
+        if (squaredBitmap != source) {
+            source.recycle()
+        }
+
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+
+        val paint = Paint().apply {
+            isAntiAlias = true
+            shader = android.graphics.BitmapShader(
+                squaredBitmap,
+                android.graphics.Shader.TileMode.CLAMP,
+                android.graphics.Shader.TileMode.CLAMP
+            )
+        }
+
+        val radius = size / 2f
+        canvas.drawCircle(radius, radius, radius, paint)
+
+        squaredBitmap.recycle()
+        return bitmap
     }
 }

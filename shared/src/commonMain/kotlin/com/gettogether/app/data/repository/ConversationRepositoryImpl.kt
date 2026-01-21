@@ -13,6 +13,7 @@ import com.gettogether.app.platform.ImageProcessingResult
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationConstants
 import com.gettogether.app.platform.NotificationHelper
+import com.gettogether.app.util.procrastinate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -140,6 +141,15 @@ class ConversationRepositoryImpl(
         scope.launch {
             if (_conversationsCache.value[accountId].isNullOrEmpty()) {
                 refreshConversations(accountId)
+
+                // If still empty after refresh, wait for daemon to initialize
+                if (_conversationsCache.value[accountId].isNullOrEmpty()) {
+                    procrastinate(
+                        delayMs = 500,
+                        condition = { jamiBridge.getConversations(accountId).isNotEmpty() },
+                        onRetrySuccess = { refreshConversations(accountId) }
+                    )
+                }
             }
         }
         return _conversationsCache.map { cache ->
@@ -1134,17 +1144,30 @@ class ConversationRepositoryImpl(
         }
 
         try {
-            // Get contact details for the author to get their display name
-            val contactDetails = jamiBridge.getContactDetails(accountId, authorId)
-            val contactName = contactDetails["displayName"]
-                ?: contactDetails["username"]
-                ?: authorId.take(8)
+            // First try to get contact from our repository (has better data: custom name, display name, avatar)
+            val contacts = contactRepository._contactsCache.value[accountId] ?: emptyList()
+            val contact = contacts.find { it.uri == authorId }
+
+            // Get contact name - prefer custom name, then display name from contact, then daemon details
+            val contactName = contact?.customName
+                ?: contact?.displayName?.takeIf { it.isNotBlank() && it != authorId.take(8) }
+                ?: run {
+                    // Fallback to daemon contact details
+                    val contactDetails = jamiBridge.getContactDetails(accountId, authorId)
+                    contactDetails["displayName"]
+                        ?: contactDetails["username"]
+                        ?: authorId.take(8)
+                }
+
+            // Get avatar path from contact
+            val avatarPath = contact?.avatarUri
 
             // Generate notification ID based on conversation (so multiple messages stack)
             val notificationId = NotificationConstants.MESSAGE_NOTIFICATION_BASE_ID +
                 conversationId.hashCode().and(0xFFFF)
 
             println("ConversationRepository: Showing message notification from $contactName in conversation $conversationId")
+            println("ConversationRepository:   avatarPath=$avatarPath")
 
             notificationHelper.showMessageNotification(
                 notificationId = notificationId,
@@ -1152,7 +1175,8 @@ class ConversationRepositoryImpl(
                 contactName = contactName,
                 message = messageText,
                 conversationId = conversationId,
-                timestamp = timestamp
+                timestamp = timestamp,
+                avatarPath = avatarPath
             )
         } catch (e: Exception) {
             println("ConversationRepository: Failed to show message notification: ${e.message}")
