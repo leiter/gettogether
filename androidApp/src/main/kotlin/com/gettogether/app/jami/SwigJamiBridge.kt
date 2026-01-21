@@ -1194,23 +1194,74 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     // File Transfer
     override suspend fun sendFile(accountId: String, conversationId: String, filePath: String, displayName: String): String = withContext(Dispatchers.IO) {
-        Log.i(TAG, "sendFile: accountId=$accountId, conversationId=$conversationId")
-        Log.i(TAG, "sendFile: filePath=$filePath, displayName=$displayName")
+        Log.i(TAG, "┌─── sendFile ───")
+        Log.i(TAG, "│ accountId: ${accountId.take(8)}...")
+        Log.i(TAG, "│ conversationId: ${conversationId.take(8)}...")
+        Log.i(TAG, "│ filePath: $filePath")
+        Log.i(TAG, "│ displayName: $displayName")
+
+        // Check if file exists
+        val file = java.io.File(filePath)
+        Log.i(TAG, "│ file.exists: ${file.exists()}")
+        Log.i(TAG, "│ file.length: ${file.length()} bytes")
+        Log.i(TAG, "│ file.canRead: ${file.canRead()}")
+
         if (!nativeLoaded) {
-            Log.e(TAG, "sendFile: Native library not loaded!")
+            Log.e(TAG, "│ ERROR: Native library not loaded!")
+            Log.i(TAG, "└─── sendFile FAILED ───")
             return@withContext ""
         }
-        JamiService.sendFile(accountId, conversationId, filePath, displayName, "")
-        Log.i(TAG, "sendFile: JamiService.sendFile() called successfully")
+
+        try {
+            JamiService.sendFile(accountId, conversationId, filePath, displayName, "")
+            Log.i(TAG, "│ JamiService.sendFile() called successfully")
+            Log.i(TAG, "└─── sendFile SUCCESS ───")
+        } catch (e: Exception) {
+            Log.e(TAG, "│ ERROR: ${e.message}")
+            e.printStackTrace()
+            Log.i(TAG, "└─── sendFile FAILED ───")
+        }
         ""
     }
 
     override suspend fun acceptFileTransfer(accountId: String, conversationId: String, fileId: String, destinationPath: String) = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext
-        JamiService.downloadFile(accountId, conversationId, "", fileId, destinationPath)
+        Log.i(TAG, "┌─── acceptFileTransfer ───")
+        Log.i(TAG, "│ accountId: ${accountId.take(8)}...")
+        Log.i(TAG, "│ conversationId: ${conversationId.take(8)}...")
+        Log.i(TAG, "│ fileId: $fileId")
+        Log.i(TAG, "│ destinationPath: $destinationPath")
+
+        if (!nativeLoaded) {
+            Log.e(TAG, "│ ERROR: Native library not loaded!")
+            Log.i(TAG, "└─── acceptFileTransfer FAILED ───")
+            return@withContext
+        }
+
+        // Check destination directory exists
+        val destFile = java.io.File(destinationPath)
+        val destDir = destFile.parentFile
+        Log.i(TAG, "│ destDir: ${destDir?.absolutePath}")
+        Log.i(TAG, "│ destDir.exists: ${destDir?.exists()}")
+
+        if (destDir != null && !destDir.exists()) {
+            val created = destDir.mkdirs()
+            Log.i(TAG, "│ Created destDir: $created")
+        }
+
+        try {
+            // Note: The third parameter is interactionId, empty string means use fileId
+            JamiService.downloadFile(accountId, conversationId, "", fileId, destinationPath)
+            Log.i(TAG, "│ JamiService.downloadFile() called")
+            Log.i(TAG, "└─── acceptFileTransfer SUCCESS ───")
+        } catch (e: Exception) {
+            Log.e(TAG, "│ ERROR: ${e.message}")
+            e.printStackTrace()
+            Log.i(TAG, "└─── acceptFileTransfer FAILED ───")
+        }
     }
 
     override suspend fun cancelFileTransfer(accountId: String, conversationId: String, fileId: String) = withContext(Dispatchers.IO) {
+        Log.i(TAG, "cancelFileTransfer: accountId=${accountId.take(8)}, convId=${conversationId.take(8)}, fileId=$fileId")
         if (!nativeLoaded) return@withContext
         JamiService.cancelDataTransfer(accountId, conversationId, fileId)
     }
@@ -1221,6 +1272,12 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         val totalOut = longArrayOf(0L)
         val progressOut = longArrayOf(0L)
         JamiService.fileTransferInfo(accountId, conversationId, fileId, pathOut, totalOut, progressOut)
+
+        // Only log occasionally to avoid spam (every 10 seconds based on progress)
+        if (progressOut[0] == 0L || progressOut[0] == totalOut[0]) {
+            Log.d(TAG, "getFileTransferInfo: fileId=$fileId, path=${pathOut[0]}, total=${totalOut[0]}, progress=${progressOut[0]}")
+        }
+
         return FileTransferInfo(
             fileId = fileId,
             path = pathOut[0],

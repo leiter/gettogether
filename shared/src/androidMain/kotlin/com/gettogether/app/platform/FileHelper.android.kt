@@ -80,6 +80,12 @@ actual class FileHelper(private val context: Context) {
             }
     }
 
+    actual fun getConversationFilePath(accountId: String, conversationId: String, fileId: String): String? {
+        // Daemon stores files at: files/{accountId}/conversation_data/{conversationId}/{fileId}
+        val file = File(context.filesDir, "$accountId/conversation_data/$conversationId/$fileId")
+        return if (file.exists()) file.absolutePath else null
+    }
+
     private fun getFileNameFromUri(uri: Uri): String? {
         val cursor = context.contentResolver.query(uri, null, null, null, null)
         return cursor?.use {

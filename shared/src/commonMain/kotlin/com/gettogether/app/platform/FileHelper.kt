@@ -31,4 +31,11 @@ expect class FileHelper {
      * Get the MIME type of a file based on its extension.
      */
     fun getMimeType(fileName: String): String
+
+    /**
+     * Get the path where daemon stores conversation files.
+     * Path pattern: files/{accountId}/conversation_data/{conversationId}/{fileId}
+     * @return Absolute file path if it exists, null otherwise
+     */
+    fun getConversationFilePath(accountId: String, conversationId: String, fileId: String): String?
 }

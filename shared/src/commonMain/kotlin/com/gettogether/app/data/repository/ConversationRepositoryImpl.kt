@@ -632,11 +632,12 @@ class ConversationRepositoryImpl(
                 val message = if (isFileMessage) {
                     // File message - extract file info
                     val fileName = msgBody["displayName"] ?: msgBody["name"] ?: "file"
+                    val fileId = msgBody["fileId"] ?: msgBody["tid"]?.let { "${event.message.id}_$it" } ?: event.message.id
                     // Try to get mimetype from body, fallback to determining from file extension
                     val mimeType = msgBody["mimetype"]?.takeIf { it.isNotEmpty() } ?: getMimeTypeFromFileName(fileName)
                     val isImage = mimeType.startsWith("image/")
 
-                    println("ConversationRepository: File message detected - fileName=$fileName, mimeType=$mimeType, isImage=$isImage")
+                    println("ConversationRepository: File message detected - fileName=$fileName, fileId=$fileId, mimeType=$mimeType, isImage=$isImage")
 
                     Message(
                         id = event.message.id,
@@ -645,7 +646,8 @@ class ConversationRepositoryImpl(
                         content = fileName, // Store filename as content for file messages
                         timestamp = Instant.fromEpochMilliseconds(timestampMillis),
                         status = MessageStatus.DELIVERED,
-                        type = if (isImage) MessageType.IMAGE else MessageType.FILE
+                        type = if (isImage) MessageType.IMAGE else MessageType.FILE,
+                        fileId = fileId
                     )
                 } else {
                     // Text message
@@ -713,6 +715,7 @@ class ConversationRepositoryImpl(
 
                     if (isFileMessage) {
                         val fileName = msgBody["displayName"] ?: msgBody["name"] ?: "file"
+                        val fileId = msgBody["fileId"] ?: msgBody["tid"]?.let { "${msg.id}_$it" } ?: msg.id
                         val mimeType = msgBody["mimetype"]?.takeIf { it.isNotEmpty() } ?: getMimeTypeFromFileName(fileName)
                         val isImage = mimeType.startsWith("image/")
 
@@ -723,7 +726,8 @@ class ConversationRepositoryImpl(
                             content = fileName,
                             timestamp = Instant.fromEpochMilliseconds(msg.timestamp),
                             status = MessageStatus.DELIVERED,
-                            type = if (isImage) MessageType.IMAGE else MessageType.FILE
+                            type = if (isImage) MessageType.IMAGE else MessageType.FILE,
+                            fileId = fileId
                         )
                     } else {
                         Message(

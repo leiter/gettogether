@@ -223,7 +223,10 @@ fun ChatScreen(
             ) {
                 item { Spacer(modifier = Modifier.height(8.dp)) }
                 items(state.messages) { message ->
-                    println("ChatScreen: Rendering message id=${message.id.take(8)}, type=${message.type}, fileInfo=${message.fileInfo != null}")
+                    val fileInfoStr = message.fileInfo?.let {
+                        "state=${it.transferState}, localPath=${it.localPath?.takeLast(30)}, progress=${it.progress}"
+                    } ?: "null"
+                    println("ChatScreen: Rendering id=${message.id.take(8)}, type=${message.type}, isFromMe=${message.isFromMe}, fileInfo=[$fileInfoStr]")
                     when (message.type) {
                         ChatMessageType.Text -> MessageBubble(message = message)
                         ChatMessageType.Image -> ImageMessageBubble(

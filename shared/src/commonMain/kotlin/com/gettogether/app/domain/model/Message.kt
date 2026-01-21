@@ -9,7 +9,8 @@ data class Message(
     val content: String,
     val timestamp: Instant,
     val status: MessageStatus = MessageStatus.SENDING,
-    val type: MessageType = MessageType.TEXT
+    val type: MessageType = MessageType.TEXT,
+    val fileId: String? = null  // For file/image messages, the daemon's file identifier
 )
 
 enum class MessageStatus {

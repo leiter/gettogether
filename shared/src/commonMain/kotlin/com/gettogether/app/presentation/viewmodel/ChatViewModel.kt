@@ -117,6 +117,13 @@ class ChatViewModel(
                                         } else {
                                             ChatMessageType.File
                                         }
+
+                                        // Check if file exists at daemon path using fileId from message metadata
+                                        val fileId = msg.fileId ?: msg.id
+                                        val daemonPath = fileHelper.getConversationFilePath(accountId, conversationId, fileId)
+                                        val localPath = daemonPath ?: pendingSentFiles[msg.content]
+                                        val transferState = if (localPath != null) FileTransferState.Completed else FileTransferState.Pending
+
                                         ChatMessage(
                                             id = msg.id,
                                             content = msg.content,
@@ -125,13 +132,13 @@ class ChatViewModel(
                                             status = MessageStatus.Sent,
                                             type = chatMsgType,
                                             fileInfo = FileMessageInfo(
-                                                fileId = msg.id,
+                                                fileId = fileId,
                                                 fileName = msg.content,
                                                 fileSize = 0L,
                                                 mimeType = mimeType,
-                                                localPath = null,
-                                                transferState = FileTransferState.Pending,
-                                                progress = 0f
+                                                localPath = localPath,
+                                                transferState = transferState,
+                                                progress = if (localPath != null) 1f else 0f
                                             )
                                         )
                                     }
@@ -253,74 +260,109 @@ class ChatViewModel(
 
     fun sendImage(uri: String) {
         val conversationId = _state.value.conversationId
-        println("ChatViewModel.sendImage: uri=$uri, conversationId=$conversationId")
+        println("[FILE-SEND] ┌─── sendImage START ───")
+        println("[FILE-SEND] │ uri: $uri")
+        println("[FILE-SEND] │ conversationId: $conversationId")
 
         viewModelScope.launch {
             try {
                 val accountId = accountRepository.currentAccountId.value
+                println("[FILE-SEND] │ accountId: $accountId")
+
                 if (accountId == null) {
-                    println("ChatViewModel.sendImage: No account ID, skipping")
+                    println("[FILE-SEND] │ ERROR: No account ID!")
+                    println("[FILE-SEND] └─── sendImage FAILED ───")
                     _state.update { it.copy(error = "No active account") }
                     return@launch
                 }
 
                 // Copy URI to sendable file path
+                println("[FILE-SEND] │ Copying URI to sendable file...")
                 val filePath = fileHelper.copyUriToSendableFile(uri, conversationId)
                 val fileName = filePath.substringAfterLast("/")
-                println("ChatViewModel.sendImage: Copied to $filePath, fileName=$fileName")
+                println("[FILE-SEND] │ filePath: $filePath")
+                println("[FILE-SEND] │ fileName: $fileName")
 
                 // Store the local path so we can look it up when the message comes back
                 pendingSentFiles[fileName] = filePath
-                println("ChatViewModel.sendImage: Stored pending file path for $fileName")
+                println("[FILE-SEND] │ pendingSentFiles[$fileName] = $filePath")
+                println("[FILE-SEND] │ pendingSentFiles size: ${pendingSentFiles.size}")
+                println("[FILE-SEND] │ pendingSentFiles keys: ${pendingSentFiles.keys}")
 
                 // Send via Jami - the message will appear via swarmMessageReceived callback
+                println("[FILE-SEND] │ Calling jamiBridge.sendFile()...")
                 jamiBridge.sendFile(accountId, conversationId, filePath, fileName)
-                println("ChatViewModel.sendImage: sendFile called")
+                println("[FILE-SEND] │ jamiBridge.sendFile() completed")
+                println("[FILE-SEND] └─── sendImage SUCCESS ───")
 
             } catch (e: Exception) {
-                println("ChatViewModel.sendImage: Error - ${e.message}")
+                println("[FILE-SEND] │ EXCEPTION: ${e.message}")
                 e.printStackTrace()
+                println("[FILE-SEND] └─── sendImage FAILED ───")
                 _state.update { it.copy(error = "Failed to send image: ${e.message}") }
             }
         }
     }
 
     fun downloadFile(messageId: String) {
+        println("[FILE-DOWNLOAD] ┌─── downloadFile START ───")
+        println("[FILE-DOWNLOAD] │ messageId: $messageId")
+
         val message = _state.value.messages.find { it.id == messageId }
         val fileInfo = message?.fileInfo
+
+        println("[FILE-DOWNLOAD] │ message found: ${message != null}")
+        println("[FILE-DOWNLOAD] │ fileInfo found: ${fileInfo != null}")
+
         if (message == null || fileInfo == null) {
-            println("ChatViewModel.downloadFile: Message or fileInfo not found for id=$messageId")
+            println("[FILE-DOWNLOAD] │ ERROR: Message or fileInfo not found!")
+            println("[FILE-DOWNLOAD] └─── downloadFile FAILED ───")
             return
         }
 
-        println("ChatViewModel.downloadFile: messageId=$messageId, fileId=${fileInfo.fileId}, fileName=${fileInfo.fileName}")
+        println("[FILE-DOWNLOAD] │ fileId: ${fileInfo.fileId}")
+        println("[FILE-DOWNLOAD] │ fileName: ${fileInfo.fileName}")
+        println("[FILE-DOWNLOAD] │ fileSize: ${fileInfo.fileSize}")
+        println("[FILE-DOWNLOAD] │ mimeType: ${fileInfo.mimeType}")
+        println("[FILE-DOWNLOAD] │ transferState: ${fileInfo.transferState}")
 
         viewModelScope.launch {
             try {
                 val accountId = accountRepository.currentAccountId.value
                 val conversationId = _state.value.conversationId
 
+                println("[FILE-DOWNLOAD] │ accountId: $accountId")
+                println("[FILE-DOWNLOAD] │ conversationId: $conversationId")
+
                 if (accountId == null) {
-                    println("ChatViewModel.downloadFile: No account ID, skipping")
+                    println("[FILE-DOWNLOAD] │ ERROR: No account ID!")
+                    println("[FILE-DOWNLOAD] └─── downloadFile FAILED ───")
                     _state.update { it.copy(error = "No active account") }
                     return@launch
                 }
 
                 // Update state to downloading
+                println("[FILE-DOWNLOAD] │ Setting state to Downloading...")
                 updateMessageTransferState(messageId, FileTransferState.Downloading)
 
                 // Get download path
                 val destPath = fileHelper.getDownloadPath(conversationId, fileInfo.fileName)
-                println("ChatViewModel.downloadFile: Downloading to $destPath")
+                println("[FILE-DOWNLOAD] │ destPath: $destPath")
 
                 // Start download
+                println("[FILE-DOWNLOAD] │ Calling jamiBridge.acceptFileTransfer()...")
                 jamiBridge.acceptFileTransfer(accountId, conversationId, fileInfo.fileId, destPath)
+                println("[FILE-DOWNLOAD] │ acceptFileTransfer() completed")
 
                 // Monitor download progress
+                println("[FILE-DOWNLOAD] │ Starting monitorTransferProgress...")
+                println("[FILE-DOWNLOAD] └─── downloadFile monitoring ───")
                 monitorTransferProgress(messageId, destPath, isUpload = false)
 
             } catch (e: Exception) {
-                println("ChatViewModel.downloadFile: Error - ${e.message}")
+                println("[FILE-DOWNLOAD] │ EXCEPTION: ${e.message}")
+                e.printStackTrace()
+                println("[FILE-DOWNLOAD] └─── downloadFile FAILED ───")
                 updateMessageTransferState(messageId, FileTransferState.Failed)
                 _state.update { it.copy(error = "Failed to download: ${e.message}") }
             }
@@ -468,24 +510,53 @@ class ChatViewModel(
 
                     val newMessage = if (isFileMessage) {
                         // File message
+                        println("[FILE-MSG] ┌─── File Message Received ───")
+                        println("[FILE-MSG] │ msgId: ${event.message.id}")
+                        println("[FILE-MSG] │ msgType: $msgType")
+                        println("[FILE-MSG] │ bodyType: $bodyType")
+                        println("[FILE-MSG] │ isFromMe: $isFromMe")
+                        println("[FILE-MSG] │ messageBody keys: ${messageBody.keys}")
+                        println("[FILE-MSG] │ messageBody values: $messageBody")
+
                         val fileId = messageBody["fileId"] ?: messageBody["tid"] ?: event.message.id
                         val fileName = messageBody["displayName"] ?: messageBody["name"] ?: "file"
                         val totalSize = messageBody["totalSize"]?.toLongOrNull() ?: 0L
                         val mimeType = messageBody["mimetype"] ?: fileHelper.getMimeType(fileName)
+                        val accountId = accountRepository.currentAccountId.value
 
-                        println("ChatViewModel.handleConversationEvent: File message - fileId=$fileId, fileName=$fileName, totalSize=$totalSize, mimeType=$mimeType, isFromMe=$isFromMe")
-                        println("ChatViewModel.handleConversationEvent: Message body keys: ${messageBody.keys}")
+                        println("[FILE-MSG] │ fileId: $fileId")
+                        println("[FILE-MSG] │ fileName: $fileName")
+                        println("[FILE-MSG] │ totalSize: $totalSize")
+                        println("[FILE-MSG] │ mimeType: $mimeType")
+                        println("[FILE-MSG] │ accountId: $accountId")
 
                         // Determine if it's an image based on mime type
                         val isImage = mimeType.startsWith("image/")
                         val messageType = if (isImage) ChatMessageType.Image else ChatMessageType.File
+                        println("[FILE-MSG] │ isImage: $isImage")
+                        println("[FILE-MSG] │ messageType: $messageType")
 
-                        // For our own sent messages, look up the local path from pending files
-                        val localPath = if (isFromMe) {
+                        // First check if file exists at daemon's conversation_data path
+                        val daemonFilePath = accountId?.let {
+                            fileHelper.getConversationFilePath(it, event.conversationId, fileId)
+                        }
+                        println("[FILE-MSG] │ daemonFilePath: $daemonFilePath")
+
+                        // For our own sent messages, also check pending files map
+                        println("[FILE-MSG] │ pendingSentFiles keys before lookup: ${pendingSentFiles.keys}")
+                        val pendingPath = if (isFromMe) {
                             pendingSentFiles.remove(fileName).also {
-                                println("ChatViewModel.handleConversationEvent: Looked up local path for $fileName: $it")
+                                println("[FILE-MSG] │ Looked up pendingPath for '$fileName': $it")
                             }
                         } else null
+
+                        // Use daemon path if available, otherwise pending path
+                        val localPath = daemonFilePath ?: pendingPath
+                        println("[FILE-MSG] │ Final localPath: $localPath")
+
+                        val transferState = if (localPath != null) FileTransferState.Completed else FileTransferState.Pending
+                        println("[FILE-MSG] │ transferState: $transferState")
+                        println("[FILE-MSG] └─── File Message Processed ───")
 
                         ChatMessage(
                             id = event.message.id,
@@ -500,8 +571,8 @@ class ChatViewModel(
                                 fileSize = totalSize,
                                 mimeType = mimeType,
                                 localPath = localPath,
-                                transferState = if (isFromMe && localPath != null) FileTransferState.Completed else FileTransferState.Pending,
-                                progress = if (isFromMe && localPath != null) 1f else 0f
+                                transferState = transferState,
+                                progress = if (localPath != null) 1f else 0f
                             )
                         )
                     } else {
@@ -525,76 +596,9 @@ class ChatViewModel(
                 }
             }
             is JamiConversationEvent.MessagesLoaded -> {
-                println("ChatViewModel.handleConversationEvent: MessagesLoaded - conversationId=${event.conversationId}, currentConversationId=${_state.value.conversationId}, messageCount=${event.messages.size}")
-                // Skip empty message loads - the daemon sometimes sends empty callbacks
-                if (event.messages.isEmpty()) {
-                    println("ChatViewModel.handleConversationEvent: Skipping empty MessagesLoaded")
-                    return
-                }
-                if (event.conversationId == _state.value.conversationId) {
-                    // Get userJamiId from accountRepository instead of state
-                    val userJamiId = accountRepository.accountState.value.jamiId
-                    val chatMessages = event.messages.mapNotNull { msg ->
-                        val messageBody = msg.body
-                        val isFromMe = msg.author == userJamiId
-                        val msgType = msg.type
-
-                        // Check if this is a file/image message
-                        // Note: the type can be in msg.type OR in messageBody["type"]
-                        val bodyType = messageBody["type"] ?: ""
-                        val isFileMessage = msgType == "application/data-transfer+json" ||
-                                bodyType == "application/data-transfer+json" ||
-                                messageBody.containsKey("fileId") ||
-                                messageBody.containsKey("tid")
-
-                        if (isFileMessage) {
-                            val fileId = messageBody["fileId"] ?: messageBody["tid"] ?: msg.id
-                            val fileName = messageBody["displayName"] ?: messageBody["name"] ?: "file"
-                            val totalSize = messageBody["totalSize"]?.toLongOrNull() ?: 0L
-                            val mimeType = messageBody["mimetype"] ?: fileHelper.getMimeType(fileName)
-
-                            val isImage = mimeType.startsWith("image/")
-                            val messageType = if (isImage) ChatMessageType.Image else ChatMessageType.File
-                            println("ChatViewModel.MessagesLoaded: File message - fileName=$fileName, mimeType=$mimeType, isImage=$isImage, messageType=$messageType")
-
-                            ChatMessage(
-                                id = msg.id,
-                                content = fileName,
-                                timestamp = formatTimestamp(msg.timestamp),
-                                isFromMe = isFromMe,
-                                status = MessageStatus.Sent,
-                                type = messageType,
-                                fileInfo = FileMessageInfo(
-                                    fileId = fileId,
-                                    fileName = fileName,
-                                    fileSize = totalSize,
-                                    mimeType = mimeType,
-                                    localPath = null,
-                                    transferState = if (isFromMe) FileTransferState.Completed else FileTransferState.Pending,
-                                    progress = if (isFromMe) 1f else 0f
-                                )
-                            )
-                        } else {
-                            val body = messageBody["body"] ?: return@mapNotNull null
-                            ChatMessage(
-                                id = msg.id,
-                                content = body,
-                                timestamp = formatTimestamp(msg.timestamp),
-                                isFromMe = isFromMe,
-                                status = MessageStatus.Sent,
-                                type = ChatMessageType.Text
-                            )
-                        }
-                    }
-                    _state.update { it.copy(messages = chatMessages) }
-                    println("ChatViewModel.handleConversationEvent: Messages loaded, total=${chatMessages.size}")
-                    // Debug: print types of all messages
-                    chatMessages.forEach { msg ->
-                        println("ChatViewModel.MessagesLoaded: Message id=${msg.id.take(8)}, type=${msg.type}, content=${msg.content.take(30)}")
-                    }
-                } else {
-                    println("ChatViewModel.handleConversationEvent: MessagesLoaded ignored - not for current conversation")
-                }
+                // MessagesLoaded is handled by the repository subscription in loadConversation()
+                // which properly checks daemon file paths. Do not duplicate handling here.
+                println("ChatViewModel.handleConversationEvent: MessagesLoaded (handled by repository subscription)")
             }
             else -> { /* Handle other events */ }
         }

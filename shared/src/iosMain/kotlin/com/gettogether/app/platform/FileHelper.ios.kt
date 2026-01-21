@@ -27,4 +27,9 @@ actual class FileHelper {
             else -> "application/octet-stream"
         }
     }
+
+    actual fun getConversationFilePath(accountId: String, conversationId: String, fileId: String): String? {
+        // TODO: Implement iOS file handling
+        return null
+    }
 }
