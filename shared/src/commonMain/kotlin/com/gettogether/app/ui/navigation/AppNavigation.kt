@@ -24,6 +24,7 @@ import com.gettogether.app.ui.screens.call.CallScreen
 import com.gettogether.app.ui.screens.chat.ChatScreen
 import com.gettogether.app.ui.screens.conference.ConferenceScreen
 import com.gettogether.app.ui.screens.contacts.AddContactScreen
+import com.gettogether.app.ui.screens.contacts.BlockedContactsScreen
 import com.gettogether.app.ui.screens.contacts.ContactDetailsScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
@@ -114,10 +115,21 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 onAddContact = {
                     navController.navigate(Screen.AddContact.route)
                 },
+                onNavigateToBlockedContacts = {
+                    navController.navigate(Screen.BlockedContacts.route)
+                },
                 onSignedOut = {
                     navController.navigate(Screen.Welcome.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }
+                }
+            )
+        }
+
+        composable(Screen.BlockedContacts.route) {
+            BlockedContactsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
                 }
             )
         }
@@ -253,6 +265,7 @@ sealed class Screen(val route: String) {
     object NewConversation : Screen("new_conversation")
     object Contacts : Screen("contacts")
     object AddContact : Screen("add_contact")
+    object BlockedContacts : Screen("blocked_contacts")
     object ContactDetails : Screen("contact/{contactId}") {
         fun createRoute(contactId: String) = "contact/$contactId"
     }

@@ -3,6 +3,7 @@ package com.gettogether.app.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.data.repository.ConversationRepositoryImpl
 import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.presentation.state.ContactDetails
@@ -16,7 +17,8 @@ import kotlinx.coroutines.launch
 class ContactDetailsViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
-    private val contactRepository: ContactRepository
+    private val contactRepository: ContactRepository,
+    private val conversationRepository: ConversationRepositoryImpl
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ContactDetailsState())
@@ -100,11 +102,21 @@ class ContactDetailsViewModel(
                 val accountId = accountRepository.currentAccountId.value
 
                 if (accountId != null) {
-                    // Start a conversation with this contact
-                    val conversationId = jamiBridge.startConversation(accountId)
-                    // Add the contact to the conversation
-                    jamiBridge.addConversationMember(accountId, conversationId, contact.jamiId)
-                    _state.update { it.copy(conversationStarted = conversationId) }
+                    // First, check if a conversation already exists with this contact
+                    val existingConversationId = conversationRepository.findConversationWithContact(
+                        accountId,
+                        contact.jamiId
+                    )
+
+                    if (existingConversationId != null) {
+                        // Navigate to existing conversation
+                        _state.update { it.copy(conversationStarted = existingConversationId) }
+                    } else {
+                        // Create new conversation
+                        val conversationId = jamiBridge.startConversation(accountId)
+                        jamiBridge.addConversationMember(accountId, conversationId, contact.jamiId)
+                        _state.update { it.copy(conversationStarted = conversationId) }
+                    }
                 } else {
                     // Demo mode
                     val conversationId = "conv_${contact.id}"

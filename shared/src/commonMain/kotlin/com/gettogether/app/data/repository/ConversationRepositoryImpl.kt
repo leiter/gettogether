@@ -411,6 +411,26 @@ class ConversationRepositoryImpl(
     }
 
     /**
+     * Find an existing 1:1 conversation with a specific contact.
+     *
+     * @param accountId The account ID
+     * @param contactUri The contact's Jami URI
+     * @return The conversation ID if found, null otherwise
+     */
+    fun findConversationWithContact(accountId: String, contactUri: String): String? {
+        val userJamiId = accountRepository.accountState.value.jamiId
+
+        return _conversationsCache.value[accountId]?.find { conversation ->
+            // Check for 1-on-1 conversations (not groups)
+            !conversation.isGroup &&
+            // Must have exactly 2 participants (user + contact)
+            conversation.participants.size == 2 &&
+            // Must include the specific contact
+            conversation.participants.any { it.uri == contactUri }
+        }?.id
+    }
+
+    /**
      * Refresh conversations from JamiBridge.
      */
     suspend fun refreshConversations(accountId: String) {
