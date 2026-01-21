@@ -958,7 +958,7 @@ class ContactRepositoryImpl(
                 jamiBridge.subscribeBuddy(accountId, contact.uri, false)
 
                 // Small delay to let unsubscribe complete
-                kotlinx.coroutines.delay(100)
+                delay(100)
 
                 // Update subscribe timestamp BEFORE resubscribing
                 // This ensures the stale filter can catch immediate daemon responses
@@ -999,12 +999,12 @@ class ContactRepositoryImpl(
             println("[PRESENCE-POLL-LIFECYCLE] Waiting ${PRESENCE_POLL_INTERVAL_MS}ms before first poll (avoiding stale cache)")
 
             // Wait before first poll
-            kotlinx.coroutines.delay(PRESENCE_POLL_INTERVAL_MS)
+            delay(PRESENCE_POLL_INTERVAL_MS)
 
             // Then poll periodically
             while (true) {
                 pollContactPresence()
-                kotlinx.coroutines.delay(PRESENCE_POLL_INTERVAL_MS)
+                delay(PRESENCE_POLL_INTERVAL_MS)
             }
         }
         println("[PRESENCE-POLL-LIFECYCLE] ✓ Polling started (first poll in ${PRESENCE_POLL_INTERVAL_MS}ms)")

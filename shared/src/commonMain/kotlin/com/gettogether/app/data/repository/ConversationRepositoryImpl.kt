@@ -443,7 +443,7 @@ class ConversationRepositoryImpl(
     /**
      * Refresh conversations from JamiBridge.
      */
-    suspend fun refreshConversations(accountId: String) {
+    fun refreshConversations(accountId: String) {
         try {
             // Get user's own Jami ID to filter out self-conversations
             val userJamiId = accountRepository.accountState.value.jamiId
@@ -533,7 +533,7 @@ class ConversationRepositoryImpl(
 
             val displayName = if (hasRealDisplayName) {
                 // Use cached contact's real display name
-                cachedDisplayName!!
+                cachedDisplayName
             } else {
                 // Fall back to getting from bridge (contact details may have profile info)
                 try {
@@ -868,7 +868,7 @@ class ConversationRepositoryImpl(
     suspend fun clearMessages(accountId: String, conversationId: String) {
         println("ConversationRepository.clearMessages: accountId=$accountId, conversationId=$conversationId")
         val key = "$accountId:$conversationId"
-        _messagesCache.value = _messagesCache.value - key
+        _messagesCache.value -= key
         println("ConversationRepository.clearMessages: Messages cleared from cache")
     }
 
@@ -1061,10 +1061,10 @@ class ConversationRepositoryImpl(
     /**
      * Refresh conversation requests from JamiBridge.
      */
-    suspend fun refreshConversationRequests(accountId: String) {
+    fun refreshConversationRequests(accountId: String) {
         try {
             val requests = jamiBridge.getConversationRequests(accountId)
-            _conversationRequestsCache.value = _conversationRequestsCache.value + (accountId to requests)
+            _conversationRequestsCache.value += (accountId to requests)
             println("ConversationRepository: Loaded ${requests.size} conversation requests")
         } catch (e: Exception) {
             println("ConversationRepository: Failed to refresh conversation requests: ${e.message}")
