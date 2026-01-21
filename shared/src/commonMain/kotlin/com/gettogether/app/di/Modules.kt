@@ -62,7 +62,7 @@ val sharedModule = module {
     viewModel { NewConversationViewModel(get(), get()) }
     viewModel { AddContactViewModel(get(), get()) }
     viewModel { SettingsViewModel(get(), get(), get(), get(), get()) }
-    viewModel { ContactDetailsViewModel(get(), get(), get()) }
+    viewModel { ContactDetailsViewModel(get(), get(), get(), get<ConversationRepositoryImpl>()) }
     viewModel { CallViewModel(get(), get(), getOrNull(), get()) }
     viewModel { ConferenceViewModel(get(), get()) }
 }
