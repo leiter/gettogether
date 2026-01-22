@@ -568,6 +568,14 @@ class AccountRepository(
             return
         }
 
+        // Announce offline status to contacts before deactivating
+        println("[ACCOUNT-LOGOUT] Publishing offline presence...")
+        try {
+            jamiBridge.publishPresence(accountId, isOnline = false)
+        } catch (e: Exception) {
+            println("[ACCOUNT-LOGOUT] ⚠️ Failed to publish offline presence: ${e.message}")
+        }
+
         println("[ACCOUNT-LOGOUT] Deactivating account: $accountId")
         jamiBridge.setAccountActive(accountId, false)
 

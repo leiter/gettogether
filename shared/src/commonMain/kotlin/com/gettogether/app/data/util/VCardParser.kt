@@ -111,15 +111,15 @@ object VCardParser {
     private fun extractPhoto(vcard: String): String? {
         // PHOTO field can span multiple lines with base64 data
         // Format: PHOTO;ENCODING=BASE64;TYPE=PNG:base64data...
+        // Using (?is) inline flags: i=ignore case, s=dot matches all (including newlines)
         val photoPattern = Regex(
-            "(?i)PHOTO;[^:]*:([A-Za-z0-9+/=\\s]+?)(?=\r?\n[A-Z]|\r?\nEND:)",
-            RegexOption.DOT_MATCHES_ALL
+            "(?is)PHOTO;[^:]*:([A-Za-z0-9+/=\\s]+?)(?=\r?\n[A-Z]|\r?\nEND:)"
         )
 
         val match = photoPattern.find(vcard)
         if (match != null) {
             // Remove whitespace from base64 data
-            return match.groupValues[1].replace(Regex("\\s"), "")
+            return match.groupValues[1].replace("\\s".toRegex(), "")
         }
         return null
     }
