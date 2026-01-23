@@ -83,6 +83,7 @@ class MockJamiBridge : JamiBridge {
     override suspend fun discardTrustRequest(accountId: String, uri: String) {}
     override fun getTrustRequests(accountId: String): List<TrustRequest> = emptyList()
     override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) {}
+    override suspend fun setSubscriptions(accountId: String, uris: List<String>) {}
     override suspend fun publishPresence(accountId: String, isOnline: Boolean, note: String) {}
 
     override suspend fun startConversation(accountId: String): String = "test-conversation-id"
@@ -113,6 +114,7 @@ class MockJamiBridge : JamiBridge {
     override fun getActiveCalls(accountId: String): List<String> = emptyList()
     override suspend fun switchCamera() {}
     override suspend fun switchAudioOutput(useSpeaker: Boolean) {}
+    override suspend fun answerMediaChangeRequest(accountId: String, callId: String, mediaList: List<Map<String, String>>) {}
 
     override suspend fun createConference(accountId: String, participantUris: List<String>): String = "test-conference-id"
     override suspend fun joinParticipant(accountId: String, callId1: String, accountId2: String, callId2: String) {}
@@ -126,7 +128,7 @@ class MockJamiBridge : JamiBridge {
     override suspend fun hangUpConferenceParticipant(accountId: String, conferenceId: String, participantUri: String, deviceId: String) {}
 
     override suspend fun sendFile(accountId: String, conversationId: String, filePath: String, displayName: String): String = "test-file-id"
-    override suspend fun acceptFileTransfer(accountId: String, conversationId: String, fileId: String, destinationPath: String) {}
+    override suspend fun acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String) {}
     override suspend fun cancelFileTransfer(accountId: String, conversationId: String, fileId: String) {}
     override fun getFileTransferInfo(accountId: String, conversationId: String, fileId: String): FileTransferInfo? = null
 

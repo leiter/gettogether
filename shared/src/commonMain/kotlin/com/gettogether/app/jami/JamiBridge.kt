@@ -349,6 +349,12 @@ interface JamiBridge {
      */
     suspend fun switchAudioOutput(useSpeaker: Boolean)
 
+    /**
+     * Answer a media change request from the peer.
+     * Called when the peer wants to add/modify media streams during a call.
+     */
+    suspend fun answerMediaChangeRequest(accountId: String, callId: String, mediaList: List<Map<String, String>>)
+
     // =========================================================================
     // Conference Calls
     // =========================================================================
@@ -725,6 +731,7 @@ sealed class JamiCallEvent : JamiEvent() {
         val peerId: String,
         val peerDisplayName: String,
         val hasVideo: Boolean,
+        val mediaList: List<Map<String, String>> = emptyList(),
         override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiCallEvent()
 

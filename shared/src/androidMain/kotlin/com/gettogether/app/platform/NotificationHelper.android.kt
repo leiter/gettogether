@@ -229,7 +229,12 @@ actual class NotificationHelper(
         contactName: String,
         isVideo: Boolean
     ) {
-        if (!hasNotificationPermission()) return
+        android.util.Log.i("NotificationHelper", "[CALL-NOTIF] showIncomingCallNotification: callId=$callId, contact=$contactName")
+
+        if (!hasNotificationPermission()) {
+            android.util.Log.w("NotificationHelper", "[CALL-NOTIF] No notification permission!")
+            return
+        }
 
         // Full-screen intent for incoming call
         val fullScreenIntent = createMainActivityIntent().apply {
@@ -290,6 +295,7 @@ actual class NotificationHelper(
             .build()
 
         notificationManager.notify(NotificationConstants.INCOMING_CALL_NOTIFICATION_ID, notification)
+        android.util.Log.i("NotificationHelper", "[CALL-NOTIF] Incoming call notification posted successfully")
     }
 
     actual fun showOngoingCallNotification(

@@ -69,6 +69,9 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     private var _isDaemonRunning = false
 
+    // Cache for active calls with their media lists (used for proper media negotiation)
+    private val activeCallsMediaCache = mutableMapOf<String, List<Map<String, String>>>()
+
     // SWIG Callback implementations
     private val configCallback = object : ConfigurationCallback() {
         override fun registrationStateChanged(accountId: String?, state: String?, code: Int, detail: String?) {
@@ -225,12 +228,48 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             // Provide a device name for this device
             result?.add(android.os.Build.MODEL)
         }
+
+        override fun getHardwareAudioFormat(result: IntVect?) {
+            // CRITICAL: Provide native audio format to the daemon
+            // This prevents crashes when OpenSL ES can't create streams at non-native sample rates
+            var sampleRate = 44100  // Default fallback
+            var bufferSize = 256    // Default fallback
+
+            try {
+                val audioManager = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                val nativeSampleRate = audioManager.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+                val nativeBufferSize = audioManager.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+
+                if (nativeSampleRate != null) {
+                    sampleRate = nativeSampleRate.toInt()
+                }
+                if (nativeBufferSize != null) {
+                    bufferSize = nativeBufferSize.toInt()
+                }
+
+                Log.i(TAG, "[AUDIO] Native hardware audio format: sampleRate=$sampleRate, bufferSize=$bufferSize")
+            } catch (e: Exception) {
+                Log.w(TAG, "[AUDIO] Failed to get native audio format, using defaults: ${e.message}")
+            }
+
+            result?.add(sampleRate)
+            result?.add(bufferSize)
+        }
     }
 
     private val callCallback = object : Callback() {
         override fun callStateChanged(accountId: String?, callId: String?, state: String?, code: Int) {
             if (accountId != null && callId != null) {
+                Log.i(TAG, "[CALL] callStateChanged: callId=$callId, state=$state, code=$code")
+
                 val callState = parseCallState(state ?: "")
+
+                // Clean up media cache when call ends
+                if (callState == CallState.OVER || callState == CallState.HUNGUP || callState == CallState.FAILURE) {
+                    activeCallsMediaCache.remove(callId)
+                    Log.d(TAG, "[CALL] Cleaned up media cache for call $callId")
+                }
+
                 val event = JamiCallEvent.CallStateChanged(accountId, callId, callState, code)
                 _callEvents.tryEmit(event)
                 _events.tryEmit(event)
@@ -239,18 +278,44 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
         override fun incomingCall(accountId: String?, callId: String?, from: String?, mediaList: VectMap?) {
             if (accountId != null && callId != null && from != null) {
-                val hasVideo = if (mediaList != null) {
-                    var found = false
+                Log.i(TAG, "[CALL] incomingCall: callId=$callId, from=${from.take(16)}..., mediaCount=${mediaList?.size ?: 0}")
+
+                // Convert VectMap to List<Map<String, String>> and store for later use
+                val mediaListConverted = mutableListOf<Map<String, String>>()
+                var hasVideo = false
+
+                if (mediaList != null) {
                     for (i in 0 until mediaList.size) {
                         val media = mediaList[i]
-                        if (media != null && media["MEDIA_TYPE"] == "MEDIA_TYPE_VIDEO") {
-                            found = true
-                            break
+                        if (media != null) {
+                            val mediaMap = mutableMapOf<String, String>()
+                            val keys = media.keys()
+                            for (j in 0 until keys.size) {
+                                val key = keys[j]
+                                mediaMap[key] = media[key] ?: ""
+                            }
+                            mediaListConverted.add(mediaMap)
+                            Log.i(TAG, "[CALL]   Media[$i]: $mediaMap")
+
+                            if (mediaMap["MEDIA_TYPE"] == "MEDIA_TYPE_VIDEO") {
+                                hasVideo = true
+                            }
                         }
                     }
-                    found
-                } else false
-                val event = JamiCallEvent.IncomingCall(accountId, callId, from, from, hasVideo)
+                }
+
+                // Store media list in cache for use when accepting the call
+                activeCallsMediaCache[callId] = mediaListConverted
+                Log.i(TAG, "[CALL] Stored ${mediaListConverted.size} media entries for call $callId")
+
+                val event = JamiCallEvent.IncomingCall(
+                    accountId = accountId,
+                    callId = callId,
+                    peerId = from,
+                    peerDisplayName = from,
+                    hasVideo = hasVideo,
+                    mediaList = mediaListConverted
+                )
                 _callEvents.tryEmit(event)
                 _events.tryEmit(event)
             }
@@ -1199,40 +1264,98 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     // Calls
     override suspend fun placeCall(accountId: String, uri: String, withVideo: Boolean): String = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext ""
+
+        Log.i(TAG, "[CALL] placeCall: uri=${uri.take(16)}..., withVideo=$withVideo")
+
         val mediaList = VectMap()
+
+        // Audio media descriptor - all required fields
         val audioMedia = StringMap()
         audioMedia["MEDIA_TYPE"] = "MEDIA_TYPE_AUDIO"
         audioMedia["ENABLED"] = "true"
         audioMedia["MUTED"] = "false"
         audioMedia["SOURCE"] = ""
+        audioMedia["LABEL"] = "audio_0"
+        audioMedia["ON_HOLD"] = "false"
         mediaList.add(audioMedia)
+
         if (withVideo) {
+            // Video media descriptor - all required fields
             val videoMedia = StringMap()
             videoMedia["MEDIA_TYPE"] = "MEDIA_TYPE_VIDEO"
             videoMedia["ENABLED"] = "true"
             videoMedia["MUTED"] = "false"
             videoMedia["SOURCE"] = "camera://0"
+            videoMedia["LABEL"] = "video_0"
+            videoMedia["ON_HOLD"] = "false"
             mediaList.add(videoMedia)
         }
-        JamiService.placeCallWithMedia(accountId, uri, mediaList)
+
+        val callId = JamiService.placeCallWithMedia(accountId, uri, mediaList)
+        Log.i(TAG, "[CALL] placeCall returned callId=$callId")
+        callId
     }
 
     override suspend fun acceptCall(accountId: String, callId: String, withVideo: Boolean) = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext
-        if (withVideo) {
+
+        Log.i(TAG, "[CALL] acceptCall: callId=$callId, withVideo=$withVideo")
+
+        // Try to use stored media list from daemon (proper media negotiation)
+        val storedMedia = activeCallsMediaCache[callId]
+
+        if (storedMedia != null && storedMedia.isNotEmpty()) {
+            Log.i(TAG, "[CALL] Using stored media list (${storedMedia.size} entries)")
+
             val mediaList = VectMap()
-            val audioMedia = StringMap()
-            audioMedia["MEDIA_TYPE"] = "MEDIA_TYPE_AUDIO"
-            audioMedia["ENABLED"] = "true"
-            mediaList.add(audioMedia)
-            val videoMedia = StringMap()
-            videoMedia["MEDIA_TYPE"] = "MEDIA_TYPE_VIDEO"
-            videoMedia["ENABLED"] = "true"
-            mediaList.add(videoMedia)
+            storedMedia.forEach { mediaMap ->
+                val media = StringMap()
+                mediaMap.forEach { (k, v) ->
+                    media[k] = v
+                }
+                // Mute video if not accepting with video
+                if (!withVideo && mediaMap["MEDIA_TYPE"] == "MEDIA_TYPE_VIDEO") {
+                    media["MUTED"] = "true"
+                    Log.i(TAG, "[CALL]   Muting video media")
+                }
+                mediaList.add(media)
+            }
+
             JamiService.acceptWithMedia(accountId, callId, mediaList)
+            Log.i(TAG, "[CALL] Call accepted with stored media")
         } else {
-            JamiService.accept(accountId, callId)
+            Log.w(TAG, "[CALL] No stored media found, using fallback")
+            // Fallback: construct media list (less reliable)
+            if (withVideo) {
+                val mediaList = VectMap()
+
+                val audioMedia = StringMap()
+                audioMedia["MEDIA_TYPE"] = "MEDIA_TYPE_AUDIO"
+                audioMedia["ENABLED"] = "true"
+                audioMedia["MUTED"] = "false"
+                audioMedia["SOURCE"] = ""
+                audioMedia["LABEL"] = "audio_0"
+                audioMedia["ON_HOLD"] = "false"
+                mediaList.add(audioMedia)
+
+                val videoMedia = StringMap()
+                videoMedia["MEDIA_TYPE"] = "MEDIA_TYPE_VIDEO"
+                videoMedia["ENABLED"] = "true"
+                videoMedia["MUTED"] = "false"
+                videoMedia["SOURCE"] = "camera://0"
+                videoMedia["LABEL"] = "video_0"
+                videoMedia["ON_HOLD"] = "false"
+                mediaList.add(videoMedia)
+
+                JamiService.acceptWithMedia(accountId, callId, mediaList)
+            } else {
+                // Audio only - simple accept
+                JamiService.accept(accountId, callId)
+            }
         }
+
+        // Clean up cache entry after accepting
+        activeCallsMediaCache.remove(callId)
     }
 
     override suspend fun refuseCall(accountId: String, callId: String) = withContext(Dispatchers.IO) {
@@ -1267,6 +1390,26 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     override suspend fun switchCamera() = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext
+        // TODO: Implement camera switching - research JamiService method for this
+        Log.d(TAG, "[CALL] switchCamera - not yet implemented")
+    }
+
+    override suspend fun answerMediaChangeRequest(accountId: String, callId: String, mediaList: List<Map<String, String>>) = withContext(Dispatchers.IO) {
+        if (!nativeLoaded) return@withContext
+
+        Log.i(TAG, "[CALL] answerMediaChangeRequest: callId=$callId, mediaCount=${mediaList.size}")
+
+        val vectMapMedia = VectMap()
+        mediaList.forEach { mediaMap ->
+            val media = StringMap()
+            mediaMap.forEach { (k, v) ->
+                media[k] = v
+            }
+            vectMapMedia.add(media)
+        }
+
+        JamiService.answerMediaChangeRequest(accountId, callId, vectMapMedia)
+        Log.i(TAG, "[CALL] Media change request answered")
     }
 
     override suspend fun switchAudioOutput(useSpeaker: Boolean) = withContext(Dispatchers.IO) {

@@ -268,6 +268,17 @@ class CallViewModel(
                     }
                 }
             }
+            is JamiCallEvent.MediaChangeRequested -> {
+                // Auto-accept media changes from the peer
+                if (event.callId == currentCallId) {
+                    viewModelScope.launch {
+                        val accountId = accountRepository.currentAccountId.value
+                        if (accountId != null) {
+                            jamiBridge.answerMediaChangeRequest(accountId, event.callId, event.mediaList)
+                        }
+                    }
+                }
+            }
             else -> { /* Handle other events */ }
         }
     }
@@ -289,18 +300,16 @@ class CallViewModel(
 
     /**
      * Initialize audio system before starting or accepting a call.
-     * This ensures both input and output audio devices are properly configured.
+     *
+     * Note: We avoid calling setAudioInputDevice() as it can cause SIGSEGV crashes
+     * in the native daemon on some devices. The daemon handles audio device
+     * selection automatically during call setup.
      */
     private suspend fun initializeAudioSystem() {
         try {
-            // Initialize default audio input device (microphone)
-            jamiBridge.useDefaultAudioInputDevice()
-
-            // Initialize audio output to earpiece (not speaker) for calls
+            // Only set audio output to earpiece (not speaker) for calls
+            // Do NOT call setAudioInputDevice - causes native crashes on some devices
             jamiBridge.setAudioOutputDevice(0)
-
-            // Small delay to ensure audio layer initialization completes
-            delay(100)
         } catch (e: Exception) {
             // Log error but don't fail the call
             println("Warning: Audio initialization error: ${e.message}")

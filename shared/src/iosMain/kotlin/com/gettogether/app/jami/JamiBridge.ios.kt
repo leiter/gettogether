@@ -628,6 +628,12 @@ class IOSJamiBridge : JamiBridge {
         }
     }
 
+    override suspend fun answerMediaChangeRequest(accountId: String, callId: String, mediaList: List<Map<String, String>>) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: answerMediaChangeRequest: callId=$callId (stub)")
+        }
+    }
+
     // =========================================================================
     // Conference Calls
     // =========================================================================

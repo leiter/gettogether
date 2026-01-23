@@ -28,6 +28,7 @@ actual class PermissionManager(private val context: Context) {
      * - RECORD_AUDIO: For microphone access during calls
      * - CAMERA: For video calls
      * - POST_NOTIFICATIONS: For showing call/message notifications (Android 13+)
+     * - BLUETOOTH_CONNECT: For Bluetooth headset support during calls (Android 12+)
      */
     actual fun getRequiredPermissions(): List<String> {
         return buildList {
@@ -37,6 +38,11 @@ actual class PermissionManager(private val context: Context) {
             // POST_NOTIFICATIONS is only required on Android 13+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+
+            // BLUETOOTH_CONNECT is required for Bluetooth headset support on Android 12+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                add(Manifest.permission.BLUETOOTH_CONNECT)
             }
 
             // READ_CONTACTS could be added if contact sync is implemented
