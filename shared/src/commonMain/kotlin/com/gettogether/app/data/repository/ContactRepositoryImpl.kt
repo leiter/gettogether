@@ -173,14 +173,14 @@ class ContactRepositoryImpl(
             if (internalContactsCache.value[accountId].isNullOrEmpty()) {
                 refreshContacts(accountId)
 
-                // If still empty after refresh, wait for daemon to initialize
-                if (internalContactsCache.value[accountId].isNullOrEmpty()) {
-                    procrastinate(
-                        delayMs = 500,
-                        condition = { jamiBridge.getContacts(accountId).isNotEmpty() },
-                        onRetrySuccess = { refreshContacts(accountId) }
-                    )
-                }
+                // If still empty after refresh, wait for daemon to initialize  todo find out if that should be reenabled
+//                if (internalContactsCache.value[accountId].isNullOrEmpty()) {
+//                    procrastinate(
+//                        delayMs = 500,
+//                        condition = { jamiBridge.getContacts(accountId).isNotEmpty() },
+//                        onRetrySuccess = { refreshContacts(accountId) }
+//                    )
+//                }
             }
         }
 
@@ -267,7 +267,7 @@ class ContactRepositoryImpl(
                     contact
                 }
             }
-            internalContactsCache.value = internalContactsCache.value + (accountId to updatedContacts)
+            internalContactsCache.value += (accountId to updatedContacts)
 
             Result.success(Unit)
         } catch (e: Exception) {

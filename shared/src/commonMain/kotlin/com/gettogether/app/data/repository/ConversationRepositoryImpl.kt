@@ -230,14 +230,14 @@ class ConversationRepositoryImpl(
             if (_conversationsCache.value[accountId].isNullOrEmpty()) {
                 refreshConversations(accountId)
 
-                // If still empty after refresh, wait for daemon to initialize
-                if (_conversationsCache.value[accountId].isNullOrEmpty()) {
-                    procrastinate(
-                        delayMs = 500,
-                        condition = { jamiBridge.getConversations(accountId).isNotEmpty() },
-                        onRetrySuccess = { refreshConversations(accountId) }
-                    )
-                }
+                // If still empty after refresh, wait for daemon to initialize todo find out if that should be reenabled
+//                if (_conversationsCache.value[accountId].isNullOrEmpty()) {
+//                    procrastinate(
+//                        delayMs = 500,
+//                        condition = { jamiBridge.getConversations(accountId).isNotEmpty() },
+//                        onRetrySuccess = { refreshConversations(accountId) }
+//                    )
+//                }
             }
         }
         return _conversationsCache.map { cache ->

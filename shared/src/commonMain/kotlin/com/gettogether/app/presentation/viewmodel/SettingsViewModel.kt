@@ -470,6 +470,10 @@ class SettingsViewModel(
         _state.update { it.copy(exportSuccess = null) }
     }
 
+    fun clearProfileUpdateSuccess() {
+        _state.update { it.copy(profileUpdateSuccess = null) }
+    }
+
     // ========== Logout Options ==========
 
     fun showLogoutOptionsDialog() {

@@ -85,6 +85,7 @@ fun SettingsTab(
                 message = message,
                 duration = SnackbarDuration.Short
             )
+            viewModel.clearProfileUpdateSuccess()
         }
     }
 
