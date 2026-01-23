@@ -117,6 +117,54 @@ class CallViewModel(
         }
     }
 
+    /**
+     * Initialize for a call that was already accepted (e.g., from notification action).
+     * The call is connecting/connected, so we just need to track its state.
+     */
+    fun initializeAcceptedCall(callId: String, contactId: String, withVideo: Boolean) {
+        println("CallViewModel: initializeAcceptedCall - callId=$callId, contactId=$contactId, withVideo=$withVideo")
+
+        _state.update {
+            it.copy(
+                callId = callId,
+                contactId = contactId,
+                isVideo = withVideo,
+                callStatus = CallStatus.Connecting, // Start as connecting, will check actual state
+                isLocalVideoEnabled = withVideo
+            )
+        }
+
+        viewModelScope.launch {
+            loadContactInfo(contactId)
+
+            // Initialize audio system for the call
+            try {
+                initializeAudioSystem()
+            } catch (e: Exception) {
+                println("CallViewModel: Warning - Audio init error: ${e.message}")
+            }
+
+            // Query the current call state since we might have missed the CURRENT event
+            // (SharedFlow has replay=0, so events emitted before we started collecting are lost)
+            try {
+                val accountId = accountRepository.currentAccountId.value
+                if (accountId != null) {
+                    val callDetails = jamiBridge.getCallDetails(accountId, callId)
+                    val currentState = callDetails["CALL_STATE"] ?: ""
+                    println("CallViewModel: Current call state from daemon: '$currentState'")
+
+                    // If call is already in CURRENT state, transition to Connected
+                    if (currentState == "CURRENT") {
+                        println("CallViewModel: Call is already CURRENT, transitioning to Connected")
+                        onCallConnected()
+                    }
+                }
+            } catch (e: Exception) {
+                println("CallViewModel: Warning - Failed to query call state: ${e.message}")
+            }
+        }
+    }
+
     fun acceptCall() {
         // Check permissions before accepting call
         if (!permissionManager.hasRequiredPermissions()) {
@@ -182,12 +230,19 @@ class CallViewModel(
 
                 val accountId = accountRepository.currentAccountId.value
                 val callId = _state.value.callId
+                println("CallViewModel: endCall - accountId=$accountId, callId=$callId")
+
                 if (accountId != null && callId.isNotEmpty()) {
+                    println("CallViewModel: Calling jamiBridge.hangUp()")
                     jamiBridge.hangUp(accountId, callId)
+                    println("CallViewModel: hangUp() completed")
+                } else {
+                    println("CallViewModel: Cannot hangUp - accountId=$accountId, callId=$callId")
                 }
 
                 _state.update { it.copy(callStatus = CallStatus.Ended) }
             } catch (e: Exception) {
+                println("CallViewModel: endCall error: ${e.message}")
                 _state.update {
                     it.copy(
                         callStatus = CallStatus.Failed,
@@ -252,20 +307,28 @@ class CallViewModel(
         val currentCallId = _state.value.callId
         when (event) {
             is JamiCallEvent.CallStateChanged -> {
+                println("CallViewModel: CallStateChanged - eventCallId=${event.callId}, currentCallId=$currentCallId, state=${event.state}")
                 if (event.callId == currentCallId || currentCallId.isEmpty()) {
+                    println("CallViewModel: Processing state change to ${event.state}")
                     when (event.state) {
                         JamiCallState.CURRENT -> onCallConnected()
                         JamiCallState.RINGING -> _state.update { it.copy(callStatus = CallStatus.Ringing) }
                         JamiCallState.CONNECTING -> _state.update { it.copy(callStatus = CallStatus.Connecting) }
                         JamiCallState.OVER, JamiCallState.HUNGUP -> {
+                            println("CallViewModel: Call ended (${event.state}), setting status to Ended")
                             durationJob?.cancel()
+                            // Stop the foreground service when call ends (including remote hangup)
+                            callServiceBridge?.endCall()
                             _state.update { it.copy(callStatus = CallStatus.Ended) }
+                            println("CallViewModel: State updated to Ended, current status=${_state.value.callStatus}")
                         }
                         JamiCallState.BUSY -> {
                             _state.update { it.copy(callStatus = CallStatus.Failed, error = "User is busy") }
                         }
                         else -> { /* Handle other states */ }
                     }
+                } else {
+                    println("CallViewModel: Ignoring event for different call (event=${event.callId}, current=$currentCallId)")
                 }
             }
             is JamiCallEvent.MediaChangeRequested -> {

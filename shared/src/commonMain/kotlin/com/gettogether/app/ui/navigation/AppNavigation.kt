@@ -9,8 +9,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavType
@@ -34,8 +38,25 @@ import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
+/**
+ * Represents initial navigation destination from notification or deep link.
+ */
+sealed class InitialNavigation {
+    data class Chat(val conversationId: String) : InitialNavigation()
+    data class Call(
+        val contactId: String,
+        val isVideo: Boolean,
+        val callId: String? = null,
+        val isAlreadyAccepted: Boolean = false
+    ) : InitialNavigation()
+    data class ContactDetails(val contactId: String) : InitialNavigation()
+}
+
 @Composable
-fun AppNavigation(modifier: Modifier = Modifier) {
+fun AppNavigation(
+    modifier: Modifier = Modifier,
+    initialNavigation: InitialNavigation? = null
+) {
     val navController = rememberNavController()
     val accountRepository: AccountRepository = koinInject()
     val accountState by accountRepository.accountState.collectAsState()
@@ -58,6 +79,45 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         Screen.Home.route
     } else {
         Screen.Welcome.route
+    }
+
+    // Track if we've handled the initial navigation to avoid repeating
+    var hasHandledInitialNavigation by remember { mutableStateOf(false) }
+
+    // Handle initial navigation from notification/deep link
+    LaunchedEffect(initialNavigation, accountState.accountId) {
+        if (initialNavigation != null && accountState.accountId != null && !hasHandledInitialNavigation) {
+            hasHandledInitialNavigation = true
+            println("AppNavigation: Handling initial navigation: $initialNavigation")
+
+            when (initialNavigation) {
+                is InitialNavigation.Chat -> {
+                    println("AppNavigation: Navigating to chat: ${initialNavigation.conversationId}")
+                    navController.navigate(Screen.Chat.createRoute(initialNavigation.conversationId)) {
+                        launchSingleTop = true
+                    }
+                }
+                is InitialNavigation.Call -> {
+                    println("AppNavigation: Navigating to call: contactId=${initialNavigation.contactId}, isVideo=${initialNavigation.isVideo}, callId=${initialNavigation.callId}, accepted=${initialNavigation.isAlreadyAccepted}")
+                    navController.navigate(
+                        Screen.Call.createRoute(
+                            initialNavigation.contactId,
+                            initialNavigation.isVideo,
+                            initialNavigation.callId,
+                            initialNavigation.isAlreadyAccepted
+                        )
+                    ) {
+                        launchSingleTop = true
+                    }
+                }
+                is InitialNavigation.ContactDetails -> {
+                    println("AppNavigation: Navigating to contact: ${initialNavigation.contactId}")
+                    navController.navigate(Screen.ContactDetails.createRoute(initialNavigation.contactId)) {
+                        launchSingleTop = true
+                    }
+                }
+            }
+        }
     }
 
     val animationDuration = 400
@@ -231,14 +291,27 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             Screen.Call.route,
             arguments = listOf(
                 navArgument("contactId") { type = NavType.StringType },
-                navArgument("isVideo") { type = NavType.StringType }
+                navArgument("isVideo") { type = NavType.StringType },
+                navArgument("callId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("accepted") {
+                    type = NavType.StringType
+                    defaultValue = "false"
+                }
             )
         ) { backStackEntry ->
             val contactId = backStackEntry.extractArg("contactId")
             val isVideo = backStackEntry.extractArg("isVideo").toBoolean()
+            val callId = backStackEntry.arguments?.getString("callId")
+            val isAlreadyAccepted = backStackEntry.extractArg("accepted").toBoolean()
             CallScreen(
                 contactId = contactId,
                 isVideo = isVideo,
+                callId = callId,
+                isAlreadyAccepted = isAlreadyAccepted,
                 onCallEnded = {
                     navController.popBackStack()
                 }
@@ -302,8 +375,20 @@ sealed class Screen(val route: String) {
     object Chat : Screen("chat/{conversationId}") {
         fun createRoute(conversationId: String) = "chat/$conversationId"
     }
-    object Call : Screen("call/{contactId}/{isVideo}") {
-        fun createRoute(contactId: String, isVideo: Boolean) = "call/$contactId/$isVideo"
+    object Call : Screen("call/{contactId}/{isVideo}?callId={callId}&accepted={accepted}") {
+        fun createRoute(
+            contactId: String,
+            isVideo: Boolean,
+            callId: String? = null,
+            isAlreadyAccepted: Boolean = false
+        ): String {
+            val base = "call/$contactId/$isVideo"
+            return if (callId != null) {
+                "$base?callId=$callId&accepted=$isAlreadyAccepted"
+            } else {
+                base
+            }
+        }
     }
     object Conference : Screen("conference/{participantIds}/{withVideo}/{conferenceId}") {
         fun createRoute(participantIds: List<String>, withVideo: Boolean, conferenceId: String? = null) =

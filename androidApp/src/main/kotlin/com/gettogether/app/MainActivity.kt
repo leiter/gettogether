@@ -1,23 +1,26 @@
 package com.gettogether.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import com.gettogether.app.data.repository.ContactRepositoryImpl
+import com.gettogether.app.platform.NotificationConstants
 import com.gettogether.app.platform.PermissionManager
+import com.gettogether.app.ui.navigation.InitialNavigation
 import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
     private val permissionManager: PermissionManager by inject()
+
+    private var initialNavigation by mutableStateOf<InitialNavigation?>(null)
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -43,8 +46,85 @@ class MainActivity : ComponentActivity() {
             permissionLauncher.launch(permissionManager.getRequiredPermissions().toTypedArray())
         }
 
+        // Process intent for navigation
+        initialNavigation = parseNavigationIntent(intent)
+
         setContent {
-            App()
+            App(initialNavigation = initialNavigation)
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Handle new intents when activity is already running
+        initialNavigation = parseNavigationIntent(intent)
+    }
+
+    /**
+     * Parse the incoming intent to determine navigation destination.
+     */
+    private fun parseNavigationIntent(intent: Intent?): InitialNavigation? {
+        if (intent == null) return null
+
+        android.util.Log.d("MainActivity", "Parsing intent action: ${intent.action}")
+
+        return when (intent.action) {
+            "OPEN_CONVERSATION" -> {
+                val conversationId = intent.getStringExtra(NotificationConstants.EXTRA_CONVERSATION_ID)
+                android.util.Log.d("MainActivity", "Navigate to chat: $conversationId")
+                conversationId?.let { InitialNavigation.Chat(it) }
+            }
+            "ANSWER_CALL" -> {
+                // Call was already accepted by CallNotificationReceiver
+                val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)
+                val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID)
+                val isVideo = intent.getBooleanExtra(NotificationConstants.EXTRA_IS_VIDEO, false)
+                android.util.Log.d("MainActivity", "Navigate to answered call: contactId=$contactId, callId=$callId, isVideo=$isVideo")
+                contactId?.let {
+                    InitialNavigation.Call(
+                        contactId = it,
+                        isVideo = isVideo,
+                        callId = callId,
+                        isAlreadyAccepted = true
+                    )
+                }
+            }
+            "INCOMING_CALL" -> {
+                // Call is incoming, not yet accepted
+                val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)
+                val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID)
+                val isVideo = intent.getBooleanExtra(NotificationConstants.EXTRA_IS_VIDEO, false)
+                android.util.Log.d("MainActivity", "Navigate to incoming call: contactId=$contactId, callId=$callId, isVideo=$isVideo")
+                contactId?.let {
+                    InitialNavigation.Call(
+                        contactId = it,
+                        isVideo = isVideo,
+                        callId = callId,
+                        isAlreadyAccepted = false
+                    )
+                }
+            }
+            "START_CALL" -> {
+                // Initiating a new outgoing call
+                val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)
+                val isVideo = intent.getBooleanExtra(NotificationConstants.EXTRA_IS_VIDEO, false)
+                android.util.Log.d("MainActivity", "Navigate to start call: contactId=$contactId, isVideo=$isVideo")
+                contactId?.let { InitialNavigation.Call(it, isVideo) }
+            }
+            "ONGOING_CALL" -> {
+                val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID)
+                val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)
+                android.util.Log.d("MainActivity", "Navigate to ongoing call: callId=$callId")
+                // For ongoing call, we need contact ID - but it may not be in the intent
+                // Just navigate to home if contact ID is not available
+                contactId?.let { InitialNavigation.Call(it, false) }
+            }
+            "CONTACT_DETAILS" -> {
+                val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)
+                android.util.Log.d("MainActivity", "Navigate to contact: $contactId")
+                contactId?.let { InitialNavigation.ContactDetails(it) }
+            }
+            else -> null
         }
     }
 

@@ -68,6 +68,7 @@ fun CallScreen(
     isVideo: Boolean,
     isIncoming: Boolean = false,
     callId: String? = null,
+    isAlreadyAccepted: Boolean = false,
     onCallEnded: () -> Unit,
     viewModel: CallViewModel = koinViewModel()
 ) {
@@ -75,16 +76,31 @@ fun CallScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(contactId) {
-        if (isIncoming && callId != null) {
-            viewModel.initializeIncomingCall(callId, contactId, isVideo)
-        } else {
-            viewModel.initializeOutgoingCall(contactId, isVideo)
+        when {
+            isAlreadyAccepted && callId != null -> {
+                // Call was accepted from notification - just track the active call
+                println("CallScreen: Initializing already-accepted call: callId=$callId, contactId=$contactId")
+                viewModel.initializeAcceptedCall(callId, contactId, isVideo)
+            }
+            isIncoming && callId != null -> {
+                // Incoming call not yet accepted
+                println("CallScreen: Initializing incoming call: callId=$callId, contactId=$contactId")
+                viewModel.initializeIncomingCall(callId, contactId, isVideo)
+            }
+            else -> {
+                // Outgoing call
+                println("CallScreen: Initializing outgoing call: contactId=$contactId")
+                viewModel.initializeOutgoingCall(contactId, isVideo)
+            }
         }
     }
 
     LaunchedEffect(state.callStatus) {
+        println("CallScreen: callStatus changed to ${state.callStatus}")
         if (state.callStatus == CallStatus.Ended || state.callStatus == CallStatus.Failed) {
+            println("CallScreen: Call ended/failed, waiting 1s then navigating back")
             kotlinx.coroutines.delay(1000)
+            println("CallScreen: Calling onCallEnded()")
             onCallEnded()
         }
     }

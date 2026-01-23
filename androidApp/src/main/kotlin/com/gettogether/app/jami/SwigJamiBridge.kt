@@ -1364,8 +1364,13 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
     }
 
     override suspend fun hangUp(accountId: String, callId: String) = withContext(Dispatchers.IO) {
-        if (!nativeLoaded) return@withContext
+        if (!nativeLoaded) {
+            Log.w(TAG, "[CALL] hangUp: Native not loaded!")
+            return@withContext
+        }
+        Log.i(TAG, "[CALL] hangUp: accountId=${accountId.take(8)}..., callId=$callId")
         JamiService.hangUp(accountId, callId)
+        Log.i(TAG, "[CALL] hangUp: completed")
     }
 
     override suspend fun holdCall(accountId: String, callId: String) = withContext(Dispatchers.IO) {
