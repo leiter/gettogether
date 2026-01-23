@@ -198,6 +198,12 @@ interface JamiBridge {
     suspend fun removeConversation(accountId: String, conversationId: String)
 
     /**
+     * Clear conversation cache including pending messages.
+     * Call this before removeConversation to ensure clean deletion.
+     */
+    suspend fun clearConversationCache(accountId: String, conversationId: String)
+
+    /**
      * Get conversation info (title, description, avatar, etc.).
      */
     fun getConversationInfo(accountId: String, conversationId: String): Map<String, String>

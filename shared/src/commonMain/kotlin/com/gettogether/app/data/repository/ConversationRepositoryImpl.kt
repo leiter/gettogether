@@ -21,8 +21,24 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 import kotlin.time.Instant
+
+/**
+ * Represents the synchronization state of a conversation.
+ */
+enum class ConversationSyncState {
+    /** Conversation is not syncing */
+    IDLE,
+    /** Conversation is currently syncing (loading messages or merging) */
+    SYNCING,
+    /** Conversation is fully synced */
+    SYNCED,
+    /** Sync failed - may need retry */
+    ERROR
+}
 
 /**
  * Implementation of ConversationRepository using JamiBridge.
@@ -47,6 +63,78 @@ class ConversationRepositoryImpl(
 
     // Cache for conversation requests by account
     private val _conversationRequestsCache = MutableStateFlow<Map<String, List<com.gettogether.app.jami.ConversationRequest>>>(emptyMap())
+
+    // Mutexes for thread-safe cache operations (prevents race conditions during sync)
+    private val messagesCacheMutex = Mutex()
+    private val conversationsCacheMutex = Mutex()
+
+    // Sync state tracking for conversations (key: "accountId:conversationId")
+    private val _syncStates = MutableStateFlow<Map<String, ConversationSyncState>>(emptyMap())
+
+    /**
+     * Exposes sync states for conversations as a Flow.
+     * Key format: "accountId:conversationId"
+     */
+    val syncStates: Flow<Map<String, ConversationSyncState>> = _syncStates
+
+    /**
+     * Get the sync state for a specific conversation.
+     */
+    fun getSyncState(accountId: String, conversationId: String): ConversationSyncState {
+        val key = "$accountId:$conversationId"
+        return _syncStates.value[key] ?: ConversationSyncState.IDLE
+    }
+
+    /**
+     * Update the sync state for a conversation.
+     */
+    private fun updateSyncState(accountId: String, conversationId: String, state: ConversationSyncState) {
+        val key = "$accountId:$conversationId"
+        val currentState = _syncStates.value[key]
+        if (currentState != state) {
+            println("ConversationRepository: Sync state for $conversationId changed: $currentState -> $state")
+            _syncStates.value = _syncStates.value + (key to state)
+        }
+    }
+
+    /**
+     * Check if a conversation is currently syncing.
+     */
+    fun isSyncing(accountId: String, conversationId: String): Boolean {
+        return getSyncState(accountId, conversationId) == ConversationSyncState.SYNCING
+    }
+
+    /**
+     * Get all conversations with sync errors for an account.
+     */
+    fun getConversationsWithErrors(accountId: String): List<String> {
+        return _syncStates.value
+            .filter { (key, state) -> key.startsWith("$accountId:") && state == ConversationSyncState.ERROR }
+            .map { (key, _) -> key.substringAfter(":") }
+    }
+
+    /**
+     * Retry syncing conversations that have failed.
+     */
+    suspend fun retrySyncErrors(accountId: String) {
+        val errorConversations = getConversationsWithErrors(accountId)
+        println("ConversationRepository.retrySyncErrors: Retrying ${errorConversations.size} failed syncs")
+        errorConversations.forEach { conversationId ->
+            // Reset state to IDLE before retrying
+            updateSyncState(accountId, conversationId, ConversationSyncState.IDLE)
+            loadMessages(accountId, conversationId)
+        }
+    }
+
+    /**
+     * Clear sync state for a removed conversation.
+     */
+    private fun clearSyncState(accountId: String, conversationId: String) {
+        val key = "$accountId:$conversationId"
+        if (_syncStates.value.containsKey(key)) {
+            _syncStates.value = _syncStates.value - key
+        }
+    }
 
     init {
         // Listen for conversation events
@@ -226,12 +314,14 @@ class ConversationRepositoryImpl(
                     type = MessageType.TEXT
                 )
 
-                // Add to cache (sorted by timestamp)
+                // Add to cache (sorted by timestamp) with mutex protection
                 val key = "$accountId:$conversationId"
-                val currentMessages = _messagesCache.value[key] ?: emptyList()
-                val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
-                _messagesCache.value = _messagesCache.value + (key to updatedMessages)
-                println("ConversationRepository.sendMessage: Message added to cache, total messages=${updatedMessages.size}")
+                messagesCacheMutex.withLock {
+                    val currentMessages = _messagesCache.value[key] ?: emptyList()
+                    val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
+                    _messagesCache.value = _messagesCache.value + (key to updatedMessages)
+                    println("ConversationRepository.sendMessage: Message added to cache, total messages=${updatedMessages.size}")
+                }
 
                 return Result.success(message)
             } catch (e: Exception) {
@@ -325,9 +415,11 @@ class ConversationRepositoryImpl(
                 createdAt = Clock.System.now()
             )
 
-            // Add to cache
-            val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
-            _conversationsCache.value += (accountId to (currentConversations + conversation))
+            // Add to cache with mutex protection
+            conversationsCacheMutex.withLock {
+                val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
+                _conversationsCache.value += (accountId to (currentConversations + conversation))
+            }
 
             Result.success(conversation)
         } catch (e: Exception) {
@@ -409,10 +501,12 @@ class ConversationRepositoryImpl(
         return try {
             jamiBridge.removeConversation(accountId, conversationId)
 
-            // Remove from cache
-            val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
-            _conversationsCache.value = _conversationsCache.value +
-                (accountId to currentConversations.filter { it.id != conversationId })
+            // Remove from cache with mutex protection
+            conversationsCacheMutex.withLock {
+                val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
+                _conversationsCache.value = _conversationsCache.value +
+                    (accountId to currentConversations.filter { it.id != conversationId })
+            }
 
             Result.success(Unit)
         } catch (e: Exception) {
@@ -482,27 +576,30 @@ class ConversationRepositoryImpl(
                 }
             }
 
-            // Deduplicate conversations with the same participants
-            // Group by participant URIs and keep only the most recent conversation for each group
+            // Deduplicate conversations by conversation ID only (not by participants)
+            // Different conversation IDs = different git repos = different conversations, even with same contact
+            // This preserves conversations that may have diverged during sync issues
             val deduplicatedConversations = updatedConversations
-                .groupBy { conversation ->
-                    // Create a key from sorted participant URIs (excluding the user)
-                    conversation.participants
-                        .map { it.uri }
-                        .filter { it != userJamiId }
-                        .sorted()
-                        .joinToString(",")
-                }
+                .groupBy { it.id }
                 .mapNotNull { (_, conversationsGroup) ->
-                    // Keep the conversation with the most recent message
+                    // If somehow we have duplicate IDs (shouldn't happen), keep the one with most recent message
                     conversationsGroup.maxByOrNull { conversation ->
                         conversation.lastMessage?.timestamp?.toEpochMilliseconds() ?: 0
                     }
                 }
 
             val duplicatesRemoved = updatedConversations.size - deduplicatedConversations.size
-            println("ConversationRepository.refreshConversations: Loaded ${deduplicatedConversations.size} conversations (filtered out ${conversations.size - updatedConversations.size} self/empty, removed $duplicatesRemoved duplicates)")
-            _conversationsCache.value = _conversationsCache.value + (accountId to deduplicatedConversations)
+            if (duplicatesRemoved > 0) {
+                println("ConversationRepository.refreshConversations: WARNING - removed $duplicatesRemoved duplicate conversation IDs (this shouldn't normally happen)")
+            }
+            println("ConversationRepository.refreshConversations: Loaded ${deduplicatedConversations.size} conversations (filtered out ${conversations.size - filteredConversations.size} self-conversations)")
+
+            // Use scope.launch for mutex protection in non-suspend context
+            scope.launch {
+                conversationsCacheMutex.withLock {
+                    _conversationsCache.value = _conversationsCache.value + (accountId to deduplicatedConversations)
+                }
+            }
         } catch (e: Exception) {
             // Keep existing cache on error
         }
@@ -594,11 +691,20 @@ class ConversationRepositoryImpl(
     }
 
     private suspend fun loadMessages(accountId: String, conversationId: String) {
+        // Skip if already syncing
+        if (isSyncing(accountId, conversationId)) {
+            println("ConversationRepository.loadMessages: Already syncing $conversationId, skipping")
+            return
+        }
+
+        updateSyncState(accountId, conversationId, ConversationSyncState.SYNCING)
         try {
             jamiBridge.loadConversationMessages(accountId, conversationId, "", 50)
             // Messages will arrive via conversationEvents
+            // Note: SYNCED state will be set when MessagesLoaded event is processed
         } catch (e: Exception) {
-            // Handle error
+            println("ConversationRepository.loadMessages: Error loading messages for $conversationId: ${e.message}")
+            updateSyncState(accountId, conversationId, ConversationSyncState.ERROR)
         }
     }
 
@@ -676,22 +782,27 @@ class ConversationRepositoryImpl(
                     )
                 }
 
-                val currentMessages = _messagesCache.value[key] ?: emptyList()
-                if (currentMessages.none { it.id == message.id }) {
-                    val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
-                    _messagesCache.value = _messagesCache.value + (key to updatedMessages)
-                    println("ConversationRepository.handleConversationEvent: Message added to cache, key=$key, total messages=${updatedMessages.size}")
+                // Use mutex to prevent race conditions during concurrent message handling
+                scope.launch {
+                    messagesCacheMutex.withLock {
+                        val currentMessages = _messagesCache.value[key] ?: emptyList()
+                        if (currentMessages.none { it.id == message.id }) {
+                            val updatedMessages = (currentMessages + message).sortedBy { it.timestamp }
+                            _messagesCache.value = _messagesCache.value + (key to updatedMessages)
+                            println("ConversationRepository.handleConversationEvent: Message added to cache, key=$key, total messages=${updatedMessages.size}")
 
-                    // Show notification for the new message
-                    showMessageNotificationIfNeeded(
-                        accountId = accountId,
-                        conversationId = event.conversationId,
-                        authorId = event.message.author,
-                        messageText = message.content,
-                        timestamp = timestampMillis
-                    )
-                } else {
-                    println("ConversationRepository.handleConversationEvent: Message already in cache, skipping")
+                            // Show notification for the new message
+                            showMessageNotificationIfNeeded(
+                                accountId = accountId,
+                                conversationId = event.conversationId,
+                                authorId = event.message.author,
+                                messageText = message.content,
+                                timestamp = timestampMillis
+                            )
+                        } else {
+                            println("ConversationRepository.handleConversationEvent: Message already in cache, skipping")
+                        }
+                    }
                 }
 
                 // Update conversation's last message
@@ -764,21 +875,33 @@ class ConversationRepositoryImpl(
                     return
                 }
 
-                // Merge with existing messages instead of replacing
-                // This ensures we don't lose messages from previous loads
-                val existingMessages = _messagesCache.value[key] ?: emptyList()
-                val existingIds = existingMessages.map { it.id }.toSet()
-                val newMessages = sortedMessages.filter { it.id !in existingIds }
-                val mergedMessages = (existingMessages + newMessages).sortedBy { it.timestamp }
+                // Use mutex to prevent race conditions during concurrent message merging
+                scope.launch {
+                    try {
+                        messagesCacheMutex.withLock {
+                            // Merge with existing messages instead of replacing
+                            // This ensures we don't lose messages from previous loads
+                            val existingMessages = _messagesCache.value[key] ?: emptyList()
+                            val existingIds = existingMessages.map { it.id }.toSet()
+                            val newMessages = sortedMessages.filter { it.id !in existingIds }
+                            val mergedMessages = (existingMessages + newMessages).sortedBy { it.timestamp }
 
-                println("ConversationRepository.MessagesLoaded: Caching ${sortedMessages.size} messages for conversation ${event.conversationId} (${newMessages.size} new, ${mergedMessages.size} total)")
-                _messagesCache.value = _messagesCache.value + (key to mergedMessages)
+                            println("ConversationRepository.MessagesLoaded: Caching ${sortedMessages.size} messages for conversation ${event.conversationId} (${newMessages.size} new, ${mergedMessages.size} total)")
+                            _messagesCache.value = _messagesCache.value + (key to mergedMessages)
 
-                // Update conversation's lastMessage from merged messages
-                if (mergedMessages.isNotEmpty()) {
-                    val lastMsg = mergedMessages.last()
-                    println("ConversationRepository.MessagesLoaded: Updating lastMessage for conversation ${event.conversationId}")
-                    updateConversationLastMessage(accountId, event.conversationId, lastMsg)
+                            // Update conversation's lastMessage from merged messages
+                            if (mergedMessages.isNotEmpty()) {
+                                val lastMsg = mergedMessages.last()
+                                println("ConversationRepository.MessagesLoaded: Updating lastMessage for conversation ${event.conversationId}")
+                                updateConversationLastMessage(accountId, event.conversationId, lastMsg)
+                            }
+                        }
+                        // Mark sync as complete after successful message processing
+                        updateSyncState(accountId, event.conversationId, ConversationSyncState.SYNCED)
+                    } catch (e: Exception) {
+                        println("ConversationRepository.MessagesLoaded: Error processing messages: ${e.message}")
+                        updateSyncState(accountId, event.conversationId, ConversationSyncState.ERROR)
+                    }
                 }
             }
 
@@ -787,9 +910,35 @@ class ConversationRepositoryImpl(
             }
 
             is JamiConversationEvent.ConversationRemoved -> {
-                val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
-                _conversationsCache.value = _conversationsCache.value +
-                    (accountId to currentConversations.filter { it.id != event.conversationId })
+                println("ConversationRepository: Conversation removed - ${event.conversationId}")
+                scope.launch {
+                    // Remove from conversations cache
+                    conversationsCacheMutex.withLock {
+                        val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
+                        _conversationsCache.value = _conversationsCache.value +
+                            (accountId to currentConversations.filter { it.id != event.conversationId })
+                    }
+                    println("ConversationRepository.ConversationRemoved: ✓ Removed from conversations cache")
+
+                    // Remove messages from cache
+                    val messageKey = "$accountId:${event.conversationId}"
+                    messagesCacheMutex.withLock {
+                        _messagesCache.value = _messagesCache.value - messageKey
+                    }
+                    println("ConversationRepository.ConversationRemoved: ✓ Removed messages from cache")
+
+                    // Clear from persistence
+                    try {
+                        conversationPersistence.clearMessages(accountId, event.conversationId)
+                        println("ConversationRepository.ConversationRemoved: ✓ Cleared from persistence")
+                    } catch (e: Exception) {
+                        println("ConversationRepository.ConversationRemoved: Failed to clear persistence: ${e.message}")
+                    }
+
+                    // Clear sync state for removed conversation
+                    clearSyncState(accountId, event.conversationId)
+                    println("ConversationRepository.ConversationRemoved: ✓ Cleanup complete for ${event.conversationId}")
+                }
             }
 
             is JamiConversationEvent.ConversationRequestReceived -> {
@@ -826,39 +975,44 @@ class ConversationRepositoryImpl(
     }
 
     private fun updateConversationLastMessage(accountId: String, conversationId: String, message: Message) {
-        val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
+        // Use scope.launch for mutex since this is called from non-suspend contexts
+        scope.launch {
+            conversationsCacheMutex.withLock {
+                val currentConversations = _conversationsCache.value[accountId] ?: emptyList()
 
-        // Check if conversation exists in cache
-        val conversationExists = currentConversations.any { it.id == conversationId }
+                // Check if conversation exists in cache
+                val conversationExists = currentConversations.any { it.id == conversationId }
 
-        if (!conversationExists) {
-            // Conversation not in cache - load it and add it
-            println("ConversationRepository.updateConversationLastMessage: Conversation $conversationId not in cache, loading it")
-            try {
-                val conversation = loadConversation(accountId, conversationId)
-                val conversationWithMessage = conversation.copy(
-                    lastMessage = message,
-                    version = conversation.version + 1
-                )
-                _conversationsCache.value = _conversationsCache.value +
-                    (accountId to (currentConversations + conversationWithMessage))
-                println("ConversationRepository.updateConversationLastMessage: Added new conversation to cache with message")
-            } catch (e: Exception) {
-                println("ConversationRepository.updateConversationLastMessage: Failed to load conversation: ${e.message}")
-            }
-        } else {
-            // Conversation exists - update it
-            val updatedConversations = currentConversations.map { conv ->
-                if (conv.id == conversationId) {
-                    conv.copy(
-                        lastMessage = message,
-                        version = conv.version + 1
-                    )
+                if (!conversationExists) {
+                    // Conversation not in cache - load it and add it
+                    println("ConversationRepository.updateConversationLastMessage: Conversation $conversationId not in cache, loading it")
+                    try {
+                        val conversation = loadConversation(accountId, conversationId)
+                        val conversationWithMessage = conversation.copy(
+                            lastMessage = message,
+                            version = conversation.version + 1
+                        )
+                        _conversationsCache.value = _conversationsCache.value +
+                            (accountId to (currentConversations + conversationWithMessage))
+                        println("ConversationRepository.updateConversationLastMessage: Added new conversation to cache with message")
+                    } catch (e: Exception) {
+                        println("ConversationRepository.updateConversationLastMessage: Failed to load conversation: ${e.message}")
+                    }
                 } else {
-                    conv
+                    // Conversation exists - update it
+                    val updatedConversations = currentConversations.map { conv ->
+                        if (conv.id == conversationId) {
+                            conv.copy(
+                                lastMessage = message,
+                                version = conv.version + 1
+                            )
+                        } else {
+                            conv
+                        }
+                    }
+                    _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
                 }
             }
-            _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
         }
     }
 
@@ -868,7 +1022,9 @@ class ConversationRepositoryImpl(
     suspend fun clearMessages(accountId: String, conversationId: String) {
         println("ConversationRepository.clearMessages: accountId=$accountId, conversationId=$conversationId")
         val key = "$accountId:$conversationId"
-        _messagesCache.value -= key
+        messagesCacheMutex.withLock {
+            _messagesCache.value -= key
+        }
         println("ConversationRepository.clearMessages: Messages cleared from cache")
     }
 
@@ -917,11 +1073,15 @@ class ConversationRepositoryImpl(
             }
         }
 
-        // Clear ALL conversations from cache
-        _conversationsCache.value = _conversationsCache.value - accountId
+        // Clear ALL conversations from cache with mutex protection
+        conversationsCacheMutex.withLock {
+            _conversationsCache.value = _conversationsCache.value - accountId
+        }
 
-        // Clear ALL messages for this account's conversations
-        _messagesCache.value = _messagesCache.value.filterKeys { !it.startsWith("$accountId:") }
+        // Clear ALL messages for this account's conversations with mutex protection
+        messagesCacheMutex.withLock {
+            _messagesCache.value = _messagesCache.value.filterKeys { !it.startsWith("$accountId:") }
+        }
 
         // Clear from persistence
         try {
@@ -938,13 +1098,24 @@ class ConversationRepositoryImpl(
         println("ConversationRepository.deleteConversation: Deleting conversation $conversationId")
 
         try {
+            // Clear conversation cache first to clean up pending messages
+            try {
+                jamiBridge.clearConversationCache(accountId, conversationId)
+                println("ConversationRepository.deleteConversation: ✓ Cleared daemon cache (pending messages)")
+            } catch (e: Exception) {
+                println("ConversationRepository.deleteConversation: Warning - Failed to clear cache: ${e.message}")
+                // Continue with removal even if cache clear fails
+            }
+
             // Remove conversation from Jami daemon
             jamiBridge.removeConversation(accountId, conversationId)
             println("ConversationRepository.deleteConversation: ✓ Removed from daemon")
 
-            // Remove messages for this conversation from cache
+            // Remove messages for this conversation from cache with mutex protection
             val messageKey = "$accountId:$conversationId"
-            _messagesCache.value = _messagesCache.value - messageKey
+            messagesCacheMutex.withLock {
+                _messagesCache.value = _messagesCache.value - messageKey
+            }
             println("ConversationRepository.deleteConversation: ✓ Removed messages from cache")
 
             // Clear from persistence
@@ -972,25 +1143,28 @@ class ConversationRepositoryImpl(
      */
     suspend fun markAsRead(accountId: String, conversationId: String) {
         try {
-            // Get the latest message ID to mark as read
+            // Get the latest message ID to mark as read (with mutex)
             val key = "$accountId:$conversationId"
-            val messages = _messagesCache.value[key]
-            val lastMessageId = messages?.lastOrNull()?.id
+            val lastMessageId = messagesCacheMutex.withLock {
+                _messagesCache.value[key]?.lastOrNull()?.id
+            }
 
             if (lastMessageId != null) {
                 jamiBridge.setMessageDisplayed(accountId, conversationId, lastMessageId)
             }
 
-            // Update local unread count
-            val currentConversations = _conversationsCache.value[accountId] ?: return
-            val updatedConversations = currentConversations.map { conv ->
-                if (conv.id == conversationId) {
-                    conv.copy(unreadCount = 0)
-                } else {
-                    conv
+            // Update local unread count with mutex protection
+            conversationsCacheMutex.withLock {
+                val currentConversations = _conversationsCache.value[accountId] ?: return@withLock
+                val updatedConversations = currentConversations.map { conv ->
+                    if (conv.id == conversationId) {
+                        conv.copy(unreadCount = 0)
+                    } else {
+                        conv
+                    }
                 }
+                _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
             }
-            _conversationsCache.value = _conversationsCache.value + (accountId to updatedConversations)
         } catch (e: Exception) {
             // Handle error silently
         }

@@ -87,6 +87,7 @@ class MockJamiBridge : JamiBridge {
 
     override suspend fun startConversation(accountId: String): String = "test-conversation-id"
     override suspend fun removeConversation(accountId: String, conversationId: String) {}
+    override suspend fun clearConversationCache(accountId: String, conversationId: String) {}
     override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> = emptyMap()
     override suspend fun updateConversationInfo(accountId: String, conversationId: String, info: Map<String, String>) {}
     override fun getConversationMembers(accountId: String, conversationId: String): List<ConversationMember> = emptyList()

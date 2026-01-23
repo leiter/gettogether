@@ -426,6 +426,12 @@ class IOSJamiBridge : JamiBridge {
         }
     }
 
+    override suspend fun clearConversationCache(accountId: String, conversationId: String) {
+        withContext(Dispatchers.Default) {
+            NSLog("$TAG: clearConversationCache: $conversationId (stub)")
+        }
+    }
+
     override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> =
         mapOf("id" to conversationId, "title" to "Conversation", "mode" to "0")
 

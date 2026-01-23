@@ -6,11 +6,13 @@ import com.gettogether.app.data.util.VCardParser
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 import net.jami.daemon.*
 
 /**
@@ -21,12 +23,43 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Event flows
-    private val _events = MutableSharedFlow<JamiEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _accountEvents = MutableSharedFlow<JamiAccountEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _callEvents = MutableSharedFlow<JamiCallEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _conversationEvents = MutableSharedFlow<JamiConversationEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _contactEvents = MutableSharedFlow<JamiContactEvent>(replay = 0, extraBufferCapacity = 64)
+    // Event buffer size - increased from 64 to 512 to prevent event loss during rapid sync operations
+    private val EVENT_BUFFER_SIZE = 512
+
+    // Overflow counters for monitoring - helps detect sync issues
+    private val eventsOverflowCount = AtomicLong(0)
+    private val accountEventsOverflowCount = AtomicLong(0)
+    private val callEventsOverflowCount = AtomicLong(0)
+    private val conversationEventsOverflowCount = AtomicLong(0)
+    private val contactEventsOverflowCount = AtomicLong(0)
+
+    // Event flows with larger buffers and DROP_OLDEST overflow strategy
+    // DROP_OLDEST prevents suspension but may lose events if buffer fills up
+    private val _events = MutableSharedFlow<JamiEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _accountEvents = MutableSharedFlow<JamiAccountEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _callEvents = MutableSharedFlow<JamiCallEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _conversationEvents = MutableSharedFlow<JamiConversationEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _contactEvents = MutableSharedFlow<JamiContactEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
     override val events: SharedFlow<JamiEvent> = _events.asSharedFlow()
     override val accountEvents: SharedFlow<JamiAccountEvent> = _accountEvents.asSharedFlow()
@@ -431,11 +464,102 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                 _events.tryEmit(event)
             }
         }
+
+        override fun conversationRemoved(accountId: String?, conversationId: String?) {
+            Log.i(TAG, "┌─── conversationRemoved CALLBACK ───")
+            Log.i(TAG, "│ accountId: $accountId")
+            Log.i(TAG, "│ conversationId: $conversationId")
+            Log.i(TAG, "└─── End conversationRemoved ───")
+            if (accountId != null && conversationId != null) {
+                val event = JamiConversationEvent.ConversationRemoved(accountId, conversationId)
+                _conversationEvents.tryEmit(event)
+                _events.tryEmit(event)
+            }
+        }
     }
 
     companion object {
         private const val TAG = "SwigJamiBridge"
         private var nativeLoaded = false
+
+        // Retry configuration for daemon operations
+        private const val MAX_RETRY_ATTEMPTS = 3
+        private const val INITIAL_RETRY_DELAY_MS = 1000L
+        private const val MAX_RETRY_DELAY_MS = 30000L
+        private const val RETRY_BACKOFF_MULTIPLIER = 2.0
+
+        /**
+         * Executes a daemon operation with exponential backoff retry.
+         * Useful for operations that may fail due to transient network or daemon issues.
+         *
+         * @param operationName Name of the operation for logging
+         * @param maxAttempts Maximum number of retry attempts (default: MAX_RETRY_ATTEMPTS)
+         * @param block The operation to execute
+         * @return Result of the operation, or null if all retries failed
+         */
+        suspend fun <T> withRetry(
+            operationName: String,
+            maxAttempts: Int = MAX_RETRY_ATTEMPTS,
+            block: suspend () -> T
+        ): T? {
+            var currentDelay = INITIAL_RETRY_DELAY_MS
+            var lastException: Exception? = null
+
+            repeat(maxAttempts) { attempt ->
+                try {
+                    return block()
+                } catch (e: Exception) {
+                    lastException = e
+                    Log.w(TAG, "[RETRY] $operationName failed (attempt ${attempt + 1}/$maxAttempts): ${e.message}")
+
+                    if (attempt < maxAttempts - 1) {
+                        Log.d(TAG, "[RETRY] Waiting ${currentDelay}ms before retry...")
+                        kotlinx.coroutines.delay(currentDelay)
+                        currentDelay = minOf(
+                            (currentDelay * RETRY_BACKOFF_MULTIPLIER).toLong(),
+                            MAX_RETRY_DELAY_MS
+                        )
+                    }
+                }
+            }
+
+            Log.e(TAG, "[RETRY] $operationName failed after $maxAttempts attempts: ${lastException?.message}")
+            return null
+        }
+
+        /**
+         * Executes a daemon operation with exponential backoff retry, returning a Result.
+         * Use this variant when you need to distinguish between success and failure.
+         */
+        suspend fun <T> withRetryResult(
+            operationName: String,
+            maxAttempts: Int = MAX_RETRY_ATTEMPTS,
+            block: suspend () -> T
+        ): Result<T> {
+            var currentDelay = INITIAL_RETRY_DELAY_MS
+            var lastException: Exception? = null
+
+            repeat(maxAttempts) { attempt ->
+                try {
+                    return Result.success(block())
+                } catch (e: Exception) {
+                    lastException = e
+                    Log.w(TAG, "[RETRY] $operationName failed (attempt ${attempt + 1}/$maxAttempts): ${e.message}")
+
+                    if (attempt < maxAttempts - 1) {
+                        Log.d(TAG, "[RETRY] Waiting ${currentDelay}ms before retry...")
+                        kotlinx.coroutines.delay(currentDelay)
+                        currentDelay = minOf(
+                            (currentDelay * RETRY_BACKOFF_MULTIPLIER).toLong(),
+                            MAX_RETRY_DELAY_MS
+                        )
+                    }
+                }
+            }
+
+            Log.e(TAG, "[RETRY] $operationName failed after $maxAttempts attempts")
+            return Result.failure(lastException ?: Exception("$operationName failed after $maxAttempts attempts"))
+        }
 
         init {
             Log.d(TAG, "=== SwigJamiBridge: Attempting to load native library ===")
@@ -946,6 +1070,13 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         Unit
     }
 
+    override suspend fun clearConversationCache(accountId: String, conversationId: String) = withContext(Dispatchers.IO) {
+        if (!nativeLoaded) return@withContext
+        Log.d(TAG, "clearConversationCache: Clearing cache for conversation ${conversationId.take(8)}...")
+        JamiService.clearCache(accountId, conversationId)
+        Log.d(TAG, "clearConversationCache: Cache cleared successfully")
+    }
+
     override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> {
         if (!nativeLoaded) return emptyMap()
         val info = stringMapToKotlin(JamiService.conversationInfos(accountId, conversationId))
@@ -989,7 +1120,12 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     override suspend fun acceptConversationRequest(accountId: String, conversationId: String) = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext
-        JamiService.acceptConversationRequest(accountId, conversationId)
+
+        // Use retry for conversation request acceptance (critical for sync)
+        withRetry("acceptConversationRequest") {
+            JamiService.acceptConversationRequest(accountId, conversationId)
+        }
+        Unit
     }
 
     override suspend fun declineConversationRequest(accountId: String, conversationId: String) = withContext(Dispatchers.IO) {
@@ -1029,18 +1165,24 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             return@withContext ""
         }
         Log.i(TAG, "sendMessage: accountId=$accountId, conversationId=$conversationId, message='$message'")
-        try {
+
+        // Use retry with exponential backoff for reliability
+        val result = withRetry("sendMessage") {
             JamiService.sendMessage(accountId, conversationId, message, replyTo ?: "", 0)
             Log.i(TAG, "sendMessage: JamiService.sendMessage called successfully")
-        } catch (e: Exception) {
-            Log.e(TAG, "sendMessage: Exception - ${e.message}", e)
+            ""
         }
-        ""
+
+        result ?: ""
     }
 
     override suspend fun loadConversationMessages(accountId: String, conversationId: String, fromMessage: String, count: Int): Int = withContext(Dispatchers.IO) {
         if (!nativeLoaded) return@withContext 0
-        JamiService.loadConversation(accountId, conversationId, fromMessage, count.toLong()).toInt()
+
+        // Use retry with exponential backoff for message loading (critical for sync)
+        withRetry("loadConversationMessages") {
+            JamiService.loadConversation(accountId, conversationId, fromMessage, count.toLong()).toInt()
+        } ?: 0
     }
 
     override suspend fun setIsComposing(accountId: String, conversationId: String, isComposing: Boolean) = withContext(Dispatchers.IO) {
@@ -1234,16 +1376,19 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
             return@withContext ""
         }
 
-        try {
+        // Use retry for file transfer (network-dependent operation)
+        val result = withRetry("sendFile") {
             JamiService.sendFile(accountId, conversationId, filePath, displayName, "")
             Log.i(TAG, "│ JamiService.sendFile() called successfully")
             Log.i(TAG, "└─── sendFile SUCCESS ───")
-        } catch (e: Exception) {
-            Log.e(TAG, "│ ERROR: ${e.message}")
-            e.printStackTrace()
-            Log.i(TAG, "└─── sendFile FAILED ───")
+            ""
         }
-        ""
+
+        if (result == null) {
+            Log.i(TAG, "└─── sendFile FAILED after retries ───")
+        }
+
+        result ?: ""
     }
 
     override suspend fun acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String) = withContext(Dispatchers.IO) {
