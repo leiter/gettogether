@@ -11,9 +11,17 @@ data class ChatState(
     val isSending: Boolean = false,
     val error: String? = null,
     val isPickingImage: Boolean = false,
-    val pendingImageUri: String? = null
+    val pendingImageUri: String? = null,
+    val selectedMessageForMenu: ChatMessage? = null,
+    val saveResult: SaveResult? = null,
+    val pendingSaveMessage: ChatMessage? = null
 ) {
     val canSend: Boolean get() = messageInput.isNotBlank() && !isSending
+}
+
+sealed class SaveResult {
+    data class Success(val message: String) : SaveResult()
+    data class Failure(val message: String) : SaveResult()
 }
 
 data class ChatMessage(

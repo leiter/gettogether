@@ -43,4 +43,32 @@ actual class PermissionManager(private val context: Context) {
             // add(Manifest.permission.READ_CONTACTS)
         }
     }
+
+    /**
+     * Check if storage write permission is granted.
+     * On Android 10+ (Q), MediaStore API doesn't need WRITE_EXTERNAL_STORAGE.
+     * On Android 9 and below, we need WRITE_EXTERNAL_STORAGE permission.
+     */
+    actual fun hasStorageWritePermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            true // Android 10+ uses MediaStore, no permission needed for Downloads
+        } else {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
+     * Get the storage write permission string if needed.
+     * Returns null on Android 10+ since MediaStore doesn't require permission.
+     */
+    actual fun getStorageWritePermission(): String? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            null // Not needed on Android 10+
+        } else {
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+        }
+    }
 }

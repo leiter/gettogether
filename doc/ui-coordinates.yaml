@@ -36,7 +36,7 @@ devices:
           tap: [540, 1369]
 
       # =====================
-      # Main Navigation
+      # Main Navigation (VERIFIED 2026-01-23)
       # =====================
       home:
         bottom_nav:
@@ -49,12 +49,12 @@ devices:
           settings_tab:
             bounds: [[734, 2127], [1080, 2337]]
             tap: [907, 2232]
-        fab_new_conversation:
+        fab_new_conversation:  # VERIFIED 2026-01-23
           bounds: [[891, 1938], [1038, 2085]]
           tap: [965, 2012]
 
       # =====================
-      # Chats Screen
+      # Chats Screen (VERIFIED 2026-01-23)
       # =====================
       chats:
         list_items:
@@ -121,29 +121,43 @@ devices:
           tap: [540, 749]
 
       # =====================
-      # Chat Screen
+      # Chat Screen (VERIFIED 2026-01-23)
       # =====================
-      # TODO: Coordinates untested - requires active conversation
-      # Test when contacts are added and a chat is started
       chat:
         back_button:
           bounds: [[21, 258], [147, 384]]
           tap: [84, 321]
-        message_input:
-          bounds: [[84, 2040], [912, 2106]]
-          tap: [498, 2073]
-        send_button:
-          bounds: [[933, 2019], [1059, 2127]]
-          tap: [996, 2073]
+
+        # ----- KEYBOARD HIDDEN (closed) -----
+        keyboard_hidden:
+          message_input:
+            tap: [634, 2255]
+            note: "Tap to open keyboard"
+          send_button:
+            tap: [655, 2255]
+          image_picker:
+            tap: [57, 2255]
+
+        # ----- KEYBOARD OPEN -----
+        keyboard_open:
+          message_input:
+            tap: [634, 2255]
+            note: "Same as hidden - opens keyboard"
+          send_button:
+            tap: [1006, 1419]
+            note: "VERIFIED - sends message with keyboard open"
+          image_picker:
+            tap: [104, 1380]
+            note: "VERIFIED - opens file picker with keyboard open"
 
       # =====================
-      # New Conversation Screen
+      # New Conversation Screen (VERIFIED 2026-01-23)
       # =====================
       new_conversation:
         back_button:
           bounds: [[12, 140], [138, 266]]
           tap: [75, 203]
-        groups_button:
+        group_call_button:
           bounds: [[944, 140], [1070, 266]]
           tap: [1007, 203]
         search_field:
@@ -151,11 +165,11 @@ devices:
           tap: [540, 381]
         contact_list_items:
           first:
-            bounds: [[0, 454], [1080, 620]]
-            tap: [540, 537]
+            bounds: [[0, 475], [1080, 685]]
+            tap: [540, 580]
           second:
-            bounds: [[0, 620], [1080, 786]]
-            tap: [540, 703]
+            bounds: [[0, 685], [1080, 895]]
+            tap: [540, 790]
 
   # Pixel 2 Test Device
   FA7AJ1A06417:

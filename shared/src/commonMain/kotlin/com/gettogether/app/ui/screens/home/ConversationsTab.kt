@@ -88,12 +88,17 @@ fun ConversationsTab(
         TopAppBar(
             title = { Text("Chats") },
             actions = {
-                IconButton(onClick = { viewModel.clearAllConversations() }) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Clear all conversations"
-                    )
-                }
+//                 DISABLED: Too dangerous for testing - causes accidental data loss
+                 IconButton(
+                     onClick = {
+
+                         //viewModel.clearAllConversations()
+                     }) {
+                     Icon(
+                         imageVector = Icons.Default.Delete,
+                         contentDescription = "Clear all conversations"
+                     )
+                 }
             }
         )
 
@@ -214,12 +219,34 @@ private fun ConversationItem(
                     )
                 }
             } else {
-                // 1:1 chat - show contact avatar
-                AvatarImage(
-                    avatarUri = conversation.avatarUri,
-                    displayName = conversation.name,
-                    size = 48.dp
-                )
+                // 1:1 chat - show contact avatar with online indicator
+                Box {
+                    AvatarImage(
+                        avatarUri = conversation.avatarUri,
+                        displayName = conversation.name,
+                        size = 48.dp
+                    )
+                    // Online indicator
+                    if (conversation.isOnline) {
+                        Surface(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .align(Alignment.BottomEnd),
+                            shape = MaterialTheme.shapes.extraLarge,
+                            color = MaterialTheme.colorScheme.surface
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(2.dp)
+                            ) {
+                                Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    shape = MaterialTheme.shapes.extraLarge,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                ) {}
+                            }
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.width(16.dp))

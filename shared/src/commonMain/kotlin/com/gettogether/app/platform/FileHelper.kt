@@ -38,4 +38,14 @@ expect class FileHelper {
      * @return Absolute file path if it exists, null otherwise
      */
     fun getConversationFilePath(accountId: String, conversationId: String, fileId: String): String?
+
+    /**
+     * Save a file to public storage (Downloads/gettogether folder).
+     * On Android 10+: Uses MediaStore API (no permission needed).
+     * On Android 9 and below: Uses direct file access (needs WRITE_EXTERNAL_STORAGE).
+     * @param sourcePath The source file path to copy from
+     * @param fileName The desired file name in Downloads
+     * @return Result with the saved file path on success, or error message on failure
+     */
+    suspend fun saveToPublicStorage(sourcePath: String, fileName: String): Result<String>
 }

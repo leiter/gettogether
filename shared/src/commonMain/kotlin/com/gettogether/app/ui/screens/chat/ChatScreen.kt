@@ -27,11 +27,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,7 +61,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
@@ -65,13 +73,17 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.gettogether.app.platform.ImagePickerResult
+import com.gettogether.app.platform.PermissionManager
 import com.gettogether.app.platform.provideImagePicker
+import com.gettogether.app.platform.providePermissionRequester
 import com.gettogether.app.presentation.state.ChatMessage
 import com.gettogether.app.presentation.state.ChatMessageType
 import com.gettogether.app.presentation.state.FileTransferState
 import com.gettogether.app.presentation.state.MessageStatus
+import com.gettogether.app.presentation.state.SaveResult
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.ui.components.ContactAvatarImage
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -79,16 +91,22 @@ import org.koin.compose.viewmodel.koinViewModel
 fun ChatScreen(
     conversationId: String,
     onNavigateBack: () -> Unit,
-    viewModel: ChatViewModel = koinViewModel()
+    viewModel: ChatViewModel = koinViewModel(),
+    permissionManager: PermissionManager = koinInject()
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val clipboardManager = LocalClipboardManager.current
+    val hapticFeedback = LocalHapticFeedback.current
 
     // Image picker
     val imagePicker = provideImagePicker()
+
+    // Permission requester for storage access
+    val permissionRequester = providePermissionRequester()
 
     LaunchedEffect(conversationId) {
         viewModel.loadConversation(conversationId)
@@ -105,6 +123,33 @@ fun ChatScreen(
         state.error?.let { error ->
             snackbarHostState.showSnackbar(error)
             viewModel.clearError()
+        }
+    }
+
+    // Handle save result snackbar
+    LaunchedEffect(state.saveResult) {
+        state.saveResult?.let { result ->
+            val message = when (result) {
+                is SaveResult.Success -> result.message
+                is SaveResult.Failure -> result.message
+            }
+            snackbarHostState.showSnackbar(message)
+            viewModel.clearSaveResult()
+        }
+    }
+
+    // Handle pending storage permission request
+    LaunchedEffect(state.pendingSaveMessage) {
+        state.pendingSaveMessage?.let {
+            val permission = permissionManager.getStorageWritePermission()
+            if (permission != null) {
+                permissionRequester.requestPermission(permission) { granted ->
+                    viewModel.onStoragePermissionResult(granted)
+                }
+            } else {
+                // No permission needed (Android 10+), proceed directly
+                viewModel.onStoragePermissionResult(true)
+            }
         }
     }
 
@@ -153,7 +198,9 @@ fun ChatScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.clearMessages() }) {
+                    IconButton(onClick = {
+//                        viewModel.clearMessages()
+                    }) {
                         Icon(
                             imageVector = Icons.Default.Delete,
                             contentDescription = "Delete messages"
@@ -232,13 +279,54 @@ fun ChatScreen(
                         "state=${it.transferState}, localPath=${it.localPath?.takeLast(30)}, progress=${it.progress}"
                     } ?: "null"
                     println("ChatScreen: Rendering id=${message.id.take(8)}, type=${message.type}, isFromMe=${message.isFromMe}, fileInfo=[$fileInfoStr]")
+                    val isMenuOpen = state.selectedMessageForMenu?.id == message.id
                     when (message.type) {
-                        ChatMessageType.Text -> MessageBubble(message = message)
+                        ChatMessageType.Text -> MessageBubble(
+                            message = message,
+                            showMenu = isMenuOpen,
+                            onLongClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.showMessageMenu(message)
+                            },
+                            onDismissMenu = { viewModel.hideMessageMenu() },
+                            onCopyText = {
+                                clipboardManager.setText(AnnotatedString(message.content))
+                                viewModel.hideMessageMenu()
+                            }
+                        )
                         ChatMessageType.Image -> ImageMessageBubble(
                             message = message,
-                            onDownloadClick = { viewModel.downloadFile(message.id) }
+                            onDownloadClick = { viewModel.downloadFile(message.id) },
+                            showMenu = isMenuOpen,
+                            onLongClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.showMessageMenu(message)
+                            },
+                            onDismissMenu = { viewModel.hideMessageMenu() },
+                            onSaveImage = {
+                                viewModel.saveMessageToDownloads(message)
+                                viewModel.hideMessageMenu()
+                            }
                         )
-                        ChatMessageType.File -> MessageBubble(message = message) // Fallback to text for now
+                        ChatMessageType.File -> MessageBubble(
+                            message = message,
+                            showMenu = isMenuOpen,
+                            onLongClick = {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.showMessageMenu(message)
+                            },
+                            onDismissMenu = { viewModel.hideMessageMenu() },
+                            onCopyText = {
+                                clipboardManager.setText(AnnotatedString(message.content))
+                                viewModel.hideMessageMenu()
+                            },
+                            onSaveFile = if (message.fileInfo?.transferState == FileTransferState.Completed) {
+                                {
+                                    viewModel.saveMessageToDownloads(message)
+                                    viewModel.hideMessageMenu()
+                                }
+                            } else null
+                        )
                     }
                 }
                 item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -272,8 +360,16 @@ fun ChatScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(
+    message: ChatMessage,
+    showMenu: Boolean = false,
+    onLongClick: () -> Unit = {},
+    onDismissMenu: () -> Unit = {},
+    onCopyText: (() -> Unit)? = null,
+    onSaveFile: (() -> Unit)? = null
+) {
     val bubbleColor = if (message.isFromMe) {
         MaterialTheme.colorScheme.primary
     } else {
@@ -296,17 +392,55 @@ private fun MessageBubble(message: ChatMessage) {
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (message.isFromMe) Alignment.End else Alignment.Start
     ) {
-        Surface(
-            shape = bubbleShape,
-            color = bubbleColor,
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = textColor
-                )
+        Box {
+            Surface(
+                shape = bubbleShape,
+                color = bubbleColor,
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .combinedClickable(
+                        onClick = { },
+                        onLongClick = onLongClick
+                    )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = message.content,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = textColor
+                    )
+                }
+            }
+
+            // Context menu
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = onDismissMenu
+            ) {
+                if (onCopyText != null) {
+                    DropdownMenuItem(
+                        text = { Text("Copy text") },
+                        onClick = onCopyText,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                }
+                if (onSaveFile != null) {
+                    DropdownMenuItem(
+                        text = { Text("Save file") },
+                        onClick = onSaveFile,
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Save,
+                                contentDescription = null
+                            )
+                        }
+                    )
+                }
             }
         }
 
@@ -409,10 +543,15 @@ private fun MessageInput(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ImageMessageBubble(
     message: ChatMessage,
-    onDownloadClick: () -> Unit
+    onDownloadClick: () -> Unit,
+    showMenu: Boolean = false,
+    onLongClick: () -> Unit = {},
+    onDismissMenu: () -> Unit = {},
+    onSaveImage: (() -> Unit)? = null
 ) {
     val context = LocalPlatformContext.current
     val fileInfo = message.fileInfo ?: return
@@ -429,144 +568,173 @@ private fun ImageMessageBubble(
         RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
     }
 
+    // Only show save option when file is downloaded
+    val canSave = fileInfo.transferState == FileTransferState.Completed && fileInfo.localPath != null
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = if (message.isFromMe) Alignment.End else Alignment.Start
     ) {
-        Surface(
-            shape = bubbleShape,
-            color = bubbleColor,
-            modifier = Modifier.widthIn(max = 280.dp)
-        ) {
-            Box(
+        Box {
+            Surface(
+                shape = bubbleShape,
+                color = bubbleColor,
                 modifier = Modifier
-                    .size(200.dp)
-                    .padding(4.dp),
-                contentAlignment = Alignment.Center
+                    .widthIn(max = 280.dp)
+                    .combinedClickable(
+                        onClick = { },
+                        onLongClick = onLongClick
+                    )
             ) {
-                when (fileInfo.transferState) {
-                    FileTransferState.Completed -> {
-                        if (fileInfo.localPath != null) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(fileInfo.localPath)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = fileInfo.fileName,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(12.dp))
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.BrokenImage,
-                                contentDescription = "Image not found",
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    FileTransferState.Uploading, FileTransferState.Downloading -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            CircularProgressIndicator(
-                                progress = { fileInfo.progress },
-                                modifier = Modifier.size(48.dp),
-                                color = if (message.isFromMe) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "${(fileInfo.progress * 100).toInt()}%",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (message.isFromMe) {
-                                    MaterialTheme.colorScheme.onPrimary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                }
-                            )
-                        }
-                    }
-                    FileTransferState.Pending -> {
-                        if (!message.isFromMe) {
-                            // Show download button for incoming images
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .clickable { onDownloadClick() }
-                            ) {
+                Box(
+                    modifier = Modifier
+                        .size(200.dp)
+                        .padding(4.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (fileInfo.transferState) {
+                        FileTransferState.Completed -> {
+                            if (fileInfo.localPath != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(fileInfo.localPath)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = fileInfo.fileName,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(12.dp))
+                                )
+                            } else {
                                 Icon(
-                                    imageVector = Icons.Default.Download,
-                                    contentDescription = "Download",
+                                    imageVector = Icons.Default.BrokenImage,
+                                    contentDescription = "Image not found",
                                     modifier = Modifier.size(48.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                        FileTransferState.Uploading, FileTransferState.Downloading -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    progress = { fileInfo.progress },
+                                    modifier = Modifier.size(48.dp),
+                                    color = if (message.isFromMe) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "${(fileInfo.progress * 100).toInt()}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (message.isFromMe) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+                            }
+                        }
+                        FileTransferState.Pending -> {
+                            if (!message.isFromMe) {
+                                // Show download button for incoming images
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clickable { onDownloadClick() }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = "Download",
+                                        modifier = Modifier.size(48.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = fileInfo.fileName,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = formatFileSize(fileInfo.fileSize),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
+                            } else {
+                                // Outgoing pending - waiting to start upload
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary
+                                )
+                            }
+                        }
+                        FileTransferState.Failed -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BrokenImage,
+                                    contentDescription = "Transfer failed",
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = fileInfo.fileName,
+                                    text = "Transfer failed",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.error
                                 )
+                            }
+                        }
+                        FileTransferState.Cancelled -> {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.BrokenImage,
+                                    contentDescription = "Transfer cancelled",
+                                    modifier = Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.outline
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = formatFileSize(fileInfo.fileSize),
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = "Cancelled",
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.outline
                                 )
                             }
-                        } else {
-                            // Outgoing pending - waiting to start upload
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(48.dp),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
                         }
                     }
-                    FileTransferState.Failed -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
+                }
+            }
+
+            // Context menu - only show Save option when file is available
+            if (canSave && onSaveImage != null) {
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = onDismissMenu
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Save image") },
+                        onClick = onSaveImage,
+                        leadingIcon = {
                             Icon(
-                                imageVector = Icons.Default.BrokenImage,
-                                contentDescription = "Transfer failed",
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Transfer failed",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
+                                imageVector = Icons.Default.Save,
+                                contentDescription = null
                             )
                         }
-                    }
-                    FileTransferState.Cancelled -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.BrokenImage,
-                                contentDescription = "Transfer cancelled",
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.outline
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Cancelled",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
+                    )
                 }
             }
         }

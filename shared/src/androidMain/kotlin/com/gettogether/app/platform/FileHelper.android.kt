@@ -1,12 +1,17 @@
 package com.gettogether.app.platform
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.UUID
 
@@ -102,6 +107,80 @@ actual class FileHelper(private val context: Context) {
         // Daemon stores files at: files/{accountId}/conversation_data/{conversationId}/{fileId}
         val file = File(context.filesDir, "$accountId/conversation_data/$conversationId/$fileId")
         return if (file.exists()) file.absolutePath else null
+    }
+
+    actual suspend fun saveToPublicStorage(sourcePath: String, fileName: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val sourceFile = File(sourcePath)
+            if (!sourceFile.exists()) {
+                return@withContext Result.failure(Exception("Source file not found"))
+            }
+
+            val mimeType = getMimeType(fileName)
+            val savedPath = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Android 10+ - Use MediaStore API
+                saveToMediaStore(sourceFile, fileName, mimeType)
+            } else {
+                // Android 9 and below - Direct file access
+                saveToDownloadsDirectory(sourceFile, fileName)
+            }
+
+            Result.success(savedPath)
+        } catch (e: Exception) {
+            println("FileHelper.saveToPublicStorage: Error - ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private fun saveToMediaStore(sourceFile: File, fileName: String, mimeType: String): String {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
+            put(MediaStore.MediaColumns.RELATIVE_PATH, "${Environment.DIRECTORY_DOWNLOADS}/gettogether")
+        }
+
+        val resolver = context.contentResolver
+        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+            ?: throw Exception("Failed to create MediaStore entry")
+
+        resolver.openOutputStream(uri)?.use { outputStream ->
+            FileInputStream(sourceFile).use { inputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        } ?: throw Exception("Failed to open output stream")
+
+        // Return a user-friendly path description
+        return "${Environment.DIRECTORY_DOWNLOADS}/gettogether/$fileName"
+    }
+
+    @Suppress("DEPRECATION")
+    private fun saveToDownloadsDirectory(sourceFile: File, fileName: String): String {
+        val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val getTogetherDir = File(downloadsDir, "gettogether").also { it.mkdirs() }
+
+        // Handle filename conflicts
+        var destFile = File(getTogetherDir, fileName)
+        var counter = 1
+        val baseName = fileName.substringBeforeLast('.', fileName)
+        val extension = fileName.substringAfterLast('.', "")
+
+        while (destFile.exists()) {
+            val newName = if (extension.isNotEmpty()) {
+                "${baseName}_$counter.$extension"
+            } else {
+                "${baseName}_$counter"
+            }
+            destFile = File(getTogetherDir, newName)
+            counter++
+        }
+
+        FileInputStream(sourceFile).use { inputStream ->
+            FileOutputStream(destFile).use { outputStream ->
+                inputStream.copyTo(outputStream)
+            }
+        }
+
+        return destFile.absolutePath
     }
 
     private fun getFileNameFromUri(uri: Uri): String? {

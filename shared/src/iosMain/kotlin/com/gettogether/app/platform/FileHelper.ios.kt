@@ -32,4 +32,9 @@ actual class FileHelper {
         // TODO: Implement iOS file handling
         return null
     }
+
+    actual suspend fun saveToPublicStorage(sourcePath: String, fileName: String): Result<String> {
+        // TODO: Implement iOS file saving (use PHPhotoLibrary for images, Files app for other files)
+        return Result.failure(UnsupportedOperationException("iOS saveToPublicStorage not yet implemented"))
+    }
 }

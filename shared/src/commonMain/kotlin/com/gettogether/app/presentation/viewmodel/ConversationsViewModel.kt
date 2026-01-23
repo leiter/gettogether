@@ -29,7 +29,8 @@ data class ConversationUiItem(
     val unreadCount: Int,
     val avatarInitial: String,
     val avatarUri: String?,
-    val isGroup: Boolean = false
+    val isGroup: Boolean = false,
+    val isOnline: Boolean = false
 )
 
 class ConversationsViewModel(
@@ -153,13 +154,14 @@ class ConversationsViewModel(
         // For one-to-one conversations, use the OTHER participant's avatar (not self)
         // For group conversations, avatarUri will be null (use initial fallback)
         val userJamiId = accountRepository.accountState.value.jamiId
-        val conversationAvatar = if (!isGroup && participants.isNotEmpty()) {
+        val otherParticipant = if (!isGroup && participants.isNotEmpty()) {
             // Find the other participant (not the current user)
-            val otherParticipant = participants.firstOrNull { it.uri != userJamiId }
-            otherParticipant?.avatarUri
+            participants.firstOrNull { it.uri != userJamiId }
         } else {
             null
         }
+        val conversationAvatar = otherParticipant?.avatarUri
+        val isContactOnline = otherParticipant?.isOnline ?: false
 
         return ConversationUiItem(
             id = id,
@@ -169,7 +171,8 @@ class ConversationsViewModel(
             unreadCount = unreadCount,
             avatarInitial = initial,
             avatarUri = conversationAvatar,
-            isGroup = isGroup
+            isGroup = isGroup,
+            isOnline = isContactOnline
         )
     }
 

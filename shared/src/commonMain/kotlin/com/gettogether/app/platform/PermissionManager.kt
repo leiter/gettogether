@@ -18,4 +18,18 @@ expect class PermissionManager {
      * @return List of permission strings (e.g., ["android.permission.RECORD_AUDIO"])
      */
     fun getRequiredPermissions(): List<String>
+
+    /**
+     * Check if storage write permission is granted.
+     * On Android 10+, returns true (MediaStore doesn't need permission).
+     * On Android 9 and below, checks WRITE_EXTERNAL_STORAGE.
+     * On iOS, returns true (handled differently).
+     */
+    fun hasStorageWritePermission(): Boolean
+
+    /**
+     * Get the storage write permission string if needed.
+     * @return Permission string on Android 9 and below, null on Android 10+ or iOS
+     */
+    fun getStorageWritePermission(): String?
 }

@@ -34,4 +34,17 @@ actual class PermissionManager {
             "Camera"
         )
     }
+
+    /**
+     * Check if storage write permission is granted.
+     * On iOS, photo library access is handled differently (PHPhotoLibrary).
+     * For now, return true as a stub.
+     */
+    actual fun hasStorageWritePermission(): Boolean = true
+
+    /**
+     * Get the storage write permission string if needed.
+     * On iOS, returns null as permissions work differently.
+     */
+    actual fun getStorageWritePermission(): String? = null
 }

@@ -8,12 +8,14 @@ import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiConversationEvent
 import com.gettogether.app.platform.FileHelper
+import com.gettogether.app.platform.PermissionManager
 import com.gettogether.app.presentation.state.ChatMessage
 import com.gettogether.app.presentation.state.ChatMessageType
 import com.gettogether.app.presentation.state.ChatState
 import com.gettogether.app.presentation.state.FileMessageInfo
 import com.gettogether.app.presentation.state.FileTransferState
 import com.gettogether.app.presentation.state.MessageStatus
+import com.gettogether.app.presentation.state.SaveResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +30,8 @@ class ChatViewModel(
     private val accountRepository: AccountRepository,
     private val conversationRepository: ConversationRepositoryImpl,
     private val contactRepository: ContactRepository,
-    private val fileHelper: FileHelper
+    private val fileHelper: FileHelper,
+    private val permissionManager: PermissionManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ChatState())
@@ -510,6 +513,73 @@ class ChatViewModel(
                 _state.update { it.copy(error = "Failed to delete conversation: ${e.message}") }
             }
         }
+    }
+
+    // Context menu methods
+    fun showMessageMenu(message: ChatMessage) {
+        _state.update { it.copy(selectedMessageForMenu = message) }
+    }
+
+    fun hideMessageMenu() {
+        _state.update { it.copy(selectedMessageForMenu = null) }
+    }
+
+    /**
+     * Initiates saving a message's file to Downloads.
+     * @return true if permission request is needed, false if save proceeds directly
+     */
+    fun saveMessageToDownloads(message: ChatMessage): Boolean {
+        if (!permissionManager.hasStorageWritePermission()) {
+            // Need to request permission first
+            _state.update { it.copy(pendingSaveMessage = message, selectedMessageForMenu = null) }
+            return true
+        }
+        // Permission granted, proceed with save
+        performSave(message)
+        return false
+    }
+
+    fun onStoragePermissionResult(granted: Boolean) {
+        val message = _state.value.pendingSaveMessage ?: return
+        _state.update { it.copy(pendingSaveMessage = null) }
+
+        if (granted) {
+            performSave(message)
+        } else {
+            _state.update { it.copy(saveResult = SaveResult.Failure("Storage permission denied")) }
+        }
+    }
+
+    private fun performSave(message: ChatMessage) {
+        _state.update { it.copy(selectedMessageForMenu = null) }
+
+        val fileInfo = message.fileInfo ?: run {
+            _state.update { it.copy(saveResult = SaveResult.Failure("No file info available")) }
+            return
+        }
+
+        val localPath = fileInfo.localPath ?: run {
+            _state.update { it.copy(saveResult = SaveResult.Failure("File not downloaded yet")) }
+            return
+        }
+
+        viewModelScope.launch {
+            val result = fileHelper.saveToPublicStorage(localPath, fileInfo.fileName)
+            result.fold(
+                onSuccess = { savedPath ->
+                    println("ChatViewModel.performSave: File saved to $savedPath")
+                    _state.update { it.copy(saveResult = SaveResult.Success("Saved to Downloads/gettogether")) }
+                },
+                onFailure = { error ->
+                    println("ChatViewModel.performSave: Error - ${error.message}")
+                    _state.update { it.copy(saveResult = SaveResult.Failure(error.message ?: "Failed to save file")) }
+                }
+            )
+        }
+    }
+
+    fun clearSaveResult() {
+        _state.update { it.copy(saveResult = null) }
     }
 
     private fun handleConversationEvent(event: JamiConversationEvent) {
