@@ -114,6 +114,7 @@ object NotificationConstants {
     // Extra keys
     const val EXTRA_CONVERSATION_ID = "conversation_id"
     const val EXTRA_CONTACT_ID = "contact_id"
+    const val EXTRA_CONTACT_NAME = "contact_name"
     const val EXTRA_CALL_ID = "call_id"
     const val EXTRA_REPLY_TEXT = "reply_text"
     const val EXTRA_IS_VIDEO = "is_video"

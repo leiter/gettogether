@@ -114,10 +114,16 @@ class MainActivity : ComponentActivity() {
             "ONGOING_CALL" -> {
                 val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID)
                 val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)
-                android.util.Log.d("MainActivity", "Navigate to ongoing call: callId=$callId")
-                // For ongoing call, we need contact ID - but it may not be in the intent
-                // Just navigate to home if contact ID is not available
-                contactId?.let { InitialNavigation.Call(it, false) }
+                val isVideo = intent.getBooleanExtra(NotificationConstants.EXTRA_IS_VIDEO, false)
+                android.util.Log.d("MainActivity", "Navigate to ongoing call: callId=$callId, contactId=$contactId, isVideo=$isVideo")
+                contactId?.let {
+                    InitialNavigation.Call(
+                        contactId = it,
+                        isVideo = isVideo,
+                        callId = callId,
+                        isAlreadyAccepted = true  // Call is already in progress
+                    )
+                }
             }
             "CONTACT_DETAILS" -> {
                 val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID)

@@ -3,6 +3,7 @@ package com.gettogether.app.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.CallState as JamiCallState
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
@@ -15,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -22,6 +24,7 @@ import kotlinx.coroutines.launch
 class CallViewModel(
     private val jamiBridge: JamiBridge,
     private val accountRepository: AccountRepository,
+    private val contactRepository: ContactRepository,
     private val callServiceBridge: CallServiceBridge? = null,
     private val permissionManager: PermissionManager
 ) : ViewModel() {
@@ -64,13 +67,15 @@ class CallViewModel(
         }
 
         viewModelScope.launch {
-            // Load contact info
+            // Load contact info first
             loadContactInfo(contactId)
 
             // Start call via service bridge (for foreground service)
+            // Use loaded name or fallback to truncated ID
+            val displayName = _state.value.contactName.ifEmpty { contactId.substringBefore("@").take(8) }
             callServiceBridge?.startOutgoingCall(
                 contactId = contactId,
-                contactName = _state.value.contactName,
+                contactName = displayName,
                 isVideo = withVideo
             )
 
@@ -118,16 +123,20 @@ class CallViewModel(
     }
 
     /**
-     * Initialize for a call that was already accepted (e.g., from notification action).
-     * The call is connecting/connected, so we just need to track its state.
+     * Initialize for a call that is already in progress (e.g., returning from notification).
+     * Works for both outgoing and incoming calls that are already active.
+     * Does NOT restart services - just syncs the UI with the current call state.
      */
     fun initializeAcceptedCall(callId: String, contactId: String, withVideo: Boolean) {
         println("CallViewModel: initializeAcceptedCall - callId=$callId, contactId=$contactId, withVideo=$withVideo")
 
+        // Strip @ring.dht suffix for cleaner ID
+        val cleanContactId = contactId.substringBefore("@")
+
         _state.update {
             it.copy(
                 callId = callId,
-                contactId = contactId,
+                contactId = cleanContactId,
                 isVideo = withVideo,
                 callStatus = CallStatus.Connecting, // Start as connecting, will check actual state
                 isLocalVideoEnabled = withVideo
@@ -137,15 +146,8 @@ class CallViewModel(
         viewModelScope.launch {
             loadContactInfo(contactId)
 
-            // Initialize audio system for the call
-            try {
-                initializeAudioSystem()
-            } catch (e: Exception) {
-                println("CallViewModel: Warning - Audio init error: ${e.message}")
-            }
-
-            // Query the current call state since we might have missed the CURRENT event
-            // (SharedFlow has replay=0, so events emitted before we started collecting are lost)
+            // Query the current call state from daemon
+            // Do NOT restart CallService - it should already be running for this call
             try {
                 val accountId = accountRepository.currentAccountId.value
                 if (accountId != null) {
@@ -153,10 +155,26 @@ class CallViewModel(
                     val currentState = callDetails["CALL_STATE"] ?: ""
                     println("CallViewModel: Current call state from daemon: '$currentState'")
 
-                    // If call is already in CURRENT state, transition to Connected
-                    if (currentState == "CURRENT") {
-                        println("CallViewModel: Call is already CURRENT, transitioning to Connected")
-                        onCallConnected()
+                    when (currentState) {
+                        "CURRENT" -> {
+                            println("CallViewModel: Call is CURRENT, transitioning to Connected")
+                            onCallConnected()
+                        }
+                        "RINGING" -> {
+                            println("CallViewModel: Call is RINGING")
+                            _state.update { it.copy(callStatus = CallStatus.Ringing) }
+                        }
+                        "CONNECTING" -> {
+                            println("CallViewModel: Call is CONNECTING")
+                            _state.update { it.copy(callStatus = CallStatus.Connecting) }
+                        }
+                        "", "OVER", "HUNGUP" -> {
+                            println("CallViewModel: Call has ended or not found: '$currentState'")
+                            _state.update { it.copy(callStatus = CallStatus.Ended) }
+                        }
+                        else -> {
+                            println("CallViewModel: Unknown call state: '$currentState'")
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -383,11 +401,33 @@ class CallViewModel(
         try {
             val accountId = accountRepository.currentAccountId.value
             if (accountId != null) {
-                val contactDetails = jamiBridge.getContactDetails(accountId, contactId)
-                val contactName = contactDetails["displayName"]
-                    ?: contactDetails["username"]
-                    ?: contactId.take(8)
-                _state.update { it.copy(contactName = contactName) }
+                // Strip @ring.dht suffix if present
+                val cleanContactId = contactId.substringBefore("@")
+                println("CallViewModel: loadContactInfo - original=$contactId, clean=$cleanContactId")
+
+                // Try to get contact from ContactRepository first (has cached display name and avatar)
+                val contact = contactRepository.getContactById(accountId, cleanContactId).firstOrNull()
+
+                if (contact != null) {
+                    val contactName = contact.getEffectiveName().ifBlank { cleanContactId.take(8) }
+                    val avatarUri = contact.avatarUri
+                    println("CallViewModel: Found contact - name=$contactName, avatar=$avatarUri")
+                    _state.update {
+                        it.copy(
+                            contactName = contactName,
+                            contactAvatar = avatarUri
+                        )
+                    }
+                } else {
+                    // Fallback to jamiBridge if contact not in repository
+                    println("CallViewModel: Contact not in repository, using jamiBridge")
+                    val contactDetails = jamiBridge.getContactDetails(accountId, cleanContactId)
+                    val contactName = contactDetails["displayName"]?.takeIf { it.isNotBlank() }
+                        ?: contactDetails["username"]?.takeIf { it.isNotBlank() }
+                        ?: cleanContactId.take(8)
+                    println("CallViewModel: resolved contactName=$contactName")
+                    _state.update { it.copy(contactName = contactName) }
+                }
             } else {
                 // Demo data fallback
                 val contactName = when (contactId) {
@@ -399,8 +439,9 @@ class CallViewModel(
                 _state.update { it.copy(contactName = contactName) }
             }
         } catch (e: Exception) {
+            println("CallViewModel: loadContactInfo error: ${e.message}")
             // Fallback to simple name
-            _state.update { it.copy(contactName = contactId.take(8)) }
+            _state.update { it.copy(contactName = contactId.substringBefore("@").take(8)) }
         }
     }
 

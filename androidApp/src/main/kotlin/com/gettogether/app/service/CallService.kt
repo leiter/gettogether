@@ -125,7 +125,11 @@ class CallService : Service() {
                 startIncomingCall(callId, contactId, contactName, isVideo)
             }
             ACTION_ANSWER_CALL -> {
-                answerCall()
+                val callId = intent.getStringExtra(CallNotificationManager.EXTRA_CALL_ID) ?: ""
+                val contactId = intent.getStringExtra(CallNotificationManager.EXTRA_CONTACT_ID) ?: ""
+                val contactName = intent.getStringExtra(CallNotificationManager.EXTRA_CONTACT_NAME) ?: "Unknown"
+                val isVideo = intent.getBooleanExtra(CallNotificationManager.EXTRA_IS_VIDEO, false)
+                answerCall(callId, contactId, contactName, isVideo)
             }
             ACTION_DECLINE_CALL -> {
                 declineCall()
@@ -196,13 +200,23 @@ class CallService : Service() {
         )
     }
 
-    private fun answerCall() {
+    private fun answerCall(callId: String, contactId: String, contactName: String, isVideo: Boolean) {
+        Log.i(TAG, "answerCall: callId=$callId, contactId=$contactId, contactName=$contactName, isVideo=$isVideo")
         notificationManager.cancelIncomingCallNotification()
 
         // Prepare audio BEFORE answering the call
         prepareAudioForCall()
 
-        _callState.value = _callState.value.copy(status = CallStatus.CONNECTING)
+        // Set call state with all the info needed for the notification
+        _callState.value = ServiceCallState(
+            callId = callId,
+            contactId = contactId,
+            contactName = contactName,
+            isVideo = isVideo,
+            status = CallStatus.CONNECTING,
+            isOutgoing = false
+        )
+        Log.i(TAG, "answerCall: Starting foreground notification")
         startForegroundWithNotification()
 
         serviceScope.launch {
@@ -247,7 +261,8 @@ class CallService : Service() {
             callDuration = formatDuration(_callState.value.durationSeconds),
             isMuted = _callState.value.isMuted,
             isVideo = _callState.value.isVideo,
-            callId = _callState.value.callId
+            callId = _callState.value.callId,
+            contactId = _callState.value.contactId
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -277,7 +292,8 @@ class CallService : Service() {
                 callDuration = formatDuration(_callState.value.durationSeconds),
                 isMuted = _callState.value.isMuted,
                 isVideo = _callState.value.isVideo,
-                callId = _callState.value.callId
+                callId = _callState.value.callId,
+                contactId = _callState.value.contactId
             )
             val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.notify(CallNotificationManager.NOTIFICATION_ID_ONGOING_CALL, notification)

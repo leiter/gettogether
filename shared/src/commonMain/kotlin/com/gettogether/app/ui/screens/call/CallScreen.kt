@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.CallState
 import com.gettogether.app.presentation.state.CallStatus
 import com.gettogether.app.presentation.viewmodel.CallViewModel
+import com.gettogether.app.ui.components.AvatarImage
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -169,7 +170,7 @@ private fun IncomingCallContent(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            PulsingAvatar(name = state.contactName)
+            PulsingAvatar(name = state.contactName, avatarUri = state.contactAvatar)
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -273,7 +274,8 @@ private fun ActiveCallContent(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     ContactAvatar(
                         name = state.contactName,
-                        size = 120
+                        size = 120,
+                        avatarUri = state.contactAvatar
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
@@ -305,7 +307,8 @@ private fun ActiveCallContent(
 
             ContactAvatar(
                 name = state.contactName,
-                size = 160
+                size = 160,
+                avatarUri = state.contactAvatar
             )
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -508,7 +511,7 @@ private fun CallEndedContent(state: CallState) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        ContactAvatar(name = state.contactName, size = 120)
+        ContactAvatar(name = state.contactName, size = 120, avatarUri = state.contactAvatar)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -543,29 +546,18 @@ private fun CallEndedContent(state: CallState) {
 @Composable
 private fun ContactAvatar(
     name: String,
-    size: Int
+    size: Int,
+    avatarUri: String? = null
 ) {
-    Surface(
-        modifier = Modifier.size(size.dp),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primaryContainer
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Text(
-                text = name.firstOrNull()?.uppercase() ?: "?",
-                style = when {
-                    size >= 160 -> MaterialTheme.typography.displayLarge
-                    size >= 120 -> MaterialTheme.typography.displayMedium
-                    else -> MaterialTheme.typography.displaySmall
-                },
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
-    }
+    AvatarImage(
+        avatarUri = avatarUri,
+        displayName = name,
+        size = size.dp
+    )
 }
 
 @Composable
-private fun PulsingAvatar(name: String) {
+private fun PulsingAvatar(name: String, avatarUri: String? = null) {
     val infiniteTransition = rememberInfiniteTransition(label = "pulse")
     val scale by infiniteTransition.animateFloat(
         initialValue = 1f,
@@ -589,7 +581,7 @@ private fun PulsingAvatar(name: String) {
         ) {}
 
         // Inner avatar
-        ContactAvatar(name = name, size = 140)
+        ContactAvatar(name = name, size = 140, avatarUri = avatarUri)
     }
 }
 

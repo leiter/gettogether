@@ -40,16 +40,19 @@ import org.koin.compose.viewmodel.koinViewModel
 
 /**
  * Represents initial navigation destination from notification or deep link.
+ * Each instance includes a unique timestamp to ensure repeated navigation requests
+ * to the same destination are recognized as new requests.
  */
-sealed class InitialNavigation {
-    data class Chat(val conversationId: String) : InitialNavigation()
+sealed class InitialNavigation(val timestamp: Long = System.currentTimeMillis()) {
+    data class Chat(val conversationId: String, private val ts: Long = System.currentTimeMillis()) : InitialNavigation(ts)
     data class Call(
         val contactId: String,
         val isVideo: Boolean,
         val callId: String? = null,
-        val isAlreadyAccepted: Boolean = false
-    ) : InitialNavigation()
-    data class ContactDetails(val contactId: String) : InitialNavigation()
+        val isAlreadyAccepted: Boolean = false,
+        private val ts: Long = System.currentTimeMillis()
+    ) : InitialNavigation(ts)
+    data class ContactDetails(val contactId: String, private val ts: Long = System.currentTimeMillis()) : InitialNavigation(ts)
 }
 
 @Composable
@@ -81,14 +84,18 @@ fun AppNavigation(
         Screen.Welcome.route
     }
 
-    // Track if we've handled the initial navigation to avoid repeating
-    var hasHandledInitialNavigation by remember { mutableStateOf(false) }
+    // Track which navigation we've handled to avoid repeating the same one
+    // but allow new navigations to be processed
+    var handledNavigation by remember { mutableStateOf<InitialNavigation?>(null) }
 
     // Handle initial navigation from notification/deep link
     LaunchedEffect(initialNavigation, accountState.accountId) {
-        if (initialNavigation != null && accountState.accountId != null && !hasHandledInitialNavigation) {
-            hasHandledInitialNavigation = true
+        if (initialNavigation != null && accountState.accountId != null && initialNavigation != handledNavigation) {
+            handledNavigation = initialNavigation
             println("AppNavigation: Handling initial navigation: $initialNavigation")
+
+            // Check current destination to avoid duplicate navigation
+            val currentRoute = navController.currentDestination?.route
 
             when (initialNavigation) {
                 is InitialNavigation.Chat -> {
@@ -98,16 +105,25 @@ fun AppNavigation(
                     }
                 }
                 is InitialNavigation.Call -> {
-                    println("AppNavigation: Navigating to call: contactId=${initialNavigation.contactId}, isVideo=${initialNavigation.isVideo}, callId=${initialNavigation.callId}, accepted=${initialNavigation.isAlreadyAccepted}")
-                    navController.navigate(
-                        Screen.Call.createRoute(
-                            initialNavigation.contactId,
-                            initialNavigation.isVideo,
-                            initialNavigation.callId,
-                            initialNavigation.isAlreadyAccepted
-                        )
-                    ) {
-                        launchSingleTop = true
+                    // Check if we're already on a call screen
+                    val isOnCallScreen = currentRoute?.startsWith("call/") == true
+                    println("AppNavigation: Navigating to call: contactId=${initialNavigation.contactId}, isVideo=${initialNavigation.isVideo}, callId=${initialNavigation.callId}, accepted=${initialNavigation.isAlreadyAccepted}, currentRoute=$currentRoute, isOnCallScreen=$isOnCallScreen")
+
+                    if (isOnCallScreen) {
+                        // Already on call screen - just pop back to it if needed
+                        // This avoids creating a new ViewModel
+                        println("AppNavigation: Already on call screen, skipping navigation")
+                    } else {
+                        navController.navigate(
+                            Screen.Call.createRoute(
+                                initialNavigation.contactId,
+                                initialNavigation.isVideo,
+                                initialNavigation.callId,
+                                initialNavigation.isAlreadyAccepted
+                            )
+                        ) {
+                            launchSingleTop = true
+                        }
                     }
                 }
                 is InitialNavigation.ContactDetails -> {

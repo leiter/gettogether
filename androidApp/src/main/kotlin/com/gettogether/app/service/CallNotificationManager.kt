@@ -74,9 +74,10 @@ class CallNotificationManager(private val context: Context) {
         callDuration: String,
         isMuted: Boolean,
         isVideo: Boolean,
-        callId: String
+        callId: String,
+        contactId: String = ""
     ): Notification {
-        val contentIntent = createContentIntent()
+        val contentIntent = createOngoingCallContentIntent(callId, contactId, isVideo)
 
         val endCallIntent = Intent(context, CallActionReceiver::class.java).apply {
             action = ACTION_END_CALL
@@ -132,6 +133,7 @@ class CallNotificationManager(private val context: Context) {
             action = ACTION_ANSWER_CALL
             putExtra(EXTRA_CALL_ID, callId)
             putExtra(EXTRA_CONTACT_ID, contactId)
+            putExtra(EXTRA_CONTACT_NAME, contactName)
             putExtra(EXTRA_IS_VIDEO, isVideo)
         }
         val answerPendingIntent = PendingIntent.getBroadcast(
@@ -194,6 +196,22 @@ class CallNotificationManager(private val context: Context) {
         return PendingIntent.getActivity(
             context,
             0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun createOngoingCallContentIntent(callId: String, contactId: String, isVideo: Boolean): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = "ONGOING_CALL"
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_CALL_ID, callId)
+            putExtra(EXTRA_CONTACT_ID, contactId)
+            putExtra(EXTRA_IS_VIDEO, isVideo)
+        }
+        return PendingIntent.getActivity(
+            context,
+            5,  // Different request code
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

@@ -256,6 +256,7 @@ actual class NotificationHelper(
             action = NotificationConstants.ACTION_ANSWER_CALL
             putExtra(NotificationConstants.EXTRA_CALL_ID, callId)
             putExtra(NotificationConstants.EXTRA_CONTACT_ID, contactId)
+            putExtra(NotificationConstants.EXTRA_CONTACT_NAME, contactName)
             putExtra(NotificationConstants.EXTRA_IS_VIDEO, isVideo)
         }
         val answerPendingIntent = PendingIntent.getBroadcast(

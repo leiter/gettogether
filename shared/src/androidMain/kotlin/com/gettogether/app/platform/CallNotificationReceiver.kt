@@ -3,6 +3,7 @@ package com.gettogether.app.platform
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import co.touchlab.kermit.Logger
 import com.gettogether.app.data.repository.AccountRepository
@@ -39,6 +40,8 @@ class CallNotificationReceiver : BroadcastReceiver(), KoinComponent {
     private fun handleAnswerCall(context: Context, intent: Intent) {
         val callId = intent.getStringExtra(NotificationConstants.EXTRA_CALL_ID) ?: return
         val contactId = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_ID) ?: return
+        val contactName = intent.getStringExtra(NotificationConstants.EXTRA_CONTACT_NAME)
+            ?: contactId.substringBefore("@").take(8)
         val isVideo = intent.getBooleanExtra(NotificationConstants.EXTRA_IS_VIDEO, false)
 
         val accountId = accountRepository.currentAccountId.value
@@ -54,6 +57,25 @@ class CallNotificationReceiver : BroadcastReceiver(), KoinComponent {
         // Cancel incoming call notification
         NotificationManagerCompat.from(context)
             .cancel(NotificationConstants.INCOMING_CALL_NOTIFICATION_ID)
+
+        // Start CallService foreground service for ongoing call notification
+        try {
+            val serviceIntent = Intent(context, Class.forName("com.gettogether.app.service.CallService")).apply {
+                action = "com.gettogether.app.ANSWER_CALL"
+                putExtra(NotificationConstants.EXTRA_CALL_ID, callId)
+                putExtra(NotificationConstants.EXTRA_CONTACT_ID, contactId)
+                putExtra(NotificationConstants.EXTRA_CONTACT_NAME, contactName)
+                putExtra(NotificationConstants.EXTRA_IS_VIDEO, isVideo)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+            Logger.d("CallNotificationReceiver") { "CallService started for ongoing call notification" }
+        } catch (e: Exception) {
+            Logger.e("CallNotificationReceiver") { "Failed to start CallService: ${e.message}" }
+        }
 
         // Accept call via JamiBridge
         scope.launch {
