@@ -2,11 +2,13 @@ package com.gettogether.app.jami
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Manages the Jami daemon lifecycle.
@@ -77,18 +79,25 @@ class DaemonManager(
     /**
      * Stop the Jami daemon.
      * This should be called when the app is being terminated.
+     *
+     * This is a suspend function that waits for the daemon to fully stop,
+     * ensuring proper cleanup before the process exits.
      */
-    fun stop() {
+    suspend fun stop() {
         if (_state.value != DaemonState.Running) {
+            println("DaemonManager: [SHUTDOWN] Skipping stop - daemon not running (state=${_state.value})")
             return
         }
 
-        scope.launch {
+        println("DaemonManager: [SHUTDOWN] Stopping daemon...")
+        withContext(Dispatchers.IO) {
             try {
                 _state.value = DaemonState.Stopping
                 bridge.stopDaemon()
                 _state.value = DaemonState.Stopped
+                println("DaemonManager: [SHUTDOWN] ✓ Daemon stopped successfully")
             } catch (e: Exception) {
+                println("DaemonManager: [SHUTDOWN] ✗ Error stopping daemon: ${e.message}")
                 _state.value = DaemonState.Error
                 _error.value = DaemonError.ShutdownFailed(e.message ?: "Unknown error")
             }

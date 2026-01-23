@@ -11,7 +11,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
+import com.gettogether.app.data.repository.ContactRepositoryImpl
 import com.gettogether.app.platform.PermissionManager
+import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.inject
 
 class MainActivity : ComponentActivity() {
@@ -44,5 +46,33 @@ class MainActivity : ComponentActivity() {
         setContent {
             App()
         }
+    }
+
+    /**
+     * Clean up presence tracking when activity is destroyed.
+     *
+     * Note: onTerminate() is only called on emulator, not on real devices.
+     * We need to handle cleanup here for real device scenarios.
+     *
+     * isFinishing check ensures we only clean up when the app is actually closing,
+     * not during configuration changes (like screen rotation).
+     *
+     * Uses runBlocking to ensure cleanup completes before the activity is destroyed,
+     * since lifecycleScope would be cancelled at this point.
+     */
+    override fun onDestroy() {
+        if (isFinishing) {
+            android.util.Log.i("MainActivity", "[APP-LIFECYCLE] onDestroy(isFinishing=true) - cleaning up presence tracking")
+            runBlocking {
+                try {
+                    val contactRepo: ContactRepositoryImpl by inject()
+                    contactRepo.stopPresenceTracking()
+                    android.util.Log.i("MainActivity", "[APP-LIFECYCLE] ✓ Presence tracking stopped")
+                } catch (e: Exception) {
+                    android.util.Log.e("MainActivity", "[APP-LIFECYCLE] ⚠️ Failed to stop presence tracking: ${e.message}")
+                }
+            }
+        }
+        super.onDestroy()
     }
 }

@@ -1,7 +1,7 @@
 # GetTogether - Open Tasks & Known Issues
 
-**Last Updated:** 2026-01-21
-**Version:** Consolidated from all task documents (Updated post filepicker-jamibridge merge)
+**Last Updated:** 2026-01-23
+**Version:** Consolidated from all task documents (Updated post graceful shutdown implementation)
 
 ---
 
@@ -221,6 +221,146 @@
 
 **Status:** ✅ Fully implemented (2026-01-17, filepicker-jamibridge merge)
 **Impact:** Users can restore their account from a backup file
+
+---
+
+### 1.8 Graceful Shutdown Handling - ✅ COMPLETE (NEW)
+
+**Status:** ✅ Fully implemented (2026-01-23)
+**Impact:** Prevents crashes from callbacks firing during daemon shutdown
+
+#### Problem Solved
+App lacked proper shutdown handling compared to the official jami-android-client. This could cause crashes if presence callbacks or network operations fired during daemon shutdown.
+
+**Related crash signature:**
+```
+Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR)
+asio::detail::reactive_socket_connect_op
+```
+
+#### What Was Implemented ✅
+
+| Component | File | Implementation |
+|-----------|------|----------------|
+| Presence cleanup | `ContactRepositoryImpl.kt` | `stopPresenceTracking()` - cancels polling, unsubscribes from all contacts |
+| Application shutdown | `GetTogetherApplication.kt` | `performGracefulShutdown()` - ordered shutdown sequence |
+| Daemon stop | `DaemonManager.kt` | `suspend fun stop()` - awaitable shutdown |
+| Activity cleanup | `MainActivity.kt` | `onDestroy()` - cleanup for real devices |
+
+#### Shutdown Sequence (Order Critical)
+1. Stop presence polling (prevents new callbacks)
+2. Unsubscribe from all contacts
+3. Stop network monitor
+4. Stop daemon (waits for completion)
+5. Cancel coroutine scope
+
+#### Testing Results ✅
+- Tested on 2 real devices with 1-2 contacts each
+- 5 consecutive open/close cycles - no crashes
+- Clean shutdown logs verified in logcat
+- No "Fatal signal" errors
+
+#### Verification Commands
+```bash
+adb logcat | grep -E "APP-LIFECYCLE|SHUTDOWN|stopPresenceTracking"
+```
+
+#### Implementation Notes
+- `onTerminate()` only called on emulator, so `MainActivity.onDestroy()` handles real devices
+- Uses `runBlocking` to ensure cleanup completes before process exits
+- 50ms delay between contact unsubscribes to avoid overwhelming daemon
+
+---
+
+### 1.9 Presence Polling Crash at Startup ⚠️
+
+**Status:** Needs implementation (2026-01-23)
+**Impact:** CRITICAL - App crashes with SIGSEGV at startup due to bulk presence subscription
+
+#### Problem
+App crashes with native SIGSEGV when bulk-subscribing to all contacts for presence status at startup. The crash occurs in libjami-core.so ASIO networking layer.
+
+**Crash signature:**
+```
+Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR)
+asio::detail::reactive_socket_connect_op
+```
+
+**Root cause:** `ContactRepositoryImpl.refreshContacts()` subscribes to ALL contacts at once via `subscribeBuddy()`, overwhelming the native networking layer.
+
+#### Current Code (Broken)
+```kotlin
+// ContactRepositoryImpl.kt, refreshContacts()
+contacts.forEach { contact ->
+    jamiBridge.subscribeBuddy(accountId, contact.uri, true)  // All at once → CRASH
+}
+```
+
+#### Solution: On-Demand + Throttled Presence Subscription
+
+1. **Remove bulk subscription at startup** - Don't subscribe to all contacts immediately
+2. **On-demand subscription** - Subscribe when user views a conversation or contact
+3. **Throttled batch subscription** - Rate-limit with 100ms delays between subscriptions
+4. **Keep unsubscribe/subscribe pattern** - But with delays between calls
+
+#### Files to Modify
+| File | Changes |
+|------|---------|
+| `ContactRepositoryImpl.kt` | Remove bulk subscription, add throttled helpers |
+| `ConversationsViewModel.kt` | Subscribe to presence when conversation is viewed |
+| `ContactDetailsViewModel.kt` | Subscribe to presence when contact details are viewed |
+
+#### Implementation Details
+
+**Add throttled subscription helper:**
+```kotlin
+private val subscriptionMutex = Mutex()
+private const val SUBSCRIPTION_DELAY_MS = 100L
+
+suspend fun subscribeToPresence(accountId: String, contactUri: String) {
+    subscriptionMutex.withLock {
+        if (contactUri !in _subscribedContacts) {
+            _subscribedContacts.add(contactUri)
+            jamiBridge.subscribeBuddy(accountId, contactUri, true)
+            delay(SUBSCRIPTION_DELAY_MS)  // Rate limit
+        }
+    }
+}
+```
+
+**On-demand in ConversationsViewModel:**
+```kotlin
+fun onConversationsVisible() {
+    viewModelScope.launch {
+        val visibleContacts = _state.value.conversations
+            .flatMap { it.participants }
+            .map { it.uri }
+            .take(10)
+        contactRepository.subscribeToPresenceBatch(accountId, visibleContacts)
+    }
+}
+```
+
+#### Key Changes
+| Before | After |
+|--------|-------|
+| Subscribe to ALL contacts at startup | No subscription at startup |
+| Bulk subscription (parallel) | Throttled sequential subscription |
+| Always poll all contacts | Only poll subscribed contacts |
+| No rate limiting | 100ms delay between subscriptions |
+
+#### Action Items
+- [ ] Remove bulk subscription loop in `refreshContacts()`
+- [ ] Add `subscribeToPresence()` and `subscribeToPresenceBatch()` methods
+- [ ] Add `onConversationsVisible()` to ConversationsViewModel
+- [ ] Add presence subscription in ChatViewModel when opening chat
+- [ ] Update polling to only poll already-subscribed contacts
+- [ ] Test with 20+ contacts - should not crash
+
+#### Notes
+- `subscribeBuddy` is the ONLY daemon API for presence - no alternative exists
+- On-demand subscription is actually better UX (only track what user cares about)
+- Battery/network savings from not polling all contacts constantly
 
 #### What Works ✅
 - Import account from backup file with file picker

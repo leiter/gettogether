@@ -123,9 +123,9 @@ fun ContactsTab(
                 state.contacts.isEmpty() && trustRequestsState.requests.isEmpty() -> {
                     PullToRefreshBox(
                         isRefreshing = state.isLoading,
-                        onRefresh = {
-                            viewModel.refresh()
-                            trustRequestsViewModel.refresh()
+                        onRefresh = { // Todo remove or fix online/offline by adding undefined
+//                            viewModel.refresh()
+//                            trustRequestsViewModel.refresh()
                         },
                         modifier = Modifier.fillMaxSize()
                     ) {

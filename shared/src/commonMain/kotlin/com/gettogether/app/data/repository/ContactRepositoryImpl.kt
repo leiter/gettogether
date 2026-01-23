@@ -1019,4 +1019,39 @@ class ContactRepositoryImpl(
         pollingJob = null
         println("[PRESENCE-POLL-LIFECYCLE] ✓ Polling stopped")
     }
+
+    /**
+     * Stop all presence polling and unsubscribe from all contacts.
+     * Call this BEFORE stopping the daemon to prevent callbacks during shutdown.
+     *
+     * This is part of the graceful shutdown sequence to prevent crashes
+     * from presence callbacks firing during daemon shutdown.
+     */
+    suspend fun stopPresenceTracking() {
+        println("ContactRepository: [SHUTDOWN] Stopping presence tracking...")
+
+        // Stop polling job first to prevent new subscriptions
+        pollingJob?.cancel()
+        pollingJob = null
+        println("ContactRepository: [SHUTDOWN] ✓ Polling job cancelled")
+
+        // Unsubscribe from all contacts to stop presence callbacks
+        val accountId = accountRepository.currentAccountId.value
+        if (accountId != null && _subscribedContacts.isNotEmpty()) {
+            println("ContactRepository: [SHUTDOWN] → Unsubscribing from ${_subscribedContacts.size} contacts...")
+            _subscribedContacts.toList().forEach { uri ->
+                try {
+                    jamiBridge.subscribeBuddy(accountId, uri, false)
+                    delay(50)  // Small delay to avoid overwhelming the daemon
+                } catch (e: Exception) {
+                    // Ignore errors during shutdown - daemon may already be stopping
+                    println("ContactRepository: [SHUTDOWN]   ⚠️ Failed to unsubscribe $uri: ${e.message}")
+                }
+            }
+            println("ContactRepository: [SHUTDOWN] ✓ Unsubscribed from all contacts")
+        }
+
+        _subscribedContacts.clear()
+        println("ContactRepository: [SHUTDOWN] ✓ Presence tracking stopped")
+    }
 }

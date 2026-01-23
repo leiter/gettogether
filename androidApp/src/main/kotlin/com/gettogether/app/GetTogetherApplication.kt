@@ -5,8 +5,7 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.gettogether.app.coil.VCardFetcher
 import com.gettogether.app.coil.VCardMapper
-import com.gettogether.app.data.repository.AccountRepository
-import com.gettogether.app.data.repository.PresenceManager
+import com.gettogether.app.data.repository.ContactRepositoryImpl
 import com.gettogether.app.di.jamiBridgeModule
 import com.gettogether.app.di.platformModule
 import com.gettogether.app.di.sharedModule
@@ -14,7 +13,6 @@ import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
 import com.gettogether.app.network.NetworkMonitor
-import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.NotificationHelper
 import com.gettogether.app.service.CallNotificationManager
 import kotlinx.coroutines.CoroutineScope
@@ -149,8 +147,58 @@ class GetTogetherApplication : Application() {
     }
 
     override fun onTerminate() {
-        android.util.Log.w("GetTogetherApp", "[APP-LIFECYCLE] onTerminate() called (note: only called in emulator, not real devices)")
-        scope.cancel()
+        android.util.Log.w("GetTogetherApp", "[APP-LIFECYCLE] onTerminate() called")
+        performGracefulShutdown()
         super.onTerminate()
+    }
+
+    /**
+     * Performs graceful shutdown of all services in the correct order.
+     * This prevents crashes from callbacks (presence, network) firing during daemon shutdown.
+     *
+     * Order is critical:
+     * 1. Stop presence polling and unsubscribe from contacts (prevents presence callbacks)
+     * 2. Stop network monitor (prevents network state callbacks)
+     * 3. Stop daemon (waits for completion)
+     * 4. Cancel coroutine scope
+     */
+    private fun performGracefulShutdown() {
+        android.util.Log.i("GetTogetherApp", "[APP-LIFECYCLE] === Starting graceful shutdown ===")
+
+        runBlocking {
+            // 1. Stop presence tracking FIRST (prevents new callbacks during shutdown)
+            try {
+                android.util.Log.d("GetTogetherApp", "[APP-LIFECYCLE] → Stopping presence tracking...")
+                val contactRepo: ContactRepositoryImpl by inject()
+                contactRepo.stopPresenceTracking()
+                android.util.Log.i("GetTogetherApp", "[APP-LIFECYCLE] ✓ Presence tracking stopped")
+            } catch (e: Exception) {
+                android.util.Log.e("GetTogetherApp", "[APP-LIFECYCLE] ⚠️ Failed to stop presence tracking: ${e.message}")
+            }
+
+            // 2. Stop network monitor (prevents network state callbacks)
+            try {
+                android.util.Log.d("GetTogetherApp", "[APP-LIFECYCLE] → Stopping network monitor...")
+                val networkMonitor: NetworkMonitor by inject()
+                networkMonitor.stop()
+                android.util.Log.i("GetTogetherApp", "[APP-LIFECYCLE] ✓ Network monitor stopped")
+            } catch (e: Exception) {
+                android.util.Log.e("GetTogetherApp", "[APP-LIFECYCLE] ⚠️ Failed to stop network monitor: ${e.message}")
+            }
+
+            // 3. Stop daemon (wait for completion)
+            try {
+                android.util.Log.d("GetTogetherApp", "[APP-LIFECYCLE] → Stopping daemon...")
+                val daemonManager: DaemonManager by inject()
+                daemonManager.stop()
+                android.util.Log.i("GetTogetherApp", "[APP-LIFECYCLE] ✓ Daemon stopped")
+            } catch (e: Exception) {
+                android.util.Log.e("GetTogetherApp", "[APP-LIFECYCLE] ⚠️ Failed to stop daemon: ${e.message}")
+            }
+        }
+
+        // 4. Cancel coroutine scope
+        scope.cancel()
+        android.util.Log.i("GetTogetherApp", "[APP-LIFECYCLE] === Graceful shutdown complete ===")
     }
 }
