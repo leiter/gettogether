@@ -7,23 +7,153 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		006792247C182C7BEC5D870D /* libjami.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 93D1100A017CDAF6EFF85566 /* libjami.a */; };
+		04A32B24080ED5AF2A6DF2F6 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DF475DB822F567121FF3918 /* Accelerate.framework */; };
+		077724C2F680A9C565582BFE /* libsrtp-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 05B61B7E5DA1719539EE7942 /* libsrtp-aarch64-apple-darwin.a */; };
+		0C8DFCA24D94E9151DA6C2C6 /* libsecp256k1.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F5E313C29FBB6B26A0776B8F /* libsecp256k1.a */; };
+		0E62AF9096855B2E934680DD /* libnettle.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 36B7D750697EEB3255201435 /* libnettle.a */; };
+		12D1414D029B034AF45C919F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64804CBF906D0B9B84D20CFF /* Foundation.framework */; };
+		189B50A1E425957DB3A3DB32 /* libspeexdsp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 67919C7495CFF537C2CAF558 /* libspeexdsp.a */; };
+		1C1A6D96D3E888146441C9A0 /* libgmp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 7C7DC98E3E8E45B083D36800 /* libgmp.a */; };
 		2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2152FB032600AC8F00CF470E /* iOSApp.swift */; };
+		21DAE04BA124D5DC6EEAFBBF /* libssl.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 06732C03570D840FF1A8AE7A /* libssl.a */; };
+		27CBEAE0D25753521942E145 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3791F64982C9581D0E5A5F6A /* CoreMedia.framework */; };
+		34BCB99E2D3BF1DBE34AF6B6 /* libyaml-cpp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D6B19CF8987924B45D2E778 /* libyaml-cpp.a */; };
+		35705CAC5C170F90679CF9DA /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7269B6EBCD06DB6D930444E4 /* AVFoundation.framework */; };
+		37297CD68A226B14ADF5996A /* libspeex.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EC28E5F6D735C7E4FF911B1 /* libspeex.a */; };
+		3AF2D367DC8A3ABB9634B5CA /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BBF53432342DD35F5F2154CE /* QuartzCore.framework */; };
+		3D94E4EABA62A5DF5E45BE41 /* libyuv-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E71DF2A08FE960DBE39AF170 /* libyuv-aarch64-apple-darwin.a */; };
+		443CBABB3DE2CE7A1554C5B0 /* libtls.a in Frameworks */ = {isa = PBXBuildFile; fileRef = AFECDFD0E36F134AB69C13E5 /* libtls.a */; };
+		45B865A85895B9F907BCED98 /* libcrypto.a in Frameworks */ = {isa = PBXBuildFile; fileRef = ECD9ACB332858D652EFF1CA1 /* libcrypto.a */; };
+		477D212D7B415551F49B8C74 /* MetalKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0FE4265B4196A48579DF1DEF /* MetalKit.framework */; };
+		542BEBEB14DD2FFC81043866 /* libpjsua-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C38C61D66B5E04F789862131 /* libpjsua-aarch64-apple-darwin.a */; };
+		5A58ECA693F547EA763EF271 /* libupnp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F1D5E2FC4C18F1DCC6087FF3 /* libupnp.a */; };
+		61A2B20A49DDC9C5BCB51B6F /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DD5E35987E45A0D87B19B4F /* CoreFoundation.framework */; };
+		67D29A1B22DCE6B00B185769 /* libpjsip-simple-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DB4092DC21CED108B2160617 /* libpjsip-simple-aarch64-apple-darwin.a */; };
+		6CE40C73746EB774211755B5 /* libpjsip-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 590BDA35AD59D5CAE7D06816 /* libpjsip-aarch64-apple-darwin.a */; };
+		6D6AF5FDDE333809306A0E22 /* libhttp_parser.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 323A414D6F027F20E26B26F6 /* libhttp_parser.a */; };
+		736F15DF02BA41FFC709275B /* libnatpmp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = CD79D09616B680FCC2D6416D /* libnatpmp.a */; };
 		7555FF83242A565900829871 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7555FF82242A565900829871 /* ContentView.swift */; };
+		76E6F06262A809C24B41A368 /* libpjsip-ua-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 995B51AAB6F0C153D9C6E66E /* libpjsip-ua-aarch64-apple-darwin.a */; };
+		7870937199702AF69E576910 /* libpjsua2-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0EE5FACEC6F301615E011E11 /* libpjsua2-aarch64-apple-darwin.a */; };
+		7B1234DD29A4489FC2DD52BD /* libavcodec.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E8C7EFAD95B1EBDE08286821 /* libavcodec.a */; };
+		81DF97B6395911B62D716B0D /* libpjmedia-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 66779761AA35FF8714AAD5EB /* libpjmedia-aarch64-apple-darwin.a */; };
+		83E87694F9177DD36AFF60E6 /* libpjmedia-audiodev-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A24BAFB32771412044EDA68 /* libpjmedia-audiodev-aarch64-apple-darwin.a */; };
+		8595F341E49400300352943B /* libllhttp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8BA7A1269122F568896DF9D9 /* libllhttp.a */; };
+		8728A23B74CCB16088679039 /* libhogweed.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 011B2C619920938BC9D4959F /* libhogweed.a */; };
+		876C08614207EBA0ABE718AF /* libgnutls.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D345A1374875C459725425A6 /* libgnutls.a */; };
+		8DEAB34D98828A776E8D21F9 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8981578D0A6320333BA3CF65 /* AudioToolbox.framework */; };
+		90D2F57072ECD03CE8D37C86 /* libpjnath-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 521953BA281906EB0CDE9ACD /* libpjnath-aarch64-apple-darwin.a */; };
+		95EC10AC07C7848775D59D5D /* libswresample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 8B48827D61C9D73A75F0BE1F /* libswresample.a */; };
+		9CAEB61FBF4C0018CC202FEB /* libavutil.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 86843A50337A79FF3A4714DA /* libavutil.a */; };
+		9EBF6BA342C92D6CCCB1B742 /* libvpx.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C696CF679A1F39A97690323B /* libvpx.a */; };
+		A0485A36C270C5FD2BD11968 /* libpjlib-util-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E3F2617D98E04EDE5C71040B /* libpjlib-util-aarch64-apple-darwin.a */; };
+		A119660EEFADC03291F8E767 /* libjsoncpp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D413D556A58280EA30064DD /* libjsoncpp.a */; };
 		A1B2C3D40001000000000001 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000002 /* CallKitManager.swift */; };
 		A1B2C3D40001000000000003 /* JamiBridgeWrapper.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */; };
 		A1B2C3D40001000000000030 /* PushKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000031 /* PushKitManager.swift */; };
+		A75150195B2D0786806AD03D /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A044B178CABFFAE863F073B /* Metal.framework */; };
+		A7F8648DF5C6B7C6CE302905 /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5F0C63D60ABF4ECCD05A89B /* CoreServices.framework */; };
+		A87BC12D4B119CF49791A3AC /* libavformat.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B2EC5DA24882990C3760EF16 /* libavformat.a */; };
+		A9C9CF62CDB2E963D0C6A9C5 /* libswscale.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 6577CA91568345E47643837B /* libswscale.a */; };
+		AA13035A756826DBC68E864F /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 111768CE428E10FD22D8E236 /* CoreGraphics.framework */; };
+		AD092EAF7470EAC5062458C8 /* libpjmedia-videodev-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A80EB68A67DC50D4639F4869 /* libpjmedia-videodev-aarch64-apple-darwin.a */; };
+		C70B455E158D3D1D37259263 /* libfmt.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 17A031B5F4AB0B2C9A39D5EC /* libfmt.a */; };
+		C888138B120598251BB71C32 /* libsimdutf.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3E15A8C0556A240110F6FA63 /* libsimdutf.a */; };
+		CAA3B12E67A79921849844EE /* libixml.a in Frameworks */ = {isa = PBXBuildFile; fileRef = DE035D95ED75F9CFE2D38387 /* libixml.a */; };
+		CBF38113F4A983D7F696A4E1 /* libgit2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = D8BBD56758D668799369D189 /* libgit2.a */; };
+		CE56FA835725621E5D220119 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 20730E30A9641CF67A42B610 /* SystemConfiguration.framework */; };
+		CEEC5215D55FD8D68CC7FD2C /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0471CC9554EBC1115AA02090 /* VideoToolbox.framework */; };
+		D675F9C08BF4E5177B0232F6 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 54C1D3B76359BC3CC54D9F96 /* CoreVideo.framework */; };
+		DB844E532C4EC07CC09D69D6 /* libx264.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0580670EA7E96ED6E82447EE /* libx264.a */; };
+		DF3FCBF0A47B615CB5C8C844 /* libarchive.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 9B3D163F9BD9393792FD8C3F /* libarchive.a */; };
+		E158E034B587132F3E1B4FAB /* libavfilter.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1DDB3FA5112E056C029DFA68 /* libavfilter.a */; };
+		E15A3438F89783426A08DB09 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 67BA53C36633F6E3FA3957C9 /* CoreAudio.framework */; };
+		E15BFD9BFA09E16E53F34DAA /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8AF3FFBDD9753AD07F6C0B0 /* Security.framework */; };
+		E5FED473AFA7BAA6AA248F74 /* libopus.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 662A7403D92407202D50FCB6 /* libopus.a */; };
+		E610B6D8F5A1AC7C3EF18A09 /* libopendht.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B70A73CF118E70E12F1E84B8 /* libopendht.a */; };
+		EA66227A7C570A1CCF0ADEDC /* libpj-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 76CEEBA1FF5D3BF44633BFD1 /* libpj-aarch64-apple-darwin.a */; };
+		EA98791129DBD44BECA9FB60 /* libpjmedia-codec-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 316FC9DACE7F712996CF495A /* libpjmedia-codec-aarch64-apple-darwin.a */; };
+		EAF9031929A9D64298EE1C82 /* libargon2.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 4639D156E0159B634EB4BE3E /* libargon2.a */; };
+		F0EC1EEBA8BB21ED71B87D5C /* libavdevice.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 2CEB0DA84BB7C75063121C73 /* libavdevice.a */; };
+		F62F50EB67DA455216BCEA8C /* libdhtnet.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 0C1EAA825EF143332377CD6F /* libdhtnet.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		011B2C619920938BC9D4959F /* libhogweed.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libhogweed.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libhogweed.a"; sourceTree = "<group>"; };
+		0471CC9554EBC1115AA02090 /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
+		0580670EA7E96ED6E82447EE /* libx264.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libx264.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libx264.a"; sourceTree = "<group>"; };
+		05B61B7E5DA1719539EE7942 /* libsrtp-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libsrtp-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libsrtp-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		06732C03570D840FF1A8AE7A /* libssl.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libssl.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libssl.a"; sourceTree = "<group>"; };
+		0C1EAA825EF143332377CD6F /* libdhtnet.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libdhtnet.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libdhtnet.a"; sourceTree = "<group>"; };
+		0EE5FACEC6F301615E011E11 /* libpjsua2-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjsua2-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjsua2-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		0FE4265B4196A48579DF1DEF /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
+		111768CE428E10FD22D8E236 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		17A031B5F4AB0B2C9A39D5EC /* libfmt.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libfmt.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libfmt.a"; sourceTree = "<group>"; };
+		1DDB3FA5112E056C029DFA68 /* libavfilter.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavfilter.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavfilter.a"; sourceTree = "<group>"; };
+		20730E30A9641CF67A42B610 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		2152FB032600AC8F00CF470E /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
+		2CEB0DA84BB7C75063121C73 /* libavdevice.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavdevice.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavdevice.a"; sourceTree = "<group>"; };
+		316FC9DACE7F712996CF495A /* libpjmedia-codec-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjmedia-codec-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjmedia-codec-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		323A414D6F027F20E26B26F6 /* libhttp_parser.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libhttp_parser.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libhttp_parser.a"; sourceTree = "<group>"; };
+		36B7D750697EEB3255201435 /* libnettle.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libnettle.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libnettle.a"; sourceTree = "<group>"; };
+		3791F64982C9581D0E5A5F6A /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		3A24BAFB32771412044EDA68 /* libpjmedia-audiodev-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjmedia-audiodev-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjmedia-audiodev-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		3E15A8C0556A240110F6FA63 /* libsimdutf.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libsimdutf.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libsimdutf.a"; sourceTree = "<group>"; };
+		4639D156E0159B634EB4BE3E /* libargon2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libargon2.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libargon2.a"; sourceTree = "<group>"; };
+		521953BA281906EB0CDE9ACD /* libpjnath-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjnath-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjnath-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		54C1D3B76359BC3CC54D9F96 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
+		590BDA35AD59D5CAE7D06816 /* libpjsip-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjsip-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjsip-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		5D413D556A58280EA30064DD /* libjsoncpp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libjsoncpp.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libjsoncpp.a"; sourceTree = "<group>"; };
+		5DD5E35987E45A0D87B19B4F /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
+		5DF475DB822F567121FF3918 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		64804CBF906D0B9B84D20CFF /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		6577CA91568345E47643837B /* libswscale.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libswscale.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libswscale.a"; sourceTree = "<group>"; };
+		662A7403D92407202D50FCB6 /* libopus.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libopus.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libopus.a"; sourceTree = "<group>"; };
+		66779761AA35FF8714AAD5EB /* libpjmedia-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjmedia-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjmedia-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		67919C7495CFF537C2CAF558 /* libspeexdsp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libspeexdsp.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libspeexdsp.a"; sourceTree = "<group>"; };
+		67BA53C36633F6E3FA3957C9 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
+		7269B6EBCD06DB6D930444E4 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		7555FF7B242A565900829871 /* iosApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		7555FF82242A565900829871 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		7555FF8C242A565B00829871 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		7555FF8D242A565B00829871 /* iosApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iosApp.entitlements; sourceTree = "<group>"; };
+		76CEEBA1FF5D3BF44633BFD1 /* libpj-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpj-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpj-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		7C7DC98E3E8E45B083D36800 /* libgmp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libgmp.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libgmp.a"; sourceTree = "<group>"; };
+		86843A50337A79FF3A4714DA /* libavutil.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavutil.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavutil.a"; sourceTree = "<group>"; };
+		8981578D0A6320333BA3CF65 /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		8A044B178CABFFAE863F073B /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
+		8B48827D61C9D73A75F0BE1F /* libswresample.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libswresample.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libswresample.a"; sourceTree = "<group>"; };
+		8BA7A1269122F568896DF9D9 /* libllhttp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libllhttp.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libllhttp.a"; sourceTree = "<group>"; };
+		8EC28E5F6D735C7E4FF911B1 /* libspeex.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libspeex.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libspeex.a"; sourceTree = "<group>"; };
+		93D1100A017CDAF6EFF85566 /* libjami.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libjami.a; path = "Frameworks/libjami-arm64/libjami.a"; sourceTree = "<group>"; };
+		995B51AAB6F0C153D9C6E66E /* libpjsip-ua-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjsip-ua-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjsip-ua-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		9B3D163F9BD9393792FD8C3F /* libarchive.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libarchive.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libarchive.a"; sourceTree = "<group>"; };
+		9D6B19CF8987924B45D2E778 /* libyaml-cpp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libyaml-cpp.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libyaml-cpp.a"; sourceTree = "<group>"; };
 		A1B2C3D40001000000000002 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
 		A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = JamiBridgeWrapper.m; sourceTree = "<group>"; };
 		A1B2C3D40001000000000005 /* JamiBridgeWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = JamiBridgeWrapper.h; sourceTree = "<group>"; };
 		A1B2C3D40001000000000031 /* PushKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushKitManager.swift; sourceTree = "<group>"; };
+		A80EB68A67DC50D4639F4869 /* libpjmedia-videodev-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjmedia-videodev-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjmedia-videodev-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		AFECDFD0E36F134AB69C13E5 /* libtls.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtls.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libtls.a"; sourceTree = "<group>"; };
+		B2EC5DA24882990C3760EF16 /* libavformat.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavformat.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavformat.a"; sourceTree = "<group>"; };
+		B5F0C63D60ABF4ECCD05A89B /* CoreServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreServices.framework; path = System/Library/Frameworks/CoreServices.framework; sourceTree = SDKROOT; };
+		B70A73CF118E70E12F1E84B8 /* libopendht.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libopendht.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libopendht.a"; sourceTree = "<group>"; };
+		BBF53432342DD35F5F2154CE /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
+		C38C61D66B5E04F789862131 /* libpjsua-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjsua-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjsua-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		C696CF679A1F39A97690323B /* libvpx.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libvpx.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libvpx.a"; sourceTree = "<group>"; };
+		C8AF3FFBDD9753AD07F6C0B0 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+		CD79D09616B680FCC2D6416D /* libnatpmp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libnatpmp.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libnatpmp.a"; sourceTree = "<group>"; };
+		D345A1374875C459725425A6 /* libgnutls.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libgnutls.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libgnutls.a"; sourceTree = "<group>"; };
+		D8BBD56758D668799369D189 /* libgit2.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libgit2.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libgit2.a"; sourceTree = "<group>"; };
+		DB4092DC21CED108B2160617 /* libpjsip-simple-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjsip-simple-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjsip-simple-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		DE035D95ED75F9CFE2D38387 /* libixml.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libixml.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libixml.a"; sourceTree = "<group>"; };
+		E3F2617D98E04EDE5C71040B /* libpjlib-util-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjlib-util-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjlib-util-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		E71DF2A08FE960DBE39AF170 /* libyuv-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libyuv-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libyuv-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
+		E8C7EFAD95B1EBDE08286821 /* libavcodec.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavcodec.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavcodec.a"; sourceTree = "<group>"; };
+		ECD9ACB332858D652EFF1CA1 /* libcrypto.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libcrypto.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libcrypto.a"; sourceTree = "<group>"; };
+		F1D5E2FC4C18F1DCC6087FF3 /* libupnp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libupnp.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libupnp.a"; sourceTree = "<group>"; };
+		F5E313C29FBB6B26A0776B8F /* libsecp256k1.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libsecp256k1.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libsecp256k1.a"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -31,6 +161,71 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				006792247C182C7BEC5D870D /* libjami.a in Frameworks */,
+				7870937199702AF69E576910 /* libpjsua2-aarch64-apple-darwin.a in Frameworks */,
+				542BEBEB14DD2FFC81043866 /* libpjsua-aarch64-apple-darwin.a in Frameworks */,
+				76E6F06262A809C24B41A368 /* libpjsip-ua-aarch64-apple-darwin.a in Frameworks */,
+				67D29A1B22DCE6B00B185769 /* libpjsip-simple-aarch64-apple-darwin.a in Frameworks */,
+				6CE40C73746EB774211755B5 /* libpjsip-aarch64-apple-darwin.a in Frameworks */,
+				EA98791129DBD44BECA9FB60 /* libpjmedia-codec-aarch64-apple-darwin.a in Frameworks */,
+				AD092EAF7470EAC5062458C8 /* libpjmedia-videodev-aarch64-apple-darwin.a in Frameworks */,
+				83E87694F9177DD36AFF60E6 /* libpjmedia-audiodev-aarch64-apple-darwin.a in Frameworks */,
+				81DF97B6395911B62D716B0D /* libpjmedia-aarch64-apple-darwin.a in Frameworks */,
+				90D2F57072ECD03CE8D37C86 /* libpjnath-aarch64-apple-darwin.a in Frameworks */,
+				A0485A36C270C5FD2BD11968 /* libpjlib-util-aarch64-apple-darwin.a in Frameworks */,
+				EA66227A7C570A1CCF0ADEDC /* libpj-aarch64-apple-darwin.a in Frameworks */,
+				077724C2F680A9C565582BFE /* libsrtp-aarch64-apple-darwin.a in Frameworks */,
+				3D94E4EABA62A5DF5E45BE41 /* libyuv-aarch64-apple-darwin.a in Frameworks */,
+				7B1234DD29A4489FC2DD52BD /* libavcodec.a in Frameworks */,
+				A87BC12D4B119CF49791A3AC /* libavformat.a in Frameworks */,
+				F0EC1EEBA8BB21ED71B87D5C /* libavdevice.a in Frameworks */,
+				E158E034B587132F3E1B4FAB /* libavfilter.a in Frameworks */,
+				9CAEB61FBF4C0018CC202FEB /* libavutil.a in Frameworks */,
+				A9C9CF62CDB2E963D0C6A9C5 /* libswscale.a in Frameworks */,
+				95EC10AC07C7848775D59D5D /* libswresample.a in Frameworks */,
+				DB844E532C4EC07CC09D69D6 /* libx264.a in Frameworks */,
+				9EBF6BA342C92D6CCCB1B742 /* libvpx.a in Frameworks */,
+				876C08614207EBA0ABE718AF /* libgnutls.a in Frameworks */,
+				0E62AF9096855B2E934680DD /* libnettle.a in Frameworks */,
+				8728A23B74CCB16088679039 /* libhogweed.a in Frameworks */,
+				1C1A6D96D3E888146441C9A0 /* libgmp.a in Frameworks */,
+				45B865A85895B9F907BCED98 /* libcrypto.a in Frameworks */,
+				21DAE04BA124D5DC6EEAFBBF /* libssl.a in Frameworks */,
+				443CBABB3DE2CE7A1554C5B0 /* libtls.a in Frameworks */,
+				0C8DFCA24D94E9151DA6C2C6 /* libsecp256k1.a in Frameworks */,
+				E5FED473AFA7BAA6AA248F74 /* libopus.a in Frameworks */,
+				37297CD68A226B14ADF5996A /* libspeex.a in Frameworks */,
+				189B50A1E425957DB3A3DB32 /* libspeexdsp.a in Frameworks */,
+				E610B6D8F5A1AC7C3EF18A09 /* libopendht.a in Frameworks */,
+				F62F50EB67DA455216BCEA8C /* libdhtnet.a in Frameworks */,
+				736F15DF02BA41FFC709275B /* libnatpmp.a in Frameworks */,
+				5A58ECA693F547EA763EF271 /* libupnp.a in Frameworks */,
+				8595F341E49400300352943B /* libllhttp.a in Frameworks */,
+				6D6AF5FDDE333809306A0E22 /* libhttp_parser.a in Frameworks */,
+				A119660EEFADC03291F8E767 /* libjsoncpp.a in Frameworks */,
+				34BCB99E2D3BF1DBE34AF6B6 /* libyaml-cpp.a in Frameworks */,
+				DF3FCBF0A47B615CB5C8C844 /* libarchive.a in Frameworks */,
+				CBF38113F4A983D7F696A4E1 /* libgit2.a in Frameworks */,
+				EAF9031929A9D64298EE1C82 /* libargon2.a in Frameworks */,
+				C70B455E158D3D1D37259263 /* libfmt.a in Frameworks */,
+				C888138B120598251BB71C32 /* libsimdutf.a in Frameworks */,
+				CAA3B12E67A79921849844EE /* libixml.a in Frameworks */,
+				35705CAC5C170F90679CF9DA /* AVFoundation.framework in Frameworks */,
+				E15A3438F89783426A08DB09 /* CoreAudio.framework in Frameworks */,
+				8DEAB34D98828A776E8D21F9 /* AudioToolbox.framework in Frameworks */,
+				D675F9C08BF4E5177B0232F6 /* CoreVideo.framework in Frameworks */,
+				CEEC5215D55FD8D68CC7FD2C /* VideoToolbox.framework in Frameworks */,
+				27CBEAE0D25753521942E145 /* CoreMedia.framework in Frameworks */,
+				61A2B20A49DDC9C5BCB51B6F /* CoreFoundation.framework in Frameworks */,
+				E15BFD9BFA09E16E53F34DAA /* Security.framework in Frameworks */,
+				12D1414D029B034AF45C919F /* Foundation.framework in Frameworks */,
+				CE56FA835725621E5D220119 /* SystemConfiguration.framework in Frameworks */,
+				A75150195B2D0786806AD03D /* Metal.framework in Frameworks */,
+				477D212D7B415551F49B8C74 /* MetalKit.framework in Frameworks */,
+				3AF2D367DC8A3ABB9634B5CA /* QuartzCore.framework in Frameworks */,
+				AA13035A756826DBC68E864F /* CoreGraphics.framework in Frameworks */,
+				04A32B24080ED5AF2A6DF2F6 /* Accelerate.framework in Frameworks */,
+				A7F8648DF5C6B7C6CE302905 /* CoreServices.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -71,6 +266,71 @@
 		7555FFB0242A642200829871 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
+				93D1100A017CDAF6EFF85566 /* libjami.a */,
+				0EE5FACEC6F301615E011E11 /* libpjsua2-aarch64-apple-darwin.a */,
+				C38C61D66B5E04F789862131 /* libpjsua-aarch64-apple-darwin.a */,
+				995B51AAB6F0C153D9C6E66E /* libpjsip-ua-aarch64-apple-darwin.a */,
+				DB4092DC21CED108B2160617 /* libpjsip-simple-aarch64-apple-darwin.a */,
+				590BDA35AD59D5CAE7D06816 /* libpjsip-aarch64-apple-darwin.a */,
+				316FC9DACE7F712996CF495A /* libpjmedia-codec-aarch64-apple-darwin.a */,
+				A80EB68A67DC50D4639F4869 /* libpjmedia-videodev-aarch64-apple-darwin.a */,
+				3A24BAFB32771412044EDA68 /* libpjmedia-audiodev-aarch64-apple-darwin.a */,
+				66779761AA35FF8714AAD5EB /* libpjmedia-aarch64-apple-darwin.a */,
+				521953BA281906EB0CDE9ACD /* libpjnath-aarch64-apple-darwin.a */,
+				E3F2617D98E04EDE5C71040B /* libpjlib-util-aarch64-apple-darwin.a */,
+				76CEEBA1FF5D3BF44633BFD1 /* libpj-aarch64-apple-darwin.a */,
+				05B61B7E5DA1719539EE7942 /* libsrtp-aarch64-apple-darwin.a */,
+				E71DF2A08FE960DBE39AF170 /* libyuv-aarch64-apple-darwin.a */,
+				E8C7EFAD95B1EBDE08286821 /* libavcodec.a */,
+				B2EC5DA24882990C3760EF16 /* libavformat.a */,
+				2CEB0DA84BB7C75063121C73 /* libavdevice.a */,
+				1DDB3FA5112E056C029DFA68 /* libavfilter.a */,
+				86843A50337A79FF3A4714DA /* libavutil.a */,
+				6577CA91568345E47643837B /* libswscale.a */,
+				8B48827D61C9D73A75F0BE1F /* libswresample.a */,
+				0580670EA7E96ED6E82447EE /* libx264.a */,
+				C696CF679A1F39A97690323B /* libvpx.a */,
+				D345A1374875C459725425A6 /* libgnutls.a */,
+				36B7D750697EEB3255201435 /* libnettle.a */,
+				011B2C619920938BC9D4959F /* libhogweed.a */,
+				7C7DC98E3E8E45B083D36800 /* libgmp.a */,
+				ECD9ACB332858D652EFF1CA1 /* libcrypto.a */,
+				06732C03570D840FF1A8AE7A /* libssl.a */,
+				AFECDFD0E36F134AB69C13E5 /* libtls.a */,
+				F5E313C29FBB6B26A0776B8F /* libsecp256k1.a */,
+				662A7403D92407202D50FCB6 /* libopus.a */,
+				8EC28E5F6D735C7E4FF911B1 /* libspeex.a */,
+				67919C7495CFF537C2CAF558 /* libspeexdsp.a */,
+				B70A73CF118E70E12F1E84B8 /* libopendht.a */,
+				0C1EAA825EF143332377CD6F /* libdhtnet.a */,
+				CD79D09616B680FCC2D6416D /* libnatpmp.a */,
+				F1D5E2FC4C18F1DCC6087FF3 /* libupnp.a */,
+				8BA7A1269122F568896DF9D9 /* libllhttp.a */,
+				323A414D6F027F20E26B26F6 /* libhttp_parser.a */,
+				5D413D556A58280EA30064DD /* libjsoncpp.a */,
+				9D6B19CF8987924B45D2E778 /* libyaml-cpp.a */,
+				9B3D163F9BD9393792FD8C3F /* libarchive.a */,
+				D8BBD56758D668799369D189 /* libgit2.a */,
+				4639D156E0159B634EB4BE3E /* libargon2.a */,
+				17A031B5F4AB0B2C9A39D5EC /* libfmt.a */,
+				3E15A8C0556A240110F6FA63 /* libsimdutf.a */,
+				DE035D95ED75F9CFE2D38387 /* libixml.a */,
+				7269B6EBCD06DB6D930444E4 /* AVFoundation.framework */,
+				67BA53C36633F6E3FA3957C9 /* CoreAudio.framework */,
+				8981578D0A6320333BA3CF65 /* AudioToolbox.framework */,
+				54C1D3B76359BC3CC54D9F96 /* CoreVideo.framework */,
+				0471CC9554EBC1115AA02090 /* VideoToolbox.framework */,
+				3791F64982C9581D0E5A5F6A /* CoreMedia.framework */,
+				5DD5E35987E45A0D87B19B4F /* CoreFoundation.framework */,
+				C8AF3FFBDD9753AD07F6C0B0 /* Security.framework */,
+				64804CBF906D0B9B84D20CFF /* Foundation.framework */,
+				20730E30A9641CF67A42B610 /* SystemConfiguration.framework */,
+				8A044B178CABFFAE863F073B /* Metal.framework */,
+				0FE4265B4196A48579DF1DEF /* MetalKit.framework */,
+				BBF53432342DD35F5F2154CE /* QuartzCore.framework */,
+				111768CE428E10FD22D8E236 /* CoreGraphics.framework */,
+				5DF475DB822F567121FF3918 /* Accelerate.framework */,
+				B5F0C63D60ABF4ECCD05A89B /* CoreServices.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -129,7 +389,7 @@
 			attributes = {
 				LastSwiftUpdateCheck = 1130;
 				LastUpgradeCheck = 1130;
-				ORGANIZATIONNAME = "orgName";
+				ORGANIZATIONNAME = orgName;
 				TargetAttributes = {
 					7555FF7A242A565900829871 = {
 						CreatedOnToolsVersion = 11.3.1;
@@ -207,7 +467,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -268,7 +528,7 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
@@ -329,19 +589,35 @@
 					"$(inherited)",
 					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
 				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/libjami-arm64/include",
+					"$(SRCROOT)/../jami-daemon/contrib/aarch64-apple-darwin/include",
+				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/libjami-arm64",
+					"$(SRCROOT)/../jami-daemon/contrib/aarch64-apple-darwin/lib",
+				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
 					Shared,
+					"-lstdc++",
+					"-lc++",
+					"-lcompression",
+					"-lz",
+					"-liconv",
+					"-lbz2",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = cut.the.crap.gettogether;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/JamiBridge/JamiBridgeWrapper.h";
+				SWIFT_OBJC_BRIDGING_HEADER = iosApp/JamiBridge/JamiBridgeWrapper.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -352,26 +628,46 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
-				CODE_SIGN_STYLE = Automatic;
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "iPhone Distribution";
+				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = "";
+				"DEVELOPMENT_TEAM[sdk=iphoneos*]" = K4K982LMZ9;
 				ENABLE_PREVIEWS = YES;
 				FRAMEWORK_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/libjami-arm64/include",
+					"$(SRCROOT)/../jami-daemon/contrib/aarch64-apple-darwin/include",
 				);
 				INFOPLIST_FILE = iosApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Frameworks/libjami-arm64",
+					"$(SRCROOT)/../jami-daemon/contrib/aarch64-apple-darwin/lib",
+				);
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-framework",
 					Shared,
+					"-lstdc++",
+					"-lc++",
+					"-lcompression",
+					"-lz",
+					"-liconv",
+					"-lbz2",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = cut.the.crap.gettogether;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_OBJC_BRIDGING_HEADER = "iosApp/JamiBridge/JamiBridgeWrapper.h";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				"PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]" = GetToGether.mobileprovisioning;
+				SWIFT_OBJC_BRIDGING_HEADER = iosApp/JamiBridge/JamiBridgeWrapper.h;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
