@@ -1,11 +1,16 @@
 import SwiftUI
 import UIKit
 import UserNotifications
+import Shared
 
 class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         NSLog("AppDelegate: App launched")
+
+        // Register the Swift bridge adapter with Kotlin's NativeBridgeProvider
+        // This must be done early, before any Kotlin code tries to use the bridge
+        SwiftJamiBridgeAdapter.register()
 
         // Register for VoIP push notifications
         PushKitManager.shared.registerForVoIPPushes()
