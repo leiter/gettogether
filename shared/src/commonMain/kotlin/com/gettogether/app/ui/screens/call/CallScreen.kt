@@ -61,7 +61,6 @@ import com.gettogether.app.presentation.state.CallState
 import com.gettogether.app.presentation.state.CallStatus
 import com.gettogether.app.presentation.viewmodel.CallViewModel
 import com.gettogether.app.ui.components.AvatarImage
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun CallScreen(
@@ -71,7 +70,7 @@ fun CallScreen(
     callId: String? = null,
     isAlreadyAccepted: Boolean = false,
     onCallEnded: () -> Unit,
-    viewModel: CallViewModel = koinViewModel()
+    viewModel: CallViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

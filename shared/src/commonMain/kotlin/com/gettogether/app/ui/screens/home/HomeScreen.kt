@@ -25,6 +25,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.gettogether.app.presentation.viewmodel.ContactsViewModel
+import com.gettogether.app.presentation.viewmodel.ConversationRequestsViewModel
+import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
+import com.gettogether.app.presentation.viewmodel.SettingsViewModel
+import com.gettogether.app.presentation.viewmodel.TrustRequestsViewModel
+import com.gettogether.app.di.getViewModel
 
 @Composable
 fun HomeScreen(
@@ -33,7 +39,12 @@ fun HomeScreen(
     onStartNewConversation: () -> Unit,
     onAddContact: () -> Unit,
     onNavigateToBlockedContacts: () -> Unit,
-    onSignedOut: () -> Unit
+    onSignedOut: () -> Unit,
+    conversationsViewModel: ConversationsViewModel = getViewModel(),
+    conversationRequestsViewModel: ConversationRequestsViewModel = getViewModel(),
+    contactsViewModel: ContactsViewModel = getViewModel(),
+    trustRequestsViewModel: TrustRequestsViewModel = getViewModel(),
+    settingsViewModel: SettingsViewModel = getViewModel()
 ) {
     var selectedTab by remember { mutableStateOf(HomeTab.Conversations) }
 
@@ -65,15 +76,20 @@ fun HomeScreen(
         ) {
             when (selectedTab) {
                 HomeTab.Conversations -> ConversationsTab(
-                    onConversationClick = onNavigateToChat
+                    onConversationClick = onNavigateToChat,
+                    viewModel = conversationsViewModel,
+                    requestsViewModel = conversationRequestsViewModel
                 )
                 HomeTab.Contacts -> ContactsTab(
                     onContactClick = onNavigateToContact,
                     onAddContact = onAddContact,
-                    onNavigateToBlockedContacts = onNavigateToBlockedContacts
+                    onNavigateToBlockedContacts = onNavigateToBlockedContacts,
+                    viewModel = contactsViewModel,
+                    trustRequestsViewModel = trustRequestsViewModel
                 )
                 HomeTab.Settings -> SettingsTab(
-                    onSignedOut = onSignedOut
+                    onSignedOut = onSignedOut,
+                    viewModel = settingsViewModel
                 )
             }
         }

@@ -49,14 +49,13 @@ import com.gettogether.app.presentation.viewmodel.ConversationRequestUiItem
 import com.gettogether.app.presentation.viewmodel.ConversationRequestsViewModel
 import com.gettogether.app.presentation.viewmodel.ConversationUiItem
 import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ConversationsTab(
     onConversationClick: (String) -> Unit,
-    viewModel: ConversationsViewModel = koinViewModel(),
-    requestsViewModel: ConversationRequestsViewModel = koinViewModel()
+    viewModel: ConversationsViewModel,
+    requestsViewModel: ConversationRequestsViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val requestsState by requestsViewModel.state.collectAsState()

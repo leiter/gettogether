@@ -40,13 +40,12 @@ import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.viewmodel.BlockedContactUiItem
 import com.gettogether.app.presentation.viewmodel.BlockedContactsViewModel
 import com.gettogether.app.ui.components.ContactAvatarImage
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlockedContactsScreen(
     onNavigateBack: () -> Unit,
-    viewModel: BlockedContactsViewModel = koinViewModel()
+    viewModel: BlockedContactsViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

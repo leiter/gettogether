@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.SelectableContact
 import com.gettogether.app.presentation.viewmodel.NewConversationViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,7 +59,7 @@ fun NewConversationScreen(
     onNavigateBack: () -> Unit,
     onConversationCreated: (String) -> Unit,
     onStartGroupCall: ((List<String>, Boolean) -> Unit)? = null,
-    viewModel: NewConversationViewModel = koinViewModel()
+    viewModel: NewConversationViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

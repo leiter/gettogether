@@ -61,13 +61,12 @@ import com.gettogether.app.presentation.state.UserProfile
 import com.gettogether.app.presentation.viewmodel.SettingsViewModel
 import com.gettogether.app.ui.components.AvatarImage
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SettingsTab(
     onSignedOut: () -> Unit,
-    viewModel: SettingsViewModel = koinViewModel()
+    viewModel: SettingsViewModel
 ) {
     val state by viewModel.state.collectAsState()
     var expandedSection by remember { mutableStateOf<String?>(null) }

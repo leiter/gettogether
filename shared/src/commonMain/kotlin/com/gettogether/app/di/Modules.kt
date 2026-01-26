@@ -21,7 +21,6 @@ import com.gettogether.app.presentation.viewmodel.NewConversationViewModel
 import com.gettogether.app.presentation.viewmodel.SettingsViewModel
 import com.gettogether.app.presentation.viewmodel.TrustRequestsViewModel
 import org.koin.core.module.Module
-import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val sharedModule = module {
@@ -47,24 +46,26 @@ val sharedModule = module {
     single { ConversationRepositoryImpl(get(), get(), get(), get(), getOrNull(), getOrNull(), getOrNull()) }
 
     // ViewModels
-    // Using factory for CreateAccountViewModel to work around iOS koinViewModel issue
-    factory {
+    // Using viewModelFactory for platform-specific scoping:
+    // - Android: viewModel { } for lifecycle scoping (survives config changes)
+    // - iOS: factory { } since there's no ViewModel lifecycle
+    viewModelFactory {
         println("Koin: Creating CreateAccountViewModel")
         CreateAccountViewModel(get(), get()).also { println("Koin: CreateAccountViewModel created") }
     }
-    viewModel { ImportAccountViewModel(get(), get()) }
-    viewModel { ChatViewModel(get(), get(), get(), get(), get(), get()) }
-    viewModel { ConversationsViewModel(get(), get()) }
-    viewModel { ConversationRequestsViewModel(get(), get()) }
-    viewModel { ContactsViewModel(get(), get()) }
-    viewModel { BlockedContactsViewModel(get(), get()) }
-    viewModel { TrustRequestsViewModel(get(), get()) }
-    viewModel { NewConversationViewModel(get(), get()) }
-    viewModel { AddContactViewModel(get(), get()) }
-    viewModel { SettingsViewModel(get(), get(), get(), get(), get()) }
-    viewModel { ContactDetailsViewModel(get(), get(), get(), get<ConversationRepositoryImpl>()) }
-    viewModel { CallViewModel(get(), get(), get(), getOrNull(), get()) }
-    viewModel { ConferenceViewModel(get(), get()) }
+    viewModelFactory { ImportAccountViewModel(get(), get()) }
+    viewModelFactory { ChatViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModelFactory { ConversationsViewModel(get(), get()) }
+    viewModelFactory { ConversationRequestsViewModel(get(), get()) }
+    viewModelFactory { ContactsViewModel(get(), get()) }
+    viewModelFactory { BlockedContactsViewModel(get(), get()) }
+    viewModelFactory { TrustRequestsViewModel(get(), get()) }
+    viewModelFactory { NewConversationViewModel(get(), get()) }
+    viewModelFactory { AddContactViewModel(get(), get()) }
+    viewModelFactory { SettingsViewModel(get(), get(), get(), get(), get()) }
+    viewModelFactory { ContactDetailsViewModel(get(), get(), get(), get<ConversationRepositoryImpl>()) }
+    viewModelFactory { CallViewModel(get(), get(), get(), getOrNull(), get()) }
+    viewModelFactory { ConferenceViewModel(get(), get()) }
 }
 
 expect val platformModule: Module
