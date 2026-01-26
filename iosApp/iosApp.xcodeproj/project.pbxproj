@@ -53,6 +53,7 @@
 		A1B2C3D40001000000000003 /* JamiBridgeWrapper.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000004 /* JamiBridgeWrapper.mm */; };
 		A1B2C3D40001000000000030 /* PushKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000031 /* PushKitManager.swift */; };
 		A1B2C3D40001000000000041 /* SwiftJamiBridgeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000040 /* SwiftJamiBridgeAdapter.swift */; };
+		A1B2C3D40001000000000051 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000050 /* Assets.xcassets */; };
 		A75150195B2D0786806AD03D /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A044B178CABFFAE863F073B /* Metal.framework */; };
 		A7F8648DF5C6B7C6CE302905 /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5F0C63D60ABF4ECCD05A89B /* CoreServices.framework */; };
 		A87BC12D4B119CF49791A3AC /* libavformat.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B2EC5DA24882990C3760EF16 /* libavformat.a */; };
@@ -136,6 +137,7 @@
 		A1B2C3D40001000000000005 /* JamiBridgeWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = JamiBridgeWrapper.h; sourceTree = "<group>"; };
 		A1B2C3D40001000000000031 /* PushKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushKitManager.swift; sourceTree = "<group>"; };
 		A1B2C3D40001000000000040 /* SwiftJamiBridgeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftJamiBridgeAdapter.swift; sourceTree = "<group>"; };
+		A1B2C3D40001000000000050 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A80EB68A67DC50D4639F4869 /* libpjmedia-videodev-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjmedia-videodev-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjmedia-videodev-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
 		AFECDFD0E36F134AB69C13E5 /* libtls.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtls.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libtls.a"; sourceTree = "<group>"; };
 		B2EC5DA24882990C3760EF16 /* libavformat.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavformat.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavformat.a"; sourceTree = "<group>"; };
@@ -258,6 +260,7 @@
 				7555FF82242A565900829871 /* ContentView.swift */,
 				7555FF8C242A565B00829871 /* Info.plist */,
 				7555FF8D242A565B00829871 /* iosApp.entitlements */,
+				A1B2C3D40001000000000050 /* Assets.xcassets */,
 				A1B2C3D40001000000000010 /* CallKit */,
 				A1B2C3D40001000000000020 /* JamiBridge */,
 				A1B2C3D40001000000000032 /* PushKit */,
@@ -422,6 +425,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D40001000000000051 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
