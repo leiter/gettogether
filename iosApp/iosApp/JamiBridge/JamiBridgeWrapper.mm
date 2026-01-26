@@ -1147,8 +1147,12 @@ static JBCallState toCallState(const std::string& state) {
 }
 
 - (void)addContact:(NSString *)accountId uri:(NSString *)uri {
-    NSLog(@"[JamiBridge] addContact: %@ uri: %@", accountId, uri);
-    libjami::addContact(toCppString(accountId), toCppString(uri));
+    FILE_LOG_I("JamiBridge", @"addContact: accountId=%@ uri=%@", accountId, uri);
+    std::string accountIdStr = toCppString(accountId);
+    std::string uriStr = toCppString(uri);
+    FILE_LOG_I("JamiBridge", @"addContact: calling libjami::addContact with accountId=%s uri=%s", accountIdStr.c_str(), uriStr.c_str());
+    libjami::addContact(accountIdStr, uriStr);
+    FILE_LOG_I("JamiBridge", @"addContact: libjami::addContact completed");
 }
 
 - (void)removeContact:(NSString *)accountId uri:(NSString *)uri ban:(BOOL)ban {
@@ -1188,6 +1192,12 @@ static JBCallState toCallState(const std::string& state) {
     return [result copy];
 }
 
+- (void)subscribeBuddy:(NSString *)accountId uri:(NSString *)uri flag:(BOOL)flag {
+    FILE_LOG_I("JamiBridge", @"subscribeBuddy: accountId=%@ uri=%@ flag=%d", accountId, uri, flag);
+    libjami::subscribeBuddy(toCppString(accountId), toCppString(uri), flag);
+    FILE_LOG_I("JamiBridge", @"subscribeBuddy: completed");
+}
+
 // =============================================================================
 // Conversation Management
 // =============================================================================
@@ -1198,8 +1208,11 @@ static JBCallState toCallState(const std::string& state) {
 }
 
 - (NSString *)startConversation:(NSString *)accountId {
-    NSLog(@"[JamiBridge] startConversation: %@", accountId);
-    std::string conversationId = libjami::startConversation(toCppString(accountId));
+    FILE_LOG_I("JamiBridge", @"startConversation: accountId=%@", accountId);
+    std::string accountIdStr = toCppString(accountId);
+    FILE_LOG_I("JamiBridge", @"startConversation: calling libjami::startConversation");
+    std::string conversationId = libjami::startConversation(accountIdStr);
+    FILE_LOG_I("JamiBridge", @"startConversation: result=%s", conversationId.c_str());
     return toNSString(conversationId);
 }
 
@@ -1252,8 +1265,13 @@ static JBCallState toCallState(const std::string& state) {
 - (void)addConversationMember:(NSString *)accountId
                conversationId:(NSString *)conversationId
                    contactUri:(NSString *)contactUri {
-    NSLog(@"[JamiBridge] addConversationMember: %@ to %@", contactUri, conversationId);
-    libjami::addConversationMember(toCppString(accountId), toCppString(conversationId), toCppString(contactUri));
+    FILE_LOG_I("JamiBridge", @"addConversationMember: accountId=%@ conversationId=%@ contactUri=%@", accountId, conversationId, contactUri);
+    std::string accountIdStr = toCppString(accountId);
+    std::string conversationIdStr = toCppString(conversationId);
+    std::string contactUriStr = toCppString(contactUri);
+    FILE_LOG_I("JamiBridge", @"addConversationMember: calling libjami::addConversationMember");
+    libjami::addConversationMember(accountIdStr, conversationIdStr, contactUriStr);
+    FILE_LOG_I("JamiBridge", @"addConversationMember: completed");
 }
 
 - (void)removeConversationMember:(NSString *)accountId
