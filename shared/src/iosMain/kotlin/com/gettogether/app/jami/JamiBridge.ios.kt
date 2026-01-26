@@ -16,6 +16,7 @@ import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
 import platform.AVFAudio.AVAudioSessionModeVoiceChat
 import platform.AVFAudio.AVAudioSessionPortOverrideNone
 import platform.AVFAudio.AVAudioSessionPortOverrideSpeaker
+import com.gettogether.app.util.IosFileLogger
 import platform.Foundation.NSDate
 import platform.Foundation.NSLog
 import platform.Foundation.NSUUID
@@ -65,7 +66,7 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     init {
         // Register this instance as the callback receiver
         NativeBridgeProvider.setCallback(this)
-        NSLog("$TAG: IOSJamiBridge initialized, native available: $isNativeAvailable")
+        IosFileLogger.i(TAG, "IOSJamiBridge initialized, native available: $isNativeAvailable")
     }
 
     // =========================================================================
@@ -73,7 +74,7 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     // =========================================================================
 
     override fun onRegistrationStateChanged(accountId: String, state: Int, code: Int, detail: String) {
-        NSLog("$TAG: onRegistrationStateChanged: $accountId state=$state")
+        IosFileLogger.i(TAG, "onRegistrationStateChanged: $accountId state=$state code=$code detail=$detail")
         val regState = when (state) {
             0 -> RegistrationState.UNREGISTERED
             1 -> RegistrationState.TRYING
@@ -113,31 +114,38 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     }
 
     override fun onContactAdded(accountId: String, uri: String, confirmed: Boolean) {
+        IosFileLogger.i(TAG, "onContactAdded: uri=${uri.take(8)}... confirmed=$confirmed")
         _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, confirmed))
     }
 
     override fun onContactRemoved(accountId: String, uri: String, banned: Boolean) {
+        IosFileLogger.i(TAG, "onContactRemoved: uri=${uri.take(8)}... banned=$banned")
         _contactEvents.tryEmit(JamiContactEvent.ContactRemoved(accountId, uri, banned))
     }
 
     override fun onIncomingTrustRequest(accountId: String, conversationId: String, from: String, received: Long) {
+        IosFileLogger.i(TAG, "onIncomingTrustRequest: from=${from.take(8)}... convId=${conversationId.take(8)}... received=$received")
         // Note: payload is not provided by Swift bridge, using empty ByteArray
         _contactEvents.tryEmit(JamiContactEvent.IncomingTrustRequest(accountId, conversationId, from, ByteArray(0), received))
     }
 
     override fun onPresenceChanged(accountId: String, uri: String, isOnline: Boolean) {
+        IosFileLogger.d(TAG, "onPresenceChanged: uri=${uri.take(8)}... isOnline=$isOnline")
         _contactEvents.tryEmit(JamiContactEvent.PresenceChanged(accountId, uri, isOnline))
     }
 
     override fun onConversationReady(accountId: String, conversationId: String) {
+        IosFileLogger.i(TAG, "onConversationReady: convId=${conversationId.take(8)}...")
         _conversationEvents.tryEmit(JamiConversationEvent.ConversationReady(accountId, conversationId))
     }
 
     override fun onConversationRemoved(accountId: String, conversationId: String) {
+        IosFileLogger.i(TAG, "onConversationRemoved: convId=${conversationId.take(8)}...")
         _conversationEvents.tryEmit(JamiConversationEvent.ConversationRemoved(accountId, conversationId))
     }
 
     override fun onConversationRequestReceived(accountId: String, conversationId: String, metadata: Map<String, String>) {
+        IosFileLogger.i(TAG, "onConversationRequestReceived: convId=${conversationId.take(8)}... metadata=$metadata")
         _conversationEvents.tryEmit(JamiConversationEvent.ConversationRequestReceived(accountId, conversationId, metadata))
     }
 
@@ -175,10 +183,12 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     }
 
     override fun onIncomingCall(accountId: String, callId: String, peerId: String, peerDisplayName: String, hasVideo: Boolean) {
+        IosFileLogger.i(TAG, "onIncomingCall: callId=$callId from=$peerId video=$hasVideo")
         _callEvents.tryEmit(JamiCallEvent.IncomingCall(accountId, callId, peerId, peerDisplayName, hasVideo))
     }
 
     override fun onCallStateChanged(accountId: String, callId: String, state: Int, code: Int) {
+        IosFileLogger.i(TAG, "onCallStateChanged: callId=$callId state=$state code=$code")
         val callState = when (state) {
             0 -> CallState.INACTIVE
             1 -> CallState.INCOMING
@@ -250,22 +260,27 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     override suspend fun initDaemon(dataPath: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: initDaemon with path: $dataPath")
-            native?.initDaemon(dataPath) ?: NSLog("$TAG: Native bridge not available")
+            IosFileLogger.i(TAG, "initDaemon with path: $dataPath")
+            if (native != null) {
+                native?.initDaemon(dataPath)
+            } else {
+                IosFileLogger.w(TAG, "Native bridge not available")
+            }
         }
     }
 
     override suspend fun startDaemon() {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: startDaemon")
+            IosFileLogger.i(TAG, "startDaemon")
             native?.startDaemon()
             _isDaemonRunning = native?.isDaemonRunning() ?: false
+            IosFileLogger.i(TAG, "Daemon running: $_isDaemonRunning")
         }
     }
 
     override suspend fun stopDaemon() {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: stopDaemon")
+            IosFileLogger.i(TAG, "stopDaemon")
             native?.stopDaemon()
             _isDaemonRunning = false
         }
@@ -280,13 +295,17 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     // =========================================================================
 
     override suspend fun createAccount(displayName: String, password: String): String = withContext(Dispatchers.Default) {
-        NSLog("$TAG: createAccount: $displayName")
-        native?.createAccount(displayName, password) ?: generateId()
+        IosFileLogger.i(TAG, "createAccount: $displayName")
+        val accountId = native?.createAccount(displayName, password) ?: generateId()
+        IosFileLogger.i(TAG, "createAccount result: $accountId")
+        accountId
     }
 
     override suspend fun importAccount(archivePath: String, password: String): String = withContext(Dispatchers.Default) {
-        NSLog("$TAG: importAccount from: $archivePath")
-        native?.importAccount(archivePath, password) ?: generateId()
+        IosFileLogger.i(TAG, "importAccount from: $archivePath")
+        val accountId = native?.importAccount(archivePath, password) ?: generateId()
+        IosFileLogger.i(TAG, "importAccount result: $accountId")
+        accountId
     }
 
     override suspend fun exportAccount(accountId: String, destinationPath: String, password: String): Boolean =
@@ -574,27 +593,29 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     override suspend fun placeCall(accountId: String, uri: String, withVideo: Boolean): String =
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: placeCall to $uri, video=$withVideo")
-            native?.placeCall(accountId, uri, withVideo) ?: ""
+            IosFileLogger.i(TAG, "placeCall to $uri, video=$withVideo")
+            val callId = native?.placeCall(accountId, uri, withVideo) ?: ""
+            IosFileLogger.i(TAG, "placeCall result: $callId")
+            callId
         }
 
     override suspend fun acceptCall(accountId: String, callId: String, withVideo: Boolean) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: acceptCall: $callId")
+            IosFileLogger.i(TAG, "acceptCall: $callId, video=$withVideo")
             native?.acceptCall(accountId, callId, withVideo)
         }
     }
 
     override suspend fun refuseCall(accountId: String, callId: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: refuseCall: $callId")
+            IosFileLogger.i(TAG, "refuseCall: $callId")
             native?.refuseCall(accountId, callId)
         }
     }
 
     override suspend fun hangUp(accountId: String, callId: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: hangUp: $callId")
+            IosFileLogger.i(TAG, "hangUp: $callId")
             native?.hangUp(accountId, callId)
         }
     }
@@ -644,7 +665,7 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     override suspend fun switchAudioOutput(useSpeaker: Boolean) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: switchAudioOutput: speaker=$useSpeaker")
+            IosFileLogger.i(TAG, "switchAudioOutput: speaker=$useSpeaker")
             native?.switchAudioOutput(useSpeaker)
                 ?: try {
                     val portOverride = if (useSpeaker) {
@@ -654,7 +675,7 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
                     }
                     audioSession.overrideOutputAudioPort(portOverride, null)
                 } catch (e: Exception) {
-                    NSLog("$TAG: Failed to switch audio output: ${e.message}")
+                    IosFileLogger.e(TAG, "Failed to switch audio output", e)
                 }
         }
     }

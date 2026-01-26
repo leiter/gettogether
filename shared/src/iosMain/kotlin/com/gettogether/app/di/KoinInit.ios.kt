@@ -1,14 +1,19 @@
 package com.gettogether.app.di
 
+import com.gettogether.app.jami.DaemonManager
+import com.gettogether.app.util.IosFileLogger
 import org.koin.core.context.startKoin
 import org.koin.mp.KoinPlatform
-import platform.Foundation.NSLog
 
 private var isKoinInitialized = false
+private const val TAG = "KoinInit"
 
 fun initKoin() {
+    // Initialize file logger first for crash-safe logging
+    IosFileLogger.initialize()
+
     if (isKoinInitialized) {
-        NSLog("KoinInit: Koin already initialized, skipping")
+        IosFileLogger.i(TAG, "Koin already initialized, skipping")
         return
     }
 
@@ -16,21 +21,35 @@ fun initKoin() {
         // Check if Koin is already started (e.g., by tests)
         try {
             KoinPlatform.getKoin()
-            NSLog("KoinInit: Koin already exists, skipping")
+            IosFileLogger.i(TAG, "Koin already exists, skipping")
             isKoinInitialized = true
             return
         } catch (_: Exception) {
             // Koin not started yet, continue with initialization
         }
 
-        NSLog("KoinInit: Starting Koin initialization")
+        IosFileLogger.i(TAG, "Starting Koin initialization")
         startKoin {
             modules(sharedModule, platformModule)
         }
         isKoinInitialized = true
-        NSLog("KoinInit: Koin initialized successfully")
+        IosFileLogger.i(TAG, "Koin initialized successfully")
+
+        // Start the Jami daemon after Koin is ready
+        startDaemon()
     } catch (e: Exception) {
-        NSLog("KoinInit: Error initializing Koin: ${e.message}")
+        IosFileLogger.e(TAG, "Error initializing Koin", e)
         throw e
+    }
+}
+
+private fun startDaemon() {
+    try {
+        IosFileLogger.i(TAG, "Starting Jami daemon...")
+        val daemonManager: DaemonManager = KoinPlatform.getKoin().get()
+        daemonManager.start()
+        IosFileLogger.i(TAG, "Daemon start initiated")
+    } catch (e: Exception) {
+        IosFileLogger.e(TAG, "Error starting daemon", e)
     }
 }

@@ -16,6 +16,92 @@
 #include <functional>
 #include <filesystem>
 
+// =============================================================================
+// Inline File Logger - writes to Documents folder for crash-safe debugging
+// =============================================================================
+
+static NSFileHandle *g_logFileHandle = nil;
+static NSDateFormatter *g_logDateFormatter = nil;
+static dispatch_queue_t g_logQueue = nil;
+
+static void initFileLogger() {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+        NSString *documentsPath = paths.firstObject;
+        if (!documentsPath) {
+            NSLog(@"[FileLogger] ERROR: Could not find Documents directory");
+            return;
+        }
+
+        NSDateFormatter *timestampFormatter = [[NSDateFormatter alloc] init];
+        timestampFormatter.dateFormat = @"yyyy-MM-dd_HH-mm-ss";
+        NSString *timestamp = [timestampFormatter stringFromDate:[NSDate date]];
+
+        NSString *fileName = [NSString stringWithFormat:@"gettogether_native_%@.log", timestamp];
+        NSString *logFilePath = [documentsPath stringByAppendingPathComponent:fileName];
+
+        [[NSFileManager defaultManager] createFileAtPath:logFilePath contents:nil attributes:nil];
+        g_logFileHandle = [NSFileHandle fileHandleForWritingAtPath:logFilePath];
+
+        g_logDateFormatter = [[NSDateFormatter alloc] init];
+        g_logDateFormatter.dateFormat = @"HH:mm:ss.SSS";
+
+        g_logQueue = dispatch_queue_create("com.gettogether.filelogger", DISPATCH_QUEUE_SERIAL);
+
+        // Write header
+        NSString *header = [NSString stringWithFormat:
+            @"=====================================\n"
+            @"GetTogether iOS Native Debug Log\n"
+            @"Started: %@\n"
+            @"=====================================\n\n",
+            [NSDate date]];
+        NSData *data = [header dataUsingEncoding:NSUTF8StringEncoding];
+        [g_logFileHandle writeData:data];
+        [g_logFileHandle synchronizeFile];
+
+        NSLog(@"[FileLogger] Initialized at %@", logFilePath);
+    });
+}
+
+static void fileLog(const char* level, const char* tag, NSString *message) {
+    initFileLogger();
+
+    // Also log to NSLog
+    NSLog(@"%s/%s: %@", level, tag, message);
+
+    if (!g_logFileHandle) return;
+
+    dispatch_async(g_logQueue, ^{
+        NSString *timestamp = [g_logDateFormatter stringFromDate:[NSDate date]];
+        NSString *line = [NSString stringWithFormat:@"[%@] %s/%s: %@\n", timestamp, level, tag, message];
+        NSData *data = [line dataUsingEncoding:NSUTF8StringEncoding];
+        [g_logFileHandle writeData:data];
+        [g_logFileHandle synchronizeFile];
+    });
+}
+
+// Convenience macros for file logging
+#define FILE_LOG_I(tag, ...) do { \
+    NSString *msg = [NSString stringWithFormat:__VA_ARGS__]; \
+    fileLog("I", tag, msg); \
+} while(0)
+
+#define FILE_LOG_D(tag, ...) do { \
+    NSString *msg = [NSString stringWithFormat:__VA_ARGS__]; \
+    fileLog("D", tag, msg); \
+} while(0)
+
+#define FILE_LOG_W(tag, ...) do { \
+    NSString *msg = [NSString stringWithFormat:__VA_ARGS__]; \
+    fileLog("W", tag, msg); \
+} while(0)
+
+#define FILE_LOG_E(tag, ...) do { \
+    NSString *msg = [NSString stringWithFormat:__VA_ARGS__]; \
+    fileLog("E", tag, msg); \
+} while(0)
+
 // libjami C++ headers
 #include "jami.h"
 #include "configurationmanager_interface.h"
@@ -245,13 +331,28 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConfigurationSignal::RegistrationStateChanged>(
         [weakSelf](const std::string& accountId, const std::string& state,
                    int code, const std::string& detail) {
+            FILE_LOG_I("JamiBridge-C++", @"RegistrationStateChanged CALLBACK: account=%s state=%s code=%d detail=%s",
+                  accountId.c_str(), state.c_str(), code, detail.c_str());
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            JBRegistrationState stateEnum = toRegistrationState(state);
+            NSString *detailNS = toNSString(detail);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
-                if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onRegistrationStateChanged:state:code:detail:)]) {
-                    [strongSelf.delegate onRegistrationStateChanged:toNSString(accountId)
-                                                              state:toRegistrationState(state)
-                                                               code:code
-                                                             detail:toNSString(detail)];
+                if (strongSelf) {
+                    FILE_LOG_I("JamiBridge-C++", @"RegistrationStateChanged dispatching: hasDelegate=%d",
+                          strongSelf.delegate != nil);
+                    if ([strongSelf.delegate respondsToSelector:@selector(onRegistrationStateChanged:state:code:detail:)]) {
+                        [strongSelf.delegate onRegistrationStateChanged:accountIdNS
+                                                                  state:stateEnum
+                                                                   code:code
+                                                                 detail:detailNS];
+                        FILE_LOG_I("JamiBridge-C++", @"RegistrationStateChanged forwarded to delegate");
+                    } else {
+                        FILE_LOG_W("JamiBridge-C++", @"Delegate does not respond to onRegistrationStateChanged");
+                    }
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"RegistrationStateChanged: strongSelf is nil!");
                 }
             });
         }));
@@ -259,11 +360,14 @@ static JBCallState toCallState(const std::string& state) {
     // Account details changed
     handlers.insert(exportable_callback<ConfigurationSignal::AccountDetailsChanged>(
         [weakSelf](const std::string& accountId, const std::map<std::string, std::string>& details) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSDictionary *detailsNS = toNSDictionary(details);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onAccountDetailsChanged:details:)]) {
-                    [strongSelf.delegate onAccountDetailsChanged:toNSString(accountId)
-                                                         details:toNSDictionary(details)];
+                    [strongSelf.delegate onAccountDetailsChanged:accountIdNS
+                                                         details:detailsNS];
                 }
             });
         }));
@@ -271,11 +375,14 @@ static JBCallState toCallState(const std::string& state) {
     // Contact added
     handlers.insert(exportable_callback<ConfigurationSignal::ContactAdded>(
         [weakSelf](const std::string& accountId, const std::string& uri, bool confirmed) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *uriNS = toNSString(uri);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onContactAdded:uri:confirmed:)]) {
-                    [strongSelf.delegate onContactAdded:toNSString(accountId)
-                                                    uri:toNSString(uri)
+                    [strongSelf.delegate onContactAdded:accountIdNS
+                                                    uri:uriNS
                                               confirmed:confirmed];
                 }
             });
@@ -284,11 +391,14 @@ static JBCallState toCallState(const std::string& state) {
     // Contact removed
     handlers.insert(exportable_callback<ConfigurationSignal::ContactRemoved>(
         [weakSelf](const std::string& accountId, const std::string& uri, bool banned) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *uriNS = toNSString(uri);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onContactRemoved:uri:banned:)]) {
-                    [strongSelf.delegate onContactRemoved:toNSString(accountId)
-                                                      uri:toNSString(uri)
+                    [strongSelf.delegate onContactRemoved:accountIdNS
+                                                      uri:uriNS
                                                    banned:banned];
                 }
             });
@@ -299,15 +409,28 @@ static JBCallState toCallState(const std::string& state) {
         [weakSelf](const std::string& accountId, const std::string& from,
                    const std::string& conversationId, const std::vector<uint8_t>& payload,
                    time_t received) {
+            FILE_LOG_I("JamiBridge-C++", @"IncomingTrustRequest CALLBACK: account=%s from=%s convId=%s payloadSize=%zu received=%ld",
+                  accountId.c_str(), from.c_str(), conversationId.c_str(), payload.size(), (long)received);
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *fromNS = toNSString(from);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSData *payloadData = [NSData dataWithBytes:payload.data() length:payload.size()];
+            int64_t receivedNS = (int64_t)received;
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
-                if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onIncomingTrustRequest:conversationId:from:payload:received:)]) {
-                    NSData *payloadData = [NSData dataWithBytes:payload.data() length:payload.size()];
-                    [strongSelf.delegate onIncomingTrustRequest:toNSString(accountId)
-                                                 conversationId:toNSString(conversationId)
-                                                           from:toNSString(from)
-                                                        payload:payloadData
-                                                       received:(int64_t)received];
+                if (strongSelf) {
+                    FILE_LOG_I("JamiBridge-C++", @"IncomingTrustRequest dispatching: hasDelegate=%d", strongSelf.delegate != nil);
+                    if ([strongSelf.delegate respondsToSelector:@selector(onIncomingTrustRequest:conversationId:from:payload:received:)]) {
+                        [strongSelf.delegate onIncomingTrustRequest:accountIdNS
+                                                     conversationId:conversationIdNS
+                                                               from:fromNS
+                                                            payload:payloadData
+                                                           received:receivedNS];
+                        FILE_LOG_I("JamiBridge-C++", @"IncomingTrustRequest forwarded to delegate");
+                    }
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"IncomingTrustRequest: strongSelf is nil!");
                 }
             });
         }));
@@ -315,12 +438,15 @@ static JBCallState toCallState(const std::string& state) {
     // Name registration ended
     handlers.insert(exportable_callback<ConfigurationSignal::NameRegistrationEnded>(
         [weakSelf](const std::string& accountId, int state, const std::string& name) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *nameNS = toNSString(name);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onNameRegistrationEnded:state:name:)]) {
-                    [strongSelf.delegate onNameRegistrationEnded:toNSString(accountId)
+                    [strongSelf.delegate onNameRegistrationEnded:accountIdNS
                                                            state:state
-                                                            name:toNSString(name)];
+                                                            name:nameNS];
                 }
             });
         }));
@@ -329,20 +455,24 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConfigurationSignal::RegisteredNameFound>(
         [weakSelf](const std::string& accountId, const std::string& requestName,
                    int state, const std::string& address, const std::string& name) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *addressNS = toNSString(address);
+            NSString *nameNS = toNSString(name);
+            JBLookupState lookupState;
+            switch (state) {
+                case 0: lookupState = JBLookupStateSuccess; break;
+                case 1: lookupState = JBLookupStateNotFound; break;
+                case 2: lookupState = JBLookupStateInvalid; break;
+                default: lookupState = JBLookupStateError; break;
+            }
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onRegisteredNameFound:state:address:name:)]) {
-                    JBLookupState lookupState;
-                    switch (state) {
-                        case 0: lookupState = JBLookupStateSuccess; break;
-                        case 1: lookupState = JBLookupStateNotFound; break;
-                        case 2: lookupState = JBLookupStateInvalid; break;
-                        default: lookupState = JBLookupStateError; break;
-                    }
-                    [strongSelf.delegate onRegisteredNameFound:toNSString(accountId)
+                    [strongSelf.delegate onRegisteredNameFound:accountIdNS
                                                          state:lookupState
-                                                       address:toNSString(address)
-                                                          name:toNSString(name)];
+                                                       address:addressNS
+                                                          name:nameNS];
                 }
             });
         }));
@@ -350,11 +480,14 @@ static JBCallState toCallState(const std::string& state) {
     // Known devices changed
     handlers.insert(exportable_callback<ConfigurationSignal::KnownDevicesChanged>(
         [weakSelf](const std::string& accountId, const std::map<std::string, std::string>& devices) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSDictionary *devicesNS = toNSDictionary(devices);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onKnownDevicesChanged:devices:)]) {
-                    [strongSelf.delegate onKnownDevicesChanged:toNSString(accountId)
-                                                       devices:toNSDictionary(devices)];
+                    [strongSelf.delegate onKnownDevicesChanged:accountIdNS
+                                                       devices:devicesNS];
                 }
             });
         }));
@@ -363,13 +496,18 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConfigurationSignal::ComposingStatusChanged>(
         [weakSelf](const std::string& accountId, const std::string& convId,
                    const std::string& from, int status) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *convIdNS = toNSString(convId);
+            NSString *fromNS = toNSString(from);
+            BOOL isComposing = (status != 0);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onComposingStatusChanged:conversationId:from:isComposing:)]) {
-                    [strongSelf.delegate onComposingStatusChanged:toNSString(accountId)
-                                                   conversationId:toNSString(convId)
-                                                             from:toNSString(from)
-                                                      isComposing:(status != 0)];
+                    [strongSelf.delegate onComposingStatusChanged:accountIdNS
+                                                   conversationId:convIdNS
+                                                             from:fromNS
+                                                      isComposing:isComposing];
                 }
             });
         }));
@@ -377,14 +515,18 @@ static JBCallState toCallState(const std::string& state) {
     // Profile received
     handlers.insert(exportable_callback<ConfigurationSignal::ProfileReceived>(
         [weakSelf](const std::string& accountId, const std::string& from, const std::string& vcard) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *fromNS = toNSString(from);
+            NSString *vcardNS = toNSString(vcard);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onProfileReceived:from:displayName:avatarPath:)]) {
                     // Parse vcard to extract display name and avatar
                     // For now, pass the vcard as display name
-                    [strongSelf.delegate onProfileReceived:toNSString(accountId)
-                                                      from:toNSString(from)
-                                               displayName:toNSString(vcard)
+                    [strongSelf.delegate onProfileReceived:accountIdNS
+                                                      from:fromNS
+                                               displayName:vcardNS
                                                 avatarPath:nil];
                 }
             });
@@ -398,12 +540,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<CallSignal::StateChange>(
         [weakSelf](const std::string& accountId, const std::string& callId,
                    const std::string& state, int code) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *callIdNS = toNSString(callId);
+            JBCallState stateEnum = toCallState(state);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onCallStateChanged:callId:state:code:)]) {
-                    [strongSelf.delegate onCallStateChanged:toNSString(accountId)
-                                                     callId:toNSString(callId)
-                                                      state:toCallState(state)
+                    [strongSelf.delegate onCallStateChanged:accountIdNS
+                                                     callId:callIdNS
+                                                      state:stateEnum
                                                        code:code];
                 }
             });
@@ -413,21 +559,25 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<CallSignal::IncomingCall>(
         [weakSelf](const std::string& accountId, const std::string& callId,
                    const std::string& peerId, const std::vector<std::map<std::string, std::string>>& mediaList) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *callIdNS = toNSString(callId);
+            NSString *peerIdNS = toNSString(peerId);
+            // Check if video is in media list
+            bool hasVideo = false;
+            for (const auto& media : mediaList) {
+                if (media.count("MEDIA_TYPE") && media.at("MEDIA_TYPE") == "MEDIA_TYPE_VIDEO") {
+                    hasVideo = true;
+                    break;
+                }
+            }
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onIncomingCall:callId:peerId:peerDisplayName:hasVideo:)]) {
-                    // Check if video is in media list
-                    bool hasVideo = false;
-                    for (const auto& media : mediaList) {
-                        if (media.count("MEDIA_TYPE") && media.at("MEDIA_TYPE") == "MEDIA_TYPE_VIDEO") {
-                            hasVideo = true;
-                            break;
-                        }
-                    }
-                    [strongSelf.delegate onIncomingCall:toNSString(accountId)
-                                                 callId:toNSString(callId)
-                                                 peerId:toNSString(peerId)
-                                        peerDisplayName:toNSString(peerId)
+                    [strongSelf.delegate onIncomingCall:accountIdNS
+                                                 callId:callIdNS
+                                                 peerId:peerIdNS
+                                        peerDisplayName:peerIdNS
                                                hasVideo:hasVideo];
                 }
             });
@@ -436,10 +586,12 @@ static JBCallState toCallState(const std::string& state) {
     // Audio muted
     handlers.insert(exportable_callback<CallSignal::AudioMuted>(
         [weakSelf](const std::string& callId, bool muted) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *callIdNS = toNSString(callId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onAudioMuted:muted:)]) {
-                    [strongSelf.delegate onAudioMuted:toNSString(callId) muted:muted];
+                    [strongSelf.delegate onAudioMuted:callIdNS muted:muted];
                 }
             });
         }));
@@ -447,10 +599,12 @@ static JBCallState toCallState(const std::string& state) {
     // Video muted
     handlers.insert(exportable_callback<CallSignal::VideoMuted>(
         [weakSelf](const std::string& callId, bool muted) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *callIdNS = toNSString(callId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onVideoMuted:muted:)]) {
-                    [strongSelf.delegate onVideoMuted:toNSString(callId) muted:muted];
+                    [strongSelf.delegate onVideoMuted:callIdNS muted:muted];
                 }
             });
         }));
@@ -459,12 +613,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<CallSignal::ConferenceCreated>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    const std::string& conferenceId) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSString *conferenceIdNS = toNSString(conferenceId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConferenceCreated:conversationId:conferenceId:)]) {
-                    [strongSelf.delegate onConferenceCreated:toNSString(accountId)
-                                              conversationId:toNSString(conversationId)
-                                                conferenceId:toNSString(conferenceId)];
+                    [strongSelf.delegate onConferenceCreated:accountIdNS
+                                              conversationId:conversationIdNS
+                                                conferenceId:conferenceIdNS];
                 }
             });
         }));
@@ -473,12 +631,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<CallSignal::ConferenceChanged>(
         [weakSelf](const std::string& accountId, const std::string& conferenceId,
                    const std::string& state) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conferenceIdNS = toNSString(conferenceId);
+            NSString *stateNS = toNSString(state);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConferenceChanged:conferenceId:state:)]) {
-                    [strongSelf.delegate onConferenceChanged:toNSString(accountId)
-                                                conferenceId:toNSString(conferenceId)
-                                                       state:toNSString(state)];
+                    [strongSelf.delegate onConferenceChanged:accountIdNS
+                                                conferenceId:conferenceIdNS
+                                                       state:stateNS];
                 }
             });
         }));
@@ -486,11 +648,14 @@ static JBCallState toCallState(const std::string& state) {
     // Conference removed
     handlers.insert(exportable_callback<CallSignal::ConferenceRemoved>(
         [weakSelf](const std::string& accountId, const std::string& conferenceId) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conferenceIdNS = toNSString(conferenceId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConferenceRemoved:conferenceId:)]) {
-                    [strongSelf.delegate onConferenceRemoved:toNSString(accountId)
-                                                conferenceId:toNSString(conferenceId)];
+                    [strongSelf.delegate onConferenceRemoved:accountIdNS
+                                                conferenceId:conferenceIdNS];
                 }
             });
         }));
@@ -499,15 +664,18 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<CallSignal::OnConferenceInfosUpdated>(
         [weakSelf](const std::string& conferenceId,
                    const std::vector<std::map<std::string, std::string>>& participantInfos) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *conferenceIdNS = toNSString(conferenceId);
+            NSMutableArray *infos = [NSMutableArray arrayWithCapacity:participantInfos.size()];
+            for (const auto& info : participantInfos) {
+                [infos addObject:toNSDictionary(info)];
+            }
+            NSArray *infosCopy = [infos copy];
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConferenceInfoUpdated:participantInfos:)]) {
-                    NSMutableArray *infos = [NSMutableArray arrayWithCapacity:participantInfos.size()];
-                    for (const auto& info : participantInfos) {
-                        [infos addObject:toNSDictionary(info)];
-                    }
-                    [strongSelf.delegate onConferenceInfoUpdated:toNSString(conferenceId)
-                                                participantInfos:[infos copy]];
+                    [strongSelf.delegate onConferenceInfoUpdated:conferenceIdNS
+                                                participantInfos:infosCopy];
                 }
             });
         }));
@@ -516,16 +684,20 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<CallSignal::MediaChangeRequested>(
         [weakSelf](const std::string& accountId, const std::string& callId,
                    const std::vector<std::map<std::string, std::string>>& mediaList) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *callIdNS = toNSString(callId);
+            NSMutableArray *list = [NSMutableArray arrayWithCapacity:mediaList.size()];
+            for (const auto& media : mediaList) {
+                [list addObject:toNSDictionary(media)];
+            }
+            NSArray *listCopy = [list copy];
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMediaChangeRequested:callId:mediaList:)]) {
-                    NSMutableArray *list = [NSMutableArray arrayWithCapacity:mediaList.size()];
-                    for (const auto& media : mediaList) {
-                        [list addObject:toNSDictionary(media)];
-                    }
-                    [strongSelf.delegate onMediaChangeRequested:toNSString(accountId)
-                                                         callId:toNSString(callId)
-                                                      mediaList:[list copy]];
+                    [strongSelf.delegate onMediaChangeRequested:accountIdNS
+                                                         callId:callIdNS
+                                                      mediaList:listCopy];
                 }
             });
         }));
@@ -537,11 +709,14 @@ static JBCallState toCallState(const std::string& state) {
     // Conversation ready
     handlers.insert(exportable_callback<ConversationSignal::ConversationReady>(
         [weakSelf](const std::string& accountId, const std::string& conversationId) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationReady:conversationId:)]) {
-                    [strongSelf.delegate onConversationReady:toNSString(accountId)
-                                              conversationId:toNSString(conversationId)];
+                    [strongSelf.delegate onConversationReady:accountIdNS
+                                              conversationId:conversationIdNS];
                 }
             });
         }));
@@ -549,11 +724,14 @@ static JBCallState toCallState(const std::string& state) {
     // Conversation removed
     handlers.insert(exportable_callback<ConversationSignal::ConversationRemoved>(
         [weakSelf](const std::string& accountId, const std::string& conversationId) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationRemoved:conversationId:)]) {
-                    [strongSelf.delegate onConversationRemoved:toNSString(accountId)
-                                                conversationId:toNSString(conversationId)];
+                    [strongSelf.delegate onConversationRemoved:accountIdNS
+                                                conversationId:conversationIdNS];
                 }
             });
         }));
@@ -562,12 +740,24 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::ConversationRequestReceived>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    std::map<std::string, std::string> metadata) {
+            FILE_LOG_I("JamiBridge-C++", @"ConversationRequestReceived CALLBACK: account=%s convId=%s metadataCount=%zu",
+                  accountId.c_str(), conversationId.c_str(), metadata.size());
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSDictionary *metadataNS = toNSDictionary(metadata);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
-                if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationRequestReceived:conversationId:metadata:)]) {
-                    [strongSelf.delegate onConversationRequestReceived:toNSString(accountId)
-                                                        conversationId:toNSString(conversationId)
-                                                              metadata:toNSDictionary(metadata)];
+                if (strongSelf) {
+                    FILE_LOG_I("JamiBridge-C++", @"ConversationRequestReceived dispatching: hasDelegate=%d", strongSelf.delegate != nil);
+                    if ([strongSelf.delegate respondsToSelector:@selector(onConversationRequestReceived:conversationId:metadata:)]) {
+                        [strongSelf.delegate onConversationRequestReceived:accountIdNS
+                                                            conversationId:conversationIdNS
+                                                                  metadata:metadataNS];
+                        FILE_LOG_I("JamiBridge-C++", @"ConversationRequestReceived forwarded to delegate");
+                    }
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"ConversationRequestReceived: strongSelf is nil!");
                 }
             });
         }));
@@ -576,12 +766,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::SwarmMessageReceived>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    const SwarmMessage& message) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            JBSwarmMessage *messageNS = toJBSwarmMessage(message);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMessageReceived:conversationId:message:)]) {
-                    [strongSelf.delegate onMessageReceived:toNSString(accountId)
-                                            conversationId:toNSString(conversationId)
-                                                   message:toJBSwarmMessage(message)];
+                    [strongSelf.delegate onMessageReceived:accountIdNS
+                                            conversationId:conversationIdNS
+                                                   message:messageNS];
                 }
             });
         }));
@@ -590,12 +784,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::SwarmMessageUpdated>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    const SwarmMessage& message) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            JBSwarmMessage *messageNS = toJBSwarmMessage(message);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMessageUpdated:conversationId:message:)]) {
-                    [strongSelf.delegate onMessageUpdated:toNSString(accountId)
-                                           conversationId:toNSString(conversationId)
-                                                  message:toJBSwarmMessage(message)];
+                    [strongSelf.delegate onMessageUpdated:accountIdNS
+                                           conversationId:conversationIdNS
+                                                  message:messageNS];
                 }
             });
         }));
@@ -604,17 +802,22 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::SwarmLoaded>(
         [weakSelf](uint32_t requestId, const std::string& accountId,
                    const std::string& conversationId, std::vector<SwarmMessage> messages) {
+            // Copy data before async dispatch to avoid use-after-free
+            // Note: messages is passed by value so it's already a copy, but we convert to NS types early
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSMutableArray *msgArray = [NSMutableArray arrayWithCapacity:messages.size()];
+            for (const auto& msg : messages) {
+                [msgArray addObject:toJBSwarmMessage(msg)];
+            }
+            NSArray *msgArrayCopy = [msgArray copy];
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMessagesLoaded:accountId:conversationId:messages:)]) {
-                    NSMutableArray *msgArray = [NSMutableArray arrayWithCapacity:messages.size()];
-                    for (const auto& msg : messages) {
-                        [msgArray addObject:toJBSwarmMessage(msg)];
-                    }
                     [strongSelf.delegate onMessagesLoaded:(int)requestId
-                                                accountId:toNSString(accountId)
-                                           conversationId:toNSString(conversationId)
-                                                 messages:[msgArray copy]];
+                                                accountId:accountIdNS
+                                           conversationId:conversationIdNS
+                                                 messages:msgArrayCopy];
                 }
             });
         }));
@@ -623,20 +826,24 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::ConversationMemberEvent>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    const std::string& memberUri, int event) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSString *memberUriNS = toNSString(memberUri);
+            JBMemberEventType eventType;
+            switch (event) {
+                case 0: eventType = JBMemberEventTypeJoin; break; // Add
+                case 1: eventType = JBMemberEventTypeJoin; break; // Joins
+                case 2: eventType = JBMemberEventTypeLeave; break; // Leave
+                case 3: eventType = JBMemberEventTypeBan; break; // Banned
+                default: eventType = JBMemberEventTypeJoin; break;
+            }
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationMemberEvent:conversationId:memberUri:event:)]) {
-                    JBMemberEventType eventType;
-                    switch (event) {
-                        case 0: eventType = JBMemberEventTypeJoin; break; // Add
-                        case 1: eventType = JBMemberEventTypeJoin; break; // Joins
-                        case 2: eventType = JBMemberEventTypeLeave; break; // Leave
-                        case 3: eventType = JBMemberEventTypeBan; break; // Banned
-                        default: eventType = JBMemberEventTypeJoin; break;
-                    }
-                    [strongSelf.delegate onConversationMemberEvent:toNSString(accountId)
-                                                    conversationId:toNSString(conversationId)
-                                                         memberUri:toNSString(memberUri)
+                    [strongSelf.delegate onConversationMemberEvent:accountIdNS
+                                                    conversationId:conversationIdNS
+                                                         memberUri:memberUriNS
                                                              event:eventType];
                 }
             });
@@ -646,12 +853,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::ConversationProfileUpdated>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    std::map<std::string, std::string> profile) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSDictionary *profileNS = toNSDictionary(profile);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationProfileUpdated:conversationId:profile:)]) {
-                    [strongSelf.delegate onConversationProfileUpdated:toNSString(accountId)
-                                                       conversationId:toNSString(conversationId)
-                                                              profile:toNSDictionary(profile)];
+                    [strongSelf.delegate onConversationProfileUpdated:accountIdNS
+                                                       conversationId:conversationIdNS
+                                                              profile:profileNS];
                 }
             });
         }));
@@ -660,13 +871,18 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::ReactionAdded>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    const std::string& messageId, std::map<std::string, std::string> reaction) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSString *messageIdNS = toNSString(messageId);
+            NSDictionary *reactionNS = toNSDictionary(reaction);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onReactionAdded:conversationId:messageId:reaction:)]) {
-                    [strongSelf.delegate onReactionAdded:toNSString(accountId)
-                                          conversationId:toNSString(conversationId)
-                                               messageId:toNSString(messageId)
-                                                reaction:toNSDictionary(reaction)];
+                    [strongSelf.delegate onReactionAdded:accountIdNS
+                                          conversationId:conversationIdNS
+                                               messageId:messageIdNS
+                                                reaction:reactionNS];
                 }
             });
         }));
@@ -675,13 +891,18 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<ConversationSignal::ReactionRemoved>(
         [weakSelf](const std::string& accountId, const std::string& conversationId,
                    const std::string& messageId, const std::string& reactionId) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *conversationIdNS = toNSString(conversationId);
+            NSString *messageIdNS = toNSString(messageId);
+            NSString *reactionIdNS = toNSString(reactionId);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onReactionRemoved:conversationId:messageId:reactionId:)]) {
-                    [strongSelf.delegate onReactionRemoved:toNSString(accountId)
-                                            conversationId:toNSString(conversationId)
-                                                 messageId:toNSString(messageId)
-                                                reactionId:toNSString(reactionId)];
+                    [strongSelf.delegate onReactionRemoved:accountIdNS
+                                            conversationId:conversationIdNS
+                                                 messageId:messageIdNS
+                                                reactionId:reactionIdNS];
                 }
             });
         }));
@@ -694,12 +915,16 @@ static JBCallState toCallState(const std::string& state) {
     handlers.insert(exportable_callback<PresenceSignal::NewBuddyNotification>(
         [weakSelf](const std::string& accountId, const std::string& buddyUri,
                    int status, const std::string& lineStatus) {
+            // Copy data before async dispatch to avoid use-after-free
+            NSString *accountIdNS = toNSString(accountId);
+            NSString *buddyUriNS = toNSString(buddyUri);
+            BOOL isOnline = (status != 0);
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onPresenceChanged:uri:isOnline:)]) {
-                    [strongSelf.delegate onPresenceChanged:toNSString(accountId)
-                                                       uri:toNSString(buddyUri)
-                                                  isOnline:(status != 0)];
+                    [strongSelf.delegate onPresenceChanged:accountIdNS
+                                                       uri:buddyUriNS
+                                                  isOnline:isOnline];
                 }
             });
         }));
@@ -733,7 +958,7 @@ static JBCallState toCallState(const std::string& state) {
         }));
 
     libjami::registerSignalHandlers(handlers);
-    NSLog(@"[JamiBridge] Signal handlers registered");
+    FILE_LOG_I("JamiBridge", @"Signal handlers registered successfully");
 }
 
 // =============================================================================
@@ -741,7 +966,7 @@ static JBCallState toCallState(const std::string& state) {
 // =============================================================================
 
 - (void)initDaemonWithDataPath:(NSString *)dataPath {
-    NSLog(@"[JamiBridge] initDaemon with path: %@", dataPath);
+    FILE_LOG_I("JamiBridge", @"initDaemon with path: %@", dataPath);
     self.dataPath = dataPath;
 
     // Create data directory if it doesn't exist
@@ -750,33 +975,36 @@ static JBCallState toCallState(const std::string& state) {
         NSError *error;
         [fm createDirectoryAtPath:dataPath withIntermediateDirectories:YES attributes:nil error:&error];
         if (error) {
-            NSLog(@"[JamiBridge] Failed to create data directory: %@", error);
+            FILE_LOG_E("JamiBridge", @"Failed to create data directory: %@", error);
         }
     }
 
     // Initialize with iOS flags
     int flags = LIBJAMI_FLAG_CONSOLE_LOG | LIBJAMI_FLAG_IOS_EXTENSION;
+    FILE_LOG_I("JamiBridge", @"Calling libjami::init with flags=%d", flags);
 
     if (!libjami::init(static_cast<InitFlag>(flags))) {
-        NSLog(@"[JamiBridge] Failed to initialize daemon");
+        FILE_LOG_E("JamiBridge", @"libjami::init() FAILED!");
         return;
     }
+    FILE_LOG_I("JamiBridge", @"libjami::init() succeeded");
 
     [self registerSignalHandlers];
-    NSLog(@"[JamiBridge] Daemon initialized");
+    FILE_LOG_I("JamiBridge", @"Daemon initialized successfully");
 }
 
 - (void)startDaemon {
-    NSLog(@"[JamiBridge] startDaemon");
+    FILE_LOG_I("JamiBridge", @"startDaemon called");
 
     std::filesystem::path configPath;  // Empty = use default
+    FILE_LOG_I("JamiBridge", @"Calling libjami::start()...");
     if (!libjami::start(configPath)) {
-        NSLog(@"[JamiBridge] Failed to start daemon");
+        FILE_LOG_E("JamiBridge", @"libjami::start() FAILED!");
         return;
     }
 
     self.daemonRunning = YES;
-    NSLog(@"[JamiBridge] Daemon started");
+    FILE_LOG_I("JamiBridge", @"Daemon started successfully, daemonRunning=YES");
 }
 
 - (void)stopDaemon {
@@ -795,7 +1023,7 @@ static JBCallState toCallState(const std::string& state) {
 // =============================================================================
 
 - (NSString *)createAccountWithDisplayName:(NSString *)displayName password:(NSString *)password {
-    NSLog(@"[JamiBridge] createAccount: %@", displayName);
+    FILE_LOG_I("JamiBridge", @"createAccount: displayName=%@", displayName);
 
     std::map<std::string, std::string> details;
     details[Account::ConfProperties::TYPE] = Account::ProtocolNames::RING;
@@ -807,8 +1035,14 @@ static JBCallState toCallState(const std::string& state) {
     details[Account::ConfProperties::TURN::ENABLED] = "true";
     details[Account::ConfProperties::TURN::SERVER] = "turn.jami.net";
 
+    FILE_LOG_I("JamiBridge", @"Calling libjami::addAccount()...");
     std::string accountId = libjami::addAccount(details);
-    NSLog(@"[JamiBridge] Account created: %s", accountId.c_str());
+    FILE_LOG_I("JamiBridge", @"Account created: accountId=%s", accountId.c_str());
+
+    // Log current account list
+    auto accounts = libjami::getAccountList();
+    FILE_LOG_I("JamiBridge", @"Current account count: %zu", accounts.size());
+
     return toNSString(accountId);
 }
 

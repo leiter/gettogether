@@ -30,8 +30,9 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
 
     /// Register this adapter with Kotlin's NativeBridgeProvider
     static func register() {
-        NSLog("[SwiftJamiBridgeAdapter] Registering with NativeBridgeProvider")
+        NSLog("[SwiftAdapter] Registering with NativeBridgeProvider")
         NativeBridgeProvider.shared.setOperations(ops: SwiftJamiBridgeAdapter.shared)
+        NSLog("[SwiftAdapter] Registration complete, delegate set on wrapper")
     }
 
     // MARK: - NativeBridgeOperations Protocol Implementation
@@ -320,10 +321,20 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
     // We forward them to the Kotlin callback.
 
     func onRegistrationStateChanged(_ accountId: String, state: JBRegistrationState, code: Int32, detail: String) {
+        let stateNames = ["UNREGISTERED", "TRYING", "REGISTERED", "ERROR_GENERIC", "ERROR_AUTH",
+                          "ERROR_NETWORK", "ERROR_HOST", "ERROR_SERVICE_UNAVAILABLE", "ERROR_NEED_MIGRATION", "INITIALIZING"]
+        let stateName = state.rawValue < stateNames.count ? stateNames[Int(state.rawValue)] : "UNKNOWN"
+        NSLog("[SwiftAdapter] onRegistrationStateChanged: account=\(accountId.prefix(8))... state=\(stateName)(\(state.rawValue)) code=\(code) detail=\(detail)")
+
+        if callback == nil {
+            NSLog("[SwiftAdapter] WARNING: callback is nil, cannot forward registration state!")
+        }
         callback?.onRegistrationStateChanged(accountId: accountId, state: Int32(state.rawValue), code: code, detail: detail)
+        NSLog("[SwiftAdapter] onRegistrationStateChanged forwarded to Kotlin")
     }
 
     func onAccountDetailsChanged(_ accountId: String, details: [String: String]) {
+        NSLog("[SwiftJamiBridgeAdapter] onAccountDetailsChanged: account=\(accountId.prefix(8))... detailsCount=\(details.count)")
         callback?.onAccountDetailsChanged(accountId: accountId, details: details)
     }
 
@@ -340,6 +351,7 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
     }
 
     func onContactAdded(_ accountId: String, uri: String, confirmed: Bool) {
+        NSLog("[SwiftJamiBridgeAdapter] onContactAdded: account=\(accountId.prefix(8))... uri=\(uri.prefix(8))... confirmed=\(confirmed)")
         callback?.onContactAdded(accountId: accountId, uri: uri, confirmed: confirmed)
     }
 
@@ -348,7 +360,13 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
     }
 
     func onIncomingTrustRequest(_ accountId: String, conversationId: String, from: String, payload: Data, received: Int64) {
+        NSLog("[SwiftAdapter] onIncomingTrustRequest: account=\(accountId.prefix(8))... convId=\(conversationId.prefix(8))... from=\(from.prefix(8))... payloadSize=\(payload.count) received=\(received)")
+
+        if callback == nil {
+            NSLog("[SwiftAdapter] WARNING: callback is nil, cannot forward trust request!")
+        }
         callback?.onIncomingTrustRequest(accountId: accountId, conversationId: conversationId, from: from, received: received)
+        NSLog("[SwiftAdapter] onIncomingTrustRequest forwarded to Kotlin")
     }
 
     func onPresenceChanged(_ accountId: String, uri: String, isOnline: Bool) {
@@ -356,6 +374,7 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
     }
 
     func onConversationReady(_ accountId: String, conversationId: String) {
+        NSLog("[SwiftJamiBridgeAdapter] onConversationReady: account=\(accountId.prefix(8))... convId=\(conversationId.prefix(8))...")
         callback?.onConversationReady(accountId: accountId, conversationId: conversationId)
     }
 
@@ -364,7 +383,13 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
     }
 
     func onConversationRequestReceived(_ accountId: String, conversationId: String, metadata: [String: String]) {
+        NSLog("[SwiftAdapter] onConversationRequestReceived: account=\(accountId.prefix(8))... convId=\(conversationId.prefix(8))... metadata=\(metadata)")
+
+        if callback == nil {
+            NSLog("[SwiftAdapter] WARNING: callback is nil, cannot forward conversation request!")
+        }
         callback?.onConversationRequestReceived(accountId: accountId, conversationId: conversationId, metadata: metadata)
+        NSLog("[SwiftAdapter] onConversationRequestReceived forwarded to Kotlin")
     }
 
     func onMessageReceived(_ accountId: String, conversationId: String, message: JBSwarmMessage) {
