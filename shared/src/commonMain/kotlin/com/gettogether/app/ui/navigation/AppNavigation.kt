@@ -314,15 +314,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
 
 // Extension function to extract arguments in a KMP-compatible way
 private fun androidx.navigation.NavBackStackEntry.extractArg(key: String): String {
-    // Access argument using SavedStateHandle-style access
-    return try {
-        @Suppress("UNCHECKED_CAST")
-        (this.arguments as? Map<String, Any?>)?.get(key)?.toString()
-            ?: this.savedStateHandle.get<String>(key)
-            ?: ""
-    } catch (e: Exception) {
-        ""
-    }
+    return this.savedStateHandle.get<String>(key) ?: ""
 }
 
 sealed class Screen(val route: String) {
