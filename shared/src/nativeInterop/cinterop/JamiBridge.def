@@ -1,2 +1,14 @@
 language = Objective-C
+package = com.gettogether.app.jami.cinterop
+
+# Headers to import
 headers = JamiBridgeWrapper.h
+
+# Header search paths - where to find the header
+headerFilter = JamiBridge*
+
+# Compiler options
+compilerOpts = -framework Foundation
+
+# Linker options
+linkerOpts = -framework Foundation

@@ -50,8 +50,9 @@
 		A0485A36C270C5FD2BD11968 /* libpjlib-util-aarch64-apple-darwin.a in Frameworks */ = {isa = PBXBuildFile; fileRef = E3F2617D98E04EDE5C71040B /* libpjlib-util-aarch64-apple-darwin.a */; };
 		A119660EEFADC03291F8E767 /* libjsoncpp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5D413D556A58280EA30064DD /* libjsoncpp.a */; };
 		A1B2C3D40001000000000001 /* CallKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000002 /* CallKitManager.swift */; };
-		A1B2C3D40001000000000003 /* JamiBridgeWrapper.m in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */; };
+		A1B2C3D40001000000000003 /* JamiBridgeWrapper.mm in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000004 /* JamiBridgeWrapper.mm */; };
 		A1B2C3D40001000000000030 /* PushKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000031 /* PushKitManager.swift */; };
+		A1B2C3D40001000000000041 /* SwiftJamiBridgeAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D40001000000000040 /* SwiftJamiBridgeAdapter.swift */; };
 		A75150195B2D0786806AD03D /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A044B178CABFFAE863F073B /* Metal.framework */; };
 		A7F8648DF5C6B7C6CE302905 /* CoreServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5F0C63D60ABF4ECCD05A89B /* CoreServices.framework */; };
 		A87BC12D4B119CF49791A3AC /* libavformat.a in Frameworks */ = {isa = PBXBuildFile; fileRef = B2EC5DA24882990C3760EF16 /* libavformat.a */; };
@@ -131,9 +132,10 @@
 		9B3D163F9BD9393792FD8C3F /* libarchive.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libarchive.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libarchive.a"; sourceTree = "<group>"; };
 		9D6B19CF8987924B45D2E778 /* libyaml-cpp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libyaml-cpp.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libyaml-cpp.a"; sourceTree = "<group>"; };
 		A1B2C3D40001000000000002 /* CallKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitManager.swift; sourceTree = "<group>"; };
-		A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = JamiBridgeWrapper.m; sourceTree = "<group>"; };
+		A1B2C3D40001000000000004 /* JamiBridgeWrapper.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = JamiBridgeWrapper.mm; sourceTree = "<group>"; };
 		A1B2C3D40001000000000005 /* JamiBridgeWrapper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = JamiBridgeWrapper.h; sourceTree = "<group>"; };
 		A1B2C3D40001000000000031 /* PushKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushKitManager.swift; sourceTree = "<group>"; };
+		A1B2C3D40001000000000040 /* SwiftJamiBridgeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftJamiBridgeAdapter.swift; sourceTree = "<group>"; };
 		A80EB68A67DC50D4639F4869 /* libpjmedia-videodev-aarch64-apple-darwin.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = "libpjmedia-videodev-aarch64-apple-darwin.a"; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libpjmedia-videodev-aarch64-apple-darwin.a"; sourceTree = "<group>"; };
 		AFECDFD0E36F134AB69C13E5 /* libtls.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libtls.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libtls.a"; sourceTree = "<group>"; };
 		B2EC5DA24882990C3760EF16 /* libavformat.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libavformat.a; path = "../jami-daemon/contrib/aarch64-apple-darwin/lib/libavformat.a"; sourceTree = "<group>"; };
@@ -347,7 +349,8 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D40001000000000005 /* JamiBridgeWrapper.h */,
-				A1B2C3D40001000000000004 /* JamiBridgeWrapper.m */,
+				A1B2C3D40001000000000004 /* JamiBridgeWrapper.mm */,
+				A1B2C3D40001000000000040 /* SwiftJamiBridgeAdapter.swift */,
 			);
 			path = JamiBridge;
 			sourceTree = "<group>";
@@ -453,8 +456,9 @@
 				2152FB042600AC8F00CF470E /* iOSApp.swift in Sources */,
 				7555FF83242A565900829871 /* ContentView.swift in Sources */,
 				A1B2C3D40001000000000001 /* CallKitManager.swift in Sources */,
-				A1B2C3D40001000000000003 /* JamiBridgeWrapper.m in Sources */,
+				A1B2C3D40001000000000003 /* JamiBridgeWrapper.mm in Sources */,
 				A1B2C3D40001000000000030 /* PushKitManager.swift in Sources */,
+				A1B2C3D40001000000000041 /* SwiftJamiBridgeAdapter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
