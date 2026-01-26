@@ -6,6 +6,7 @@ import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.ConversationRepositoryImpl
 import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.JamiBridge
+import com.gettogether.app.presentation.state.ActiveCallInfo
 import com.gettogether.app.presentation.state.ContactDetails
 import com.gettogether.app.presentation.state.ContactDetailsState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -91,6 +92,47 @@ class ContactDetailsViewModel(
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Check if there's an active call.
+     * Returns ActiveCallInfo with isWithCurrentContact = true if call is with this contact,
+     * or isWithCurrentContact = false if call is with a different contact.
+     */
+    suspend fun checkActiveCallWithContact(): ActiveCallInfo? {
+        val contact = _state.value.contact ?: return null
+        val accountId = accountRepository.currentAccountId.value ?: return null
+
+        return try {
+            val activeCalls = jamiBridge.getActiveCalls(accountId)
+
+            for (callId in activeCalls) {
+                val callDetails = jamiBridge.getCallDetails(accountId, callId)
+                val peerUri = callDetails["PEER_NUMBER"] ?: ""
+                val callState = callDetails["CALL_STATE"] ?: ""
+
+                // Check if this is an active call
+                if (callState in listOf("CURRENT", "RINGING", "CONNECTING", "INCOMING")) {
+                    val hasVideo = callDetails["VIDEO_SOURCE"]?.isNotEmpty() == true ||
+                            callDetails["MEDIA_TYPE"]?.contains("VIDEO") == true
+
+                    val isWithCurrentContact = peerUri.contains(contact.jamiId)
+                    val callInfo = ActiveCallInfo(
+                        callId = callId,
+                        isVideo = hasVideo,
+                        isWithCurrentContact = isWithCurrentContact
+                    )
+                    _state.update { it.copy(activeCallInfo = callInfo) }
+                    return callInfo
+                }
+            }
+
+            _state.update { it.copy(activeCallInfo = null) }
+            null
+        } catch (e: Exception) {
+            println("ContactDetailsViewModel: Error checking active calls: ${e.message}")
+            null
         }
     }
 

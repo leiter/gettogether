@@ -10,7 +10,17 @@ data class ContactDetailsState(
     val isRemoving: Boolean = false,
     val isBlocking: Boolean = false,
     val contactRemoved: Boolean = false,
-    val conversationStarted: String? = null
+    val conversationStarted: String? = null,
+    val activeCallInfo: ActiveCallInfo? = null  // Info about active call with this contact
+)
+
+/**
+ * Information about an active call with a contact
+ */
+data class ActiveCallInfo(
+    val callId: String,
+    val isVideo: Boolean,
+    val isWithCurrentContact: Boolean = true  // false if call is with a different contact
 )
 
 data class ContactDetails(

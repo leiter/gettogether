@@ -30,7 +30,8 @@ expect class NotificationHelper {
         callId: String,
         contactId: String,
         contactName: String,
-        isVideo: Boolean
+        isVideo: Boolean,
+        avatarPath: String? = null
     )
 
     /**

@@ -208,6 +208,11 @@ class ContactRepositoryImpl(
         }
     }
 
+    override fun getContactFromCache(accountId: String, contactId: String): Contact? {
+        val contacts = internalContactsCache.value[accountId] ?: return null
+        return contacts.find { it.id == contactId || it.uri == contactId }
+    }
+
     override suspend fun addContact(accountId: String, uri: String): Result<Contact> {
         println("ContactRepository: addContact() called")
         println("  AccountId: $accountId")

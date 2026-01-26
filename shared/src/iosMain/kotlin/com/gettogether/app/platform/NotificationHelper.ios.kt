@@ -186,10 +186,12 @@ actual class NotificationHelper {
         callId: String,
         contactId: String,
         contactName: String,
-        isVideo: Boolean
+        isVideo: Boolean,
+        avatarPath: String?
     ) {
         // Note: On iOS, incoming calls should primarily use CallKit
         // This is a fallback notification for VoIP pushes or when CallKit is unavailable
+        // Note: avatarPath is not used on iOS - avatar support requires different approach via Contacts framework
 
         val content = UNMutableNotificationContent()
         val callType = if (isVideo) "Video Call" else "Voice Call"

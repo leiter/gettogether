@@ -227,13 +227,34 @@ actual class NotificationHelper(
         callId: String,
         contactId: String,
         contactName: String,
-        isVideo: Boolean
+        isVideo: Boolean,
+        avatarPath: String?
     ) {
-        android.util.Log.i("NotificationHelper", "[CALL-NOTIF] showIncomingCallNotification: callId=$callId, contact=$contactName")
+        android.util.Log.i("NotificationHelper", "[CALL-NOTIF] showIncomingCallNotification: callId=$callId, contact=$contactName, avatar=$avatarPath")
 
         if (!hasNotificationPermission()) {
             android.util.Log.w("NotificationHelper", "[CALL-NOTIF] No notification permission!")
             return
+        }
+
+        // Load avatar bitmap if available
+        val avatarBitmap: Bitmap? = avatarPath?.let { path ->
+            try {
+                val file = File(path)
+                if (file.exists()) {
+                    val bitmap = if (path.endsWith(".vcf", ignoreCase = true)) {
+                        extractAvatarFromVCard(file)
+                    } else {
+                        BitmapFactory.decodeFile(path)
+                    }
+                    if (bitmap != null) {
+                        createCircularBitmap(bitmap)
+                    } else null
+                } else null
+            } catch (e: Exception) {
+                android.util.Log.e("NotificationHelper", "[CALL-NOTIF] Error loading avatar: ${e.message}")
+                null
+            }
         }
 
         // Full-screen intent for incoming call
@@ -280,7 +301,7 @@ actual class NotificationHelper(
 
         val callType = if (isVideo) "Video call" else "Voice call"
 
-        val notification = NotificationCompat.Builder(context, NotificationConstants.CHANNEL_INCOMING_CALLS)
+        val notificationBuilder = NotificationCompat.Builder(context, NotificationConstants.CHANNEL_INCOMING_CALLS)
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setContentTitle("Incoming $callType")
             .setContentText(contactName)
@@ -293,9 +314,13 @@ actual class NotificationHelper(
             .setOngoing(true)
             .setAutoCancel(false)
             .setTimeoutAfter(60000) // Auto-dismiss after 60 seconds
-            .build()
 
-        notificationManager.notify(NotificationConstants.INCOMING_CALL_NOTIFICATION_ID, notification)
+        // Add large icon (avatar) if available
+        if (avatarBitmap != null) {
+            notificationBuilder.setLargeIcon(avatarBitmap)
+        }
+
+        notificationManager.notify(NotificationConstants.INCOMING_CALL_NOTIFICATION_ID, notificationBuilder.build())
         android.util.Log.i("NotificationHelper", "[CALL-NOTIF] Incoming call notification posted successfully")
     }
 

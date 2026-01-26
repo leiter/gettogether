@@ -47,7 +47,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -64,11 +66,13 @@ fun ContactDetailsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToChat: (String) -> Unit,
     onNavigateToCall: (contactId: String, isVideo: Boolean) -> Unit,
+    onNavigateToActiveCall: ((contactId: String, callId: String, isVideo: Boolean) -> Unit)? = null,
     onContactRemoved: () -> Unit,
     viewModel: ContactDetailsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val snackBarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(contactId) {
         viewModel.loadContact(contactId)
@@ -89,7 +93,7 @@ fun ContactDetailsScreen(
 
     LaunchedEffect(state.error) {
         state.error?.let { error ->
-            snackbarHostState.showSnackbar(error)
+            snackBarHostState.showSnackbar(error)
             viewModel.clearError()
         }
     }
@@ -203,7 +207,7 @@ fun ContactDetailsScreen(
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackBarHostState) }
     ) { paddingValues ->
         Surface(
             modifier = Modifier
@@ -236,8 +240,52 @@ fun ContactDetailsScreen(
                     ContactDetailsContent(
                         contact = state.contact!!,
                         onMessageClick = { viewModel.startConversation() },
-                        onCallClick = { onNavigateToCall(contactId, false) },
-                        onVideoCallClick = { onNavigateToCall(contactId, true) },
+                        onCallClick = {
+                            scope.launch {
+                                val activeCall = viewModel.checkActiveCallWithContact()
+                                when {
+                                    activeCall == null -> {
+                                        // No active call, start new call
+                                        onNavigateToCall(contactId, false)
+                                    }
+                                    activeCall.isWithCurrentContact && onNavigateToActiveCall != null -> {
+                                        // Active call with this contact, navigate to it
+                                        onNavigateToActiveCall(contactId, activeCall.callId, activeCall.isVideo)
+                                    }
+                                    !activeCall.isWithCurrentContact -> {
+                                        // Active call with different contact, show error
+                                        snackBarHostState.showSnackbar("Already in a call. End it first to start a new call.")
+                                    }
+                                    else -> {
+                                        // Fallback: start new call
+                                        onNavigateToCall(contactId, false)
+                                    }
+                                }
+                            }
+                        },
+                        onVideoCallClick = {
+                            scope.launch {
+                                val activeCall = viewModel.checkActiveCallWithContact()
+                                when {
+                                    activeCall == null -> {
+                                        // No active call, start new video call
+                                        onNavigateToCall(contactId, true)
+                                    }
+                                    activeCall.isWithCurrentContact && onNavigateToActiveCall != null -> {
+                                        // Active call with this contact, navigate to it
+                                        onNavigateToActiveCall(contactId, activeCall.callId, activeCall.isVideo)
+                                    }
+                                    !activeCall.isWithCurrentContact -> {
+                                        // Active call with different contact, show error
+                                        snackBarHostState.showSnackbar("Already in a call. End it first to start a new call.")
+                                    }
+                                    else -> {
+                                        // Fallback: start new video call
+                                        onNavigateToCall(contactId, true)
+                                    }
+                                }
+                            }
+                        },
                         onBlockClick = { viewModel.showBlockDialog() },
                         onRemoveClick = { viewModel.showRemoveDialog() },
                         onEditNameClick = { viewModel.showEditNameDialog() }

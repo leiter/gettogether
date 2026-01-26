@@ -5,10 +5,12 @@ import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import com.gettogether.app.coil.VCardFetcher
 import com.gettogether.app.coil.VCardMapper
+import com.gettogether.app.data.repository.AccountRepository
 import com.gettogether.app.data.repository.ContactRepositoryImpl
 import com.gettogether.app.di.jamiBridgeModule
 import com.gettogether.app.di.platformModule
 import com.gettogether.app.di.sharedModule
+import com.gettogether.app.domain.repository.ContactRepository
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiCallEvent
@@ -97,14 +99,51 @@ class GetTogetherApplication : Application() {
     private fun setupIncomingCallListener() {
         scope.launch {
             val jamiBridge: JamiBridge by inject()
+            val accountRepository: AccountRepository by inject()
+            val contactRepository: ContactRepository by inject()
+
             jamiBridge.callEvents.collect { event ->
                 when (event) {
                     is JamiCallEvent.IncomingCall -> {
+                        // Look up contact info for display name and avatar
+                        // Use same pattern as message notifications - access cache directly
+                        val accountId = accountRepository.currentAccountId.value
+
+                        // First try to get contact from repository cache (has better data: custom name, display name, avatar)
+                        val contact = if (accountId != null) {
+                            contactRepository.getContactFromCache(accountId, event.peerId)
+                        } else null
+
+                        // Get contact name - prefer custom name, then display name, then fallback
+                        val contactName = contact?.customName?.takeIf { it.isNotBlank() }
+                            ?: contact?.displayName?.takeIf { it.isNotBlank() && it != event.peerId.take(8) }
+                            ?: run {
+                                // Fallback to daemon contact details
+                                if (accountId != null) {
+                                    try {
+                                        val contactDetails = jamiBridge.getContactDetails(accountId, event.peerId)
+                                        contactDetails["displayName"]
+                                            ?: contactDetails["username"]
+                                            ?: event.peerId.take(8)
+                                    } catch (e: Exception) {
+                                        event.peerId.take(8)
+                                    }
+                                } else {
+                                    event.peerId.take(8)
+                                }
+                            }
+
+                        // Get avatar path from contact
+                        val avatarPath = contact?.avatarUri
+
+                        android.util.Log.i("GetTogetherApp", "Incoming call contact lookup: name=$contactName, avatar=$avatarPath, fromCache=${contact != null}")
+
                         handleIncomingCall(
                             callId = event.callId,
                             contactId = event.peerId,
-                            contactName = event.peerDisplayName.ifEmpty { event.peerId.take(8) },
-                            isVideo = event.hasVideo
+                            contactName = contactName,
+                            isVideo = event.hasVideo,
+                            avatarPath = avatarPath
                         )
                     }
                     else -> { /* Ignore other call events */ }
@@ -120,11 +159,12 @@ class GetTogetherApplication : Application() {
         callId: String,
         contactId: String,
         contactName: String,
-        isVideo: Boolean
+        isVideo: Boolean,
+        avatarPath: String?
     ) {
         android.util.Log.i(
             "GetTogetherApp",
-            "Incoming call from $contactName (callId: $callId, isVideo: $isVideo)"
+            "Incoming call from $contactName (callId: $callId, isVideo: $isVideo, avatar: $avatarPath)"
         )
 
         val notificationHelper: NotificationHelper by inject()
@@ -132,7 +172,8 @@ class GetTogetherApplication : Application() {
             callId = callId,
             contactId = contactId,
             contactName = contactName,
-            isVideo = isVideo
+            isVideo = isVideo,
+            avatarPath = avatarPath
         )
     }
 

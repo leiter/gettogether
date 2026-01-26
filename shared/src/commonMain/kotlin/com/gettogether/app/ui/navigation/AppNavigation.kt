@@ -35,6 +35,7 @@ import com.gettogether.app.ui.screens.contacts.BlockedContactsScreen
 import com.gettogether.app.ui.screens.contacts.ContactDetailsScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
+import kotlin.time.Clock
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -43,16 +44,16 @@ import org.koin.compose.viewmodel.koinViewModel
  * Each instance includes a unique timestamp to ensure repeated navigation requests
  * to the same destination are recognized as new requests.
  */
-sealed class InitialNavigation(val timestamp: Long = System.currentTimeMillis()) {
-    data class Chat(val conversationId: String, private val ts: Long = System.currentTimeMillis()) : InitialNavigation(ts)
+sealed class InitialNavigation(val timestamp: Long = Clock.System.now().toEpochMilliseconds()) {
+    data class Chat(val conversationId: String, private val ts: Long = Clock.System.now().toEpochMilliseconds()) : InitialNavigation(ts)
     data class Call(
         val contactId: String,
         val isVideo: Boolean,
         val callId: String? = null,
         val isAlreadyAccepted: Boolean = false,
-        private val ts: Long = System.currentTimeMillis()
+        private val ts: Long = Clock.System.now().toEpochMilliseconds()
     ) : InitialNavigation(ts)
-    data class ContactDetails(val contactId: String, private val ts: Long = System.currentTimeMillis()) : InitialNavigation(ts)
+    data class ContactDetails(val contactId: String, private val ts: Long = Clock.System.now().toEpochMilliseconds()) : InitialNavigation(ts)
 }
 
 @Composable
@@ -266,6 +267,10 @@ fun AppNavigation(
                 onNavigateToCall = { callContactId, isVideo ->
                     navController.navigate(Screen.Call.createRoute(callContactId, isVideo))
                 },
+                onNavigateToActiveCall = { callContactId, callId, isVideo ->
+                    // Navigate to existing active call
+                    navController.navigate(Screen.Call.createRoute(callContactId, isVideo, callId, isAlreadyAccepted = true))
+                },
                 onContactRemoved = {
                     navController.popBackStack()
                 }
@@ -321,7 +326,7 @@ fun AppNavigation(
         ) { backStackEntry ->
             val contactId = backStackEntry.extractArg("contactId")
             val isVideo = backStackEntry.extractArg("isVideo").toBoolean()
-            val callId = backStackEntry.arguments?.getString("callId")
+            val callId = backStackEntry.extractArgOrNull("callId")
             val isAlreadyAccepted = backStackEntry.extractArg("accepted").toBoolean()
             CallScreen(
                 contactId = contactId,
@@ -372,6 +377,18 @@ private fun androidx.navigation.NavBackStackEntry.extractArg(key: String): Strin
             ?: ""
     } catch (e: Exception) {
         ""
+    }
+}
+
+// Nullable version for optional arguments
+private fun androidx.navigation.NavBackStackEntry.extractArgOrNull(key: String): String? {
+    return try {
+        @Suppress("UNCHECKED_CAST")
+        val value = (this.arguments as? Map<String, Any?>)?.get(key)?.toString()
+            ?: this.savedStateHandle.get<String>(key)
+        value?.takeIf { it.isNotEmpty() && it != "null" }
+    } catch (e: Exception) {
+        null
     }
 }
 
