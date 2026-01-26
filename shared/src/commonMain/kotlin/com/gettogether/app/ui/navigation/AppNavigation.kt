@@ -19,7 +19,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.gettogether.app.data.repository.AccountRepository
+import com.gettogether.app.presentation.viewmodel.AddContactViewModel
+import com.gettogether.app.presentation.viewmodel.BlockedContactsViewModel
+import com.gettogether.app.presentation.viewmodel.CallViewModel
+import com.gettogether.app.presentation.viewmodel.ChatViewModel
+import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
+import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
+import com.gettogether.app.presentation.viewmodel.ContactsViewModel
+import com.gettogether.app.presentation.viewmodel.ConversationRequestsViewModel
+import com.gettogether.app.presentation.viewmodel.ConversationsViewModel
 import com.gettogether.app.presentation.viewmodel.CreateAccountViewModel
+import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
+import com.gettogether.app.presentation.viewmodel.NewConversationViewModel
+import com.gettogether.app.presentation.viewmodel.SettingsViewModel
+import com.gettogether.app.presentation.viewmodel.TrustRequestsViewModel
 import com.gettogether.app.ui.screens.auth.CreateAccountScreen
 import com.gettogether.app.ui.screens.auth.ImportAccountScreen
 import com.gettogether.app.ui.screens.auth.WelcomeScreen
@@ -31,8 +44,8 @@ import com.gettogether.app.ui.screens.contacts.BlockedContactsScreen
 import com.gettogether.app.ui.screens.contacts.ContactDetailsScreen
 import com.gettogether.app.ui.screens.home.HomeScreen
 import com.gettogether.app.ui.screens.newconversation.NewConversationScreen
+import com.gettogether.app.di.getViewModel
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun AppNavigation(modifier: Modifier = Modifier) {
@@ -103,6 +116,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         }
 
         composable(Screen.ImportAccount.route) {
+            val importAccountViewModel: ImportAccountViewModel = getViewModel()
             ImportAccountScreen(
                 onNavigateBack = {
                     navController.popBackStack()
@@ -111,12 +125,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Welcome.route) { inclusive = true }
                     }
-                }
+                },
+                viewModel = importAccountViewModel
             )
         }
 
         composable(Screen.CreateAccount.route) {
-            val createAccountViewModel: CreateAccountViewModel = koinViewModel()
+            val createAccountViewModel: CreateAccountViewModel = getViewModel()
             CreateAccountScreen(
                 viewModel = createAccountViewModel,
                 onNavigateBack = {
@@ -131,6 +146,11 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         }
 
         composable(Screen.Home.route) {
+            val conversationsViewModel: ConversationsViewModel = getViewModel()
+            val conversationRequestsViewModel: ConversationRequestsViewModel = getViewModel()
+            val contactsViewModel: ContactsViewModel = getViewModel()
+            val trustRequestsViewModel: TrustRequestsViewModel = getViewModel()
+            val settingsViewModel: SettingsViewModel = getViewModel()
             HomeScreen(
                 onNavigateToChat = { conversationId ->
                     navController.navigate(Screen.Chat.createRoute(conversationId))
@@ -151,26 +171,35 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     navController.navigate(Screen.Welcome.route) {
                         popUpTo(Screen.Home.route) { inclusive = true }
                     }
-                }
+                },
+                conversationsViewModel = conversationsViewModel,
+                conversationRequestsViewModel = conversationRequestsViewModel,
+                contactsViewModel = contactsViewModel,
+                trustRequestsViewModel = trustRequestsViewModel,
+                settingsViewModel = settingsViewModel
             )
         }
 
         composable(Screen.BlockedContacts.route) {
+            val blockedContactsViewModel: BlockedContactsViewModel = getViewModel()
             BlockedContactsScreen(
                 onNavigateBack = {
                     navController.popBackStack()
-                }
+                },
+                viewModel = blockedContactsViewModel
             )
         }
 
         composable(Screen.AddContact.route) {
+            val addContactViewModel: AddContactViewModel = getViewModel()
             AddContactScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 },
                 onContactAdded = {
                     navController.popBackStack()
-                }
+                },
+                viewModel = addContactViewModel
             )
         }
 
@@ -179,6 +208,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             arguments = listOf(navArgument("contactId") { type = NavType.StringType })
         ) { backStackEntry ->
             val contactId = backStackEntry.extractArg("contactId")
+            val contactDetailsViewModel: ContactDetailsViewModel = getViewModel()
             ContactDetailsScreen(
                 contactId = contactId,
                 onNavigateBack = {
@@ -192,11 +222,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 },
                 onContactRemoved = {
                     navController.popBackStack()
-                }
+                },
+                viewModel = contactDetailsViewModel
             )
         }
 
         composable(Screen.NewConversation.route) {
+            val newConversationViewModel: NewConversationViewModel = getViewModel()
             NewConversationScreen(
                 onNavigateBack = {
                     navController.popBackStack()
@@ -210,7 +242,8 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     navController.navigate(Screen.Conference.createRoute(participantIds, withVideo)) {
                         popUpTo(Screen.Home.route)
                     }
-                }
+                },
+                viewModel = newConversationViewModel
             )
         }
 
@@ -219,11 +252,13 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             arguments = listOf(navArgument("conversationId") { type = NavType.StringType })
         ) { backStackEntry ->
             val conversationId = backStackEntry.extractArg("conversationId")
+            val chatViewModel: ChatViewModel = getViewModel()
             ChatScreen(
                 conversationId = conversationId,
                 onNavigateBack = {
                     navController.popBackStack()
-                }
+                },
+                viewModel = chatViewModel
             )
         }
 
@@ -236,12 +271,14 @@ fun AppNavigation(modifier: Modifier = Modifier) {
         ) { backStackEntry ->
             val contactId = backStackEntry.extractArg("contactId")
             val isVideo = backStackEntry.extractArg("isVideo").toBoolean()
+            val callViewModel: CallViewModel = getViewModel()
             CallScreen(
                 contactId = contactId,
                 isVideo = isVideo,
                 onCallEnded = {
                     navController.popBackStack()
-                }
+                },
+                viewModel = callViewModel
             )
         }
 
@@ -261,13 +298,15 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             }
             val withVideo = backStackEntry.extractArg("withVideo").toBoolean()
             val conferenceId = backStackEntry.extractArg("conferenceId").takeIf { it != "null" }
+            val conferenceViewModel: ConferenceViewModel = getViewModel()
             ConferenceScreen(
                 participantIds = participantIds,
                 withVideo = withVideo,
                 conferenceId = conferenceId,
                 onConferenceEnded = {
                     navController.popBackStack()
-                }
+                },
+                viewModel = conferenceViewModel
             )
         }
     }

@@ -48,14 +48,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.ContactSearchResult
 import com.gettogether.app.presentation.viewmodel.AddContactViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddContactScreen(
     onNavigateBack: () -> Unit,
     onContactAdded: () -> Unit,
-    viewModel: AddContactViewModel = koinViewModel()
+    viewModel: AddContactViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

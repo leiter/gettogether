@@ -9,6 +9,7 @@ import com.gettogether.app.data.repository.SettingsRepository
 import com.gettogether.app.data.repository.createSettingsRepository
 import com.gettogether.app.jami.DaemonManager
 import com.gettogether.app.jami.DataPathProvider
+import com.gettogether.app.platform.AppLifecycleManager
 import com.gettogether.app.platform.CallServiceBridge
 import com.gettogether.app.platform.ExportPathProvider
 import com.gettogether.app.platform.FileHelper
@@ -18,6 +19,9 @@ import org.koin.core.module.Module
 import org.koin.dsl.module
 
 actual val platformModule: Module = module {
+    // App lifecycle manager (must be created early)
+    single { AppLifecycleManager() }
+
     // iOS-specific dependencies
     single { CallServiceBridge() }
     single { NotificationHelper() }

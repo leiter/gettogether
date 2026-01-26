@@ -51,7 +51,6 @@ import com.gettogether.app.presentation.viewmodel.ContactUiItem
 import com.gettogether.app.presentation.viewmodel.ContactsViewModel
 import com.gettogether.app.presentation.viewmodel.TrustRequestUiItem
 import com.gettogether.app.presentation.viewmodel.TrustRequestsViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,8 +58,8 @@ fun ContactsTab(
     onContactClick: (String) -> Unit,
     onAddContact: () -> Unit,
     onNavigateToBlockedContacts: () -> Unit,
-    viewModel: ContactsViewModel = koinViewModel(),
-    trustRequestsViewModel: TrustRequestsViewModel = koinViewModel()
+    viewModel: ContactsViewModel,
+    trustRequestsViewModel: TrustRequestsViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val trustRequestsState by trustRequestsViewModel.state.collectAsState()

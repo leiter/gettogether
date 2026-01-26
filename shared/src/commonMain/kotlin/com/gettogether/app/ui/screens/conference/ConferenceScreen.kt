@@ -79,7 +79,6 @@ import com.gettogether.app.presentation.state.ConferenceState
 import com.gettogether.app.presentation.state.ConferenceStatus
 import com.gettogether.app.presentation.state.ParticipantConnectionState
 import com.gettogether.app.presentation.viewmodel.ConferenceViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun ConferenceScreen(
@@ -87,7 +86,7 @@ fun ConferenceScreen(
     withVideo: Boolean,
     conferenceId: String? = null,
     onConferenceEnded: () -> Unit,
-    viewModel: ConferenceViewModel = koinViewModel()
+    viewModel: ConferenceViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

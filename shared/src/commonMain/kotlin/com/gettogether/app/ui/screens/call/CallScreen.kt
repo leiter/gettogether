@@ -60,7 +60,6 @@ import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.CallState
 import com.gettogether.app.presentation.state.CallStatus
 import com.gettogether.app.presentation.viewmodel.CallViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun CallScreen(
@@ -69,7 +68,7 @@ fun CallScreen(
     isIncoming: Boolean = false,
     callId: String? = null,
     onCallEnded: () -> Unit,
-    viewModel: CallViewModel = koinViewModel()
+    viewModel: CallViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

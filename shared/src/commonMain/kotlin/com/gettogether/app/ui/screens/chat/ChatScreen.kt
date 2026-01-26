@@ -84,14 +84,13 @@ import com.gettogether.app.presentation.state.SaveResult
 import com.gettogether.app.presentation.viewmodel.ChatViewModel
 import com.gettogether.app.ui.components.ContactAvatarImage
 import org.koin.compose.koinInject
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
     conversationId: String,
     onNavigateBack: () -> Unit,
-    viewModel: ChatViewModel = koinViewModel(),
+    viewModel: ChatViewModel,
     permissionManager: PermissionManager = koinInject()
 ) {
     val state by viewModel.state.collectAsState()

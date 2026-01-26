@@ -55,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import com.gettogether.app.presentation.state.ContactDetails
 import com.gettogether.app.presentation.viewmodel.ContactDetailsViewModel
 import com.gettogether.app.ui.components.ContactAvatarImage
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +64,7 @@ fun ContactDetailsScreen(
     onNavigateToChat: (String) -> Unit,
     onNavigateToCall: (contactId: String, isVideo: Boolean) -> Unit,
     onContactRemoved: () -> Unit,
-    viewModel: ContactDetailsViewModel = koinViewModel()
+    viewModel: ContactDetailsViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

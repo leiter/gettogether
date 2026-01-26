@@ -61,14 +61,13 @@ import com.gettogether.app.platform.FilePickerResult
 import com.gettogether.app.platform.provideFilePicker
 import com.gettogether.app.presentation.state.ImportMethod
 import com.gettogether.app.presentation.viewmodel.ImportAccountViewModel
-import org.koin.compose.viewmodel.koinViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImportAccountScreen(
     onNavigateBack: () -> Unit,
     onAccountImported: () -> Unit,
-    viewModel: ImportAccountViewModel = koinViewModel()
+    viewModel: ImportAccountViewModel
 ) {
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }

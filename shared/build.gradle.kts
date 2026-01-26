@@ -137,3 +137,25 @@ dependencies {
     add("kspIosArm64", libs.room.compiler)
     add("kspIosSimulatorArm64", libs.room.compiler)
 }
+
+// Auto-copy Release framework to Xcode location after successful build
+tasks.register<Copy>("copyReleaseFrameworkToXcode") {
+    description = "Copies the Release iOS framework to the Xcode frameworks directory"
+    group = "build"
+
+    val sourceDir = layout.buildDirectory.dir("bin/iosArm64/releaseFramework/Shared.framework")
+    val targetDir = layout.buildDirectory.dir("xcode-frameworks/Release/iphoneos26.2")
+
+    from(sourceDir)
+    into(targetDir.map { it.dir("Shared.framework") })
+
+    doFirst {
+        // Delete existing framework before copying
+        targetDir.get().asFile.resolve("Shared.framework").deleteRecursively()
+    }
+}
+
+// Make the copy task run after linkReleaseFrameworkIosArm64
+tasks.named("linkReleaseFrameworkIosArm64") {
+    finalizedBy("copyReleaseFrameworkToXcode")
+}
