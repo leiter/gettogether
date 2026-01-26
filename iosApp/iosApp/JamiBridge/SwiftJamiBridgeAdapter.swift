@@ -158,6 +158,10 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
         }
     }
 
+    func subscribeBuddy(accountId: String, uri: String, flag: Bool) {
+        wrapper.subscribeBuddy(accountId, uri: uri, flag: flag)
+    }
+
     // MARK: Conversation Management
 
     func getConversations(accountId: String) -> [String] {

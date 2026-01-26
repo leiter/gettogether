@@ -15,6 +15,7 @@ import com.gettogether.app.platform.ExportPathProvider
 import com.gettogether.app.platform.FileHelper
 import com.gettogether.app.platform.ImageProcessor
 import com.gettogether.app.platform.NotificationHelper
+import com.gettogether.app.platform.PermissionManager
 import org.koin.core.module.Module
 import org.koin.dsl.module
 
@@ -27,6 +28,7 @@ actual val platformModule: Module = module {
     single { NotificationHelper() }
     single { ImageProcessor() }
     single { FileHelper() }
+    single { PermissionManager() }
     single { ExportPathProvider() }
     single<SettingsRepository> { createSettingsRepository() }
 

@@ -41,6 +41,7 @@ interface NativeBridgeOperations {
     fun acceptTrustRequest(accountId: String, uri: String)
     fun discardTrustRequest(accountId: String, uri: String)
     fun getTrustRequests(accountId: String): List<Map<String, Any?>>
+    fun subscribeBuddy(accountId: String, uri: String, flag: Boolean)
 
     // Conversation management
     fun getConversations(accountId: String): List<String>

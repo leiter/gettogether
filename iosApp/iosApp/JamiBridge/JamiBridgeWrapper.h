@@ -343,6 +343,8 @@ typedef NS_ENUM(NSInteger, JBMemberEventType) {
 
 - (NSArray<JBTrustRequest *> *)getTrustRequests:(NSString *)accountId;
 
+- (void)subscribeBuddy:(NSString *)accountId uri:(NSString *)uri flag:(BOOL)flag;
+
 // =========================================================================
 // Conversation Management (11 methods)
 // =========================================================================

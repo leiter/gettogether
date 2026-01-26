@@ -5,10 +5,12 @@ package com.gettogether.app.jami
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
+import com.gettogether.app.data.util.VCardParser
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryOptionAllowBluetooth
 import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
@@ -33,12 +35,35 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    // Event flows
-    private val _events = MutableSharedFlow<JamiEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _accountEvents = MutableSharedFlow<JamiAccountEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _callEvents = MutableSharedFlow<JamiCallEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _conversationEvents = MutableSharedFlow<JamiConversationEvent>(replay = 0, extraBufferCapacity = 64)
-    private val _contactEvents = MutableSharedFlow<JamiContactEvent>(replay = 0, extraBufferCapacity = 64)
+    // Event buffer size - match Android for consistency
+    private val EVENT_BUFFER_SIZE = 512
+
+    // Event flows with larger buffers and DROP_OLDEST overflow strategy
+    private val _events = MutableSharedFlow<JamiEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _accountEvents = MutableSharedFlow<JamiAccountEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _callEvents = MutableSharedFlow<JamiCallEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _conversationEvents = MutableSharedFlow<JamiConversationEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    private val _contactEvents = MutableSharedFlow<JamiContactEvent>(
+        replay = 0,
+        extraBufferCapacity = EVENT_BUFFER_SIZE,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
 
     override val events: SharedFlow<JamiEvent> = _events.asSharedFlow()
     override val accountEvents: SharedFlow<JamiAccountEvent> = _accountEvents.asSharedFlow()
@@ -88,15 +113,21 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
             9 -> RegistrationState.INITIALIZING
             else -> RegistrationState.ERROR_GENERIC
         }
-        _accountEvents.tryEmit(JamiAccountEvent.RegistrationStateChanged(accountId, regState, code, detail))
+        val event = JamiAccountEvent.RegistrationStateChanged(accountId, regState, code, detail)
+        _accountEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onAccountDetailsChanged(accountId: String, details: Map<String, String>) {
-        _accountEvents.tryEmit(JamiAccountEvent.AccountDetailsChanged(accountId, details))
+        val event = JamiAccountEvent.AccountDetailsChanged(accountId, details)
+        _accountEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onNameRegistrationEnded(accountId: String, state: Int, name: String) {
-        _accountEvents.tryEmit(JamiAccountEvent.NameRegistrationEnded(accountId, state, name))
+        val event = JamiAccountEvent.NameRegistrationEnded(accountId, state, name)
+        _accountEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onRegisteredNameFound(accountId: String, state: Int, address: String, name: String) {
@@ -106,85 +137,141 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
             2 -> LookupState.INVALID
             else -> LookupState.ERROR
         }
-        _accountEvents.tryEmit(JamiAccountEvent.RegisteredNameFound(accountId, lookupState, address, name))
+        val event = JamiAccountEvent.RegisteredNameFound(accountId, lookupState, address, name)
+        _accountEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onProfileReceived(accountId: String, from: String, displayName: String, avatarPath: String?) {
-        _accountEvents.tryEmit(JamiAccountEvent.ProfileReceived(accountId, from, displayName, avatarPath))
+        IosFileLogger.d(TAG, "onProfileReceived: from=${from.take(8)}... displayName=$displayName avatarPath=$avatarPath")
+
+        // Try to parse vCard content if displayName contains vCard data
+        // (Native layer may pass raw vCard as displayName)
+        val profile = if (displayName.contains("BEGIN:VCARD")) {
+            VCardParser.parseString(displayName)
+        } else {
+            null
+        }
+
+        if (profile != null) {
+            // Emit ContactProfileReceived with parsed vCard data (matches Android behavior)
+            val event = JamiContactEvent.ContactProfileReceived(
+                accountId = accountId,
+                contactUri = from,
+                displayName = profile.displayName,
+                avatarBase64 = profile.photoBase64
+            )
+            _contactEvents.tryEmit(event)
+            _events.tryEmit(event)
+            IosFileLogger.i(TAG, "onProfileReceived: Parsed vCard - displayName='${profile.displayName}' hasPhoto=${profile.photoBase64 != null}")
+        } else {
+            // Fallback: emit as-is for backward compatibility
+            _accountEvents.tryEmit(JamiAccountEvent.ProfileReceived(accountId, from, displayName, avatarPath))
+            IosFileLogger.d(TAG, "onProfileReceived: No vCard detected, using raw values")
+        }
     }
 
     override fun onContactAdded(accountId: String, uri: String, confirmed: Boolean) {
         IosFileLogger.i(TAG, "onContactAdded: uri=${uri.take(8)}... confirmed=$confirmed")
-        _contactEvents.tryEmit(JamiContactEvent.ContactAdded(accountId, uri, confirmed))
+        val event = JamiContactEvent.ContactAdded(accountId, uri, confirmed)
+        _contactEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onContactRemoved(accountId: String, uri: String, banned: Boolean) {
         IosFileLogger.i(TAG, "onContactRemoved: uri=${uri.take(8)}... banned=$banned")
-        _contactEvents.tryEmit(JamiContactEvent.ContactRemoved(accountId, uri, banned))
+        val event = JamiContactEvent.ContactRemoved(accountId, uri, banned)
+        _contactEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onIncomingTrustRequest(accountId: String, conversationId: String, from: String, received: Long) {
         IosFileLogger.i(TAG, "onIncomingTrustRequest: from=${from.take(8)}... convId=${conversationId.take(8)}... received=$received")
         // Note: payload is not provided by Swift bridge, using empty ByteArray
-        _contactEvents.tryEmit(JamiContactEvent.IncomingTrustRequest(accountId, conversationId, from, ByteArray(0), received))
+        val event = JamiContactEvent.IncomingTrustRequest(accountId, conversationId, from, ByteArray(0), received)
+        _contactEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onPresenceChanged(accountId: String, uri: String, isOnline: Boolean) {
         IosFileLogger.d(TAG, "onPresenceChanged: uri=${uri.take(8)}... isOnline=$isOnline")
-        _contactEvents.tryEmit(JamiContactEvent.PresenceChanged(accountId, uri, isOnline))
+        val event = JamiContactEvent.PresenceChanged(accountId, uri, isOnline)
+        _contactEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConversationReady(accountId: String, conversationId: String) {
         IosFileLogger.i(TAG, "onConversationReady: convId=${conversationId.take(8)}...")
-        _conversationEvents.tryEmit(JamiConversationEvent.ConversationReady(accountId, conversationId))
+        val event = JamiConversationEvent.ConversationReady(accountId, conversationId)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConversationRemoved(accountId: String, conversationId: String) {
         IosFileLogger.i(TAG, "onConversationRemoved: convId=${conversationId.take(8)}...")
-        _conversationEvents.tryEmit(JamiConversationEvent.ConversationRemoved(accountId, conversationId))
+        val event = JamiConversationEvent.ConversationRemoved(accountId, conversationId)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConversationRequestReceived(accountId: String, conversationId: String, metadata: Map<String, String>) {
         IosFileLogger.i(TAG, "onConversationRequestReceived: convId=${conversationId.take(8)}... metadata=$metadata")
-        _conversationEvents.tryEmit(JamiConversationEvent.ConversationRequestReceived(accountId, conversationId, metadata))
+        val event = JamiConversationEvent.ConversationRequestReceived(accountId, conversationId, metadata)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onMessageReceived(accountId: String, conversationId: String, messageData: Map<String, Any?>) {
         val message = parseSwarmMessage(messageData)
-        _conversationEvents.tryEmit(JamiConversationEvent.MessageReceived(accountId, conversationId, message))
+        val event = JamiConversationEvent.MessageReceived(accountId, conversationId, message)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onMessageUpdated(accountId: String, conversationId: String, messageData: Map<String, Any?>) {
         val message = parseSwarmMessage(messageData)
-        _conversationEvents.tryEmit(JamiConversationEvent.MessageUpdated(accountId, conversationId, message))
+        val event = JamiConversationEvent.MessageUpdated(accountId, conversationId, message)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onMessagesLoaded(requestId: Int, accountId: String, conversationId: String, messages: List<Map<String, Any?>>) {
         val parsedMessages = messages.map { parseSwarmMessage(it) }
-        _conversationEvents.tryEmit(JamiConversationEvent.MessagesLoaded(requestId, accountId, conversationId, parsedMessages))
+        val event = JamiConversationEvent.MessagesLoaded(requestId, accountId, conversationId, parsedMessages)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConversationMemberEvent(accountId: String, conversationId: String, memberUri: String, event: Int) {
+        // Event codes match Android: 0,1=JOIN, 2=LEAVE, 3=UNBAN
         val eventType = when (event) {
             0, 1 -> MemberEventType.JOIN
             2 -> MemberEventType.LEAVE
-            3 -> MemberEventType.BAN
+            3 -> MemberEventType.UNBAN
             else -> MemberEventType.JOIN
         }
-        _conversationEvents.tryEmit(JamiConversationEvent.ConversationMemberEvent(accountId, conversationId, memberUri, eventType))
+        val memberEvent = JamiConversationEvent.ConversationMemberEvent(accountId, conversationId, memberUri, eventType)
+        _conversationEvents.tryEmit(memberEvent)
+        _events.tryEmit(memberEvent)
     }
 
     override fun onComposingStatusChanged(accountId: String, conversationId: String, from: String, isComposing: Boolean) {
-        _conversationEvents.tryEmit(JamiConversationEvent.ComposingStatusChanged(accountId, conversationId, from, isComposing))
+        val event = JamiConversationEvent.ComposingStatusChanged(accountId, conversationId, from, isComposing)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConversationProfileUpdated(accountId: String, conversationId: String, profile: Map<String, String>) {
-        _conversationEvents.tryEmit(JamiConversationEvent.ConversationProfileUpdated(accountId, conversationId, profile))
+        val event = JamiConversationEvent.ConversationProfileUpdated(accountId, conversationId, profile)
+        _conversationEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onIncomingCall(accountId: String, callId: String, peerId: String, peerDisplayName: String, hasVideo: Boolean) {
         IosFileLogger.i(TAG, "onIncomingCall: callId=$callId from=$peerId video=$hasVideo")
-        _callEvents.tryEmit(JamiCallEvent.IncomingCall(accountId, callId, peerId, peerDisplayName, hasVideo))
+        val event = JamiCallEvent.IncomingCall(accountId, callId, peerId, peerDisplayName, hasVideo)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onCallStateChanged(accountId: String, callId: String, state: Int, code: Int) {
@@ -203,27 +290,39 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
             10 -> CallState.OVER
             else -> CallState.INACTIVE
         }
-        _callEvents.tryEmit(JamiCallEvent.CallStateChanged(accountId, callId, callState, code))
+        val event = JamiCallEvent.CallStateChanged(accountId, callId, callState, code)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onAudioMuted(callId: String, muted: Boolean) {
-        _callEvents.tryEmit(JamiCallEvent.AudioMuted(callId, muted))
+        val event = JamiCallEvent.AudioMuted(callId, muted)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onVideoMuted(callId: String, muted: Boolean) {
-        _callEvents.tryEmit(JamiCallEvent.VideoMuted(callId, muted))
+        val event = JamiCallEvent.VideoMuted(callId, muted)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConferenceCreated(accountId: String, conversationId: String, conferenceId: String) {
-        _callEvents.tryEmit(JamiCallEvent.ConferenceCreated(accountId, conversationId, conferenceId))
+        val event = JamiCallEvent.ConferenceCreated(accountId, conversationId, conferenceId)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConferenceChanged(accountId: String, conferenceId: String, state: String) {
-        _callEvents.tryEmit(JamiCallEvent.ConferenceChanged(accountId, conferenceId, state))
+        val event = JamiCallEvent.ConferenceChanged(accountId, conferenceId, state)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     override fun onConferenceRemoved(accountId: String, conferenceId: String) {
-        _callEvents.tryEmit(JamiCallEvent.ConferenceRemoved(accountId, conferenceId))
+        val event = JamiCallEvent.ConferenceRemoved(accountId, conferenceId)
+        _callEvents.tryEmit(event)
+        _events.tryEmit(event)
     }
 
     // =========================================================================
@@ -398,8 +497,19 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     override suspend fun addContact(accountId: String, uri: String) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: addContact: $uri")
-            native?.addContact(accountId, uri)
+            IosFileLogger.i(TAG, "addContact: uri=$uri accountId=${accountId.take(8)}...")
+            try {
+                native?.addContact(accountId, uri)
+                IosFileLogger.i(TAG, "addContact completed successfully")
+
+                // Subscribe to presence updates for this contact (matches Android behavior)
+                IosFileLogger.i(TAG, "addContact: subscribing to presence for $uri")
+                native?.subscribeBuddy(accountId, uri, true)
+                IosFileLogger.i(TAG, "addContact: presence subscription requested")
+            } catch (e: Exception) {
+                IosFileLogger.e(TAG, "addContact FAILED", e)
+                throw e
+            }
         }
     }
 
@@ -442,8 +552,13 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: subscribeBuddy: $uri, flag=$flag")
-            // Presence subscription handled by daemon
+            IosFileLogger.i(TAG, "subscribeBuddy: uri=$uri flag=$flag")
+            try {
+                native?.subscribeBuddy(accountId, uri, flag)
+                IosFileLogger.i(TAG, "subscribeBuddy completed")
+            } catch (e: Exception) {
+                IosFileLogger.e(TAG, "subscribeBuddy FAILED", e)
+            }
         }
     }
 
@@ -459,12 +574,22 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     // =========================================================================
 
     override fun getConversations(accountId: String): List<String> {
-        return native?.getConversations(accountId) ?: emptyList()
+        IosFileLogger.d(TAG, "getConversations for account: ${accountId.take(8)}...")
+        val result = native?.getConversations(accountId) ?: emptyList()
+        IosFileLogger.d(TAG, "getConversations returned ${result.size} conversations")
+        return result
     }
 
     override suspend fun startConversation(accountId: String): String = withContext(Dispatchers.Default) {
-        NSLog("$TAG: startConversation")
-        native?.startConversation(accountId) ?: generateId()
+        IosFileLogger.i(TAG, "startConversation for account: ${accountId.take(8)}...")
+        try {
+            val conversationId = native?.startConversation(accountId) ?: generateId()
+            IosFileLogger.i(TAG, "startConversation result: ${conversationId.take(8)}...")
+            conversationId
+        } catch (e: Exception) {
+            IosFileLogger.e(TAG, "startConversation FAILED", e)
+            throw e
+        }
     }
 
     override suspend fun removeConversation(accountId: String, conversationId: String) {
@@ -482,7 +607,15 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     }
 
     override fun getConversationInfo(accountId: String, conversationId: String): Map<String, String> {
-        return native?.getConversationInfo(accountId, conversationId) ?: emptyMap()
+        IosFileLogger.d(TAG, "getConversationInfo: ${conversationId.take(8)}...")
+        try {
+            val result = native?.getConversationInfo(accountId, conversationId) ?: emptyMap()
+            IosFileLogger.d(TAG, "getConversationInfo returned ${result.size} entries")
+            return result
+        } catch (e: Exception) {
+            IosFileLogger.e(TAG, "getConversationInfo FAILED", e)
+            return emptyMap()
+        }
     }
 
     override suspend fun updateConversationInfo(accountId: String, conversationId: String, info: Map<String, String>) {
@@ -493,20 +626,27 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     }
 
     override fun getConversationMembers(accountId: String, conversationId: String): List<ConversationMember> {
-        val membersData = native?.getConversationMembers(accountId, conversationId) ?: return emptyList()
-        return membersData.map { data ->
-            val roleInt = (data["role"] as? Number)?.toInt() ?: 1
-            val role = when (roleInt) {
-                0 -> MemberRole.ADMIN
-                1 -> MemberRole.MEMBER
-                2 -> MemberRole.INVITED
-                3 -> MemberRole.BANNED
-                else -> MemberRole.MEMBER
+        IosFileLogger.d(TAG, "getConversationMembers: ${conversationId.take(8)}...")
+        try {
+            val membersData = native?.getConversationMembers(accountId, conversationId) ?: return emptyList()
+            IosFileLogger.d(TAG, "getConversationMembers: got ${membersData.size} members data")
+            return membersData.map { data ->
+                val roleInt = (data["role"] as? Number)?.toInt() ?: 1
+                val role = when (roleInt) {
+                    0 -> MemberRole.ADMIN
+                    1 -> MemberRole.MEMBER
+                    2 -> MemberRole.INVITED
+                    3 -> MemberRole.BANNED
+                    else -> MemberRole.MEMBER
+                }
+                ConversationMember(
+                    uri = data["uri"] as? String ?: "",
+                    role = role
+                )
             }
-            ConversationMember(
-                uri = data["uri"] as? String ?: "",
-                role = role
-            )
+        } catch (e: Exception) {
+            IosFileLogger.e(TAG, "getConversationMembers FAILED", e)
+            return emptyList()
         }
     }
 
