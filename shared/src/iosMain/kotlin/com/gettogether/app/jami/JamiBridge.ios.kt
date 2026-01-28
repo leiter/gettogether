@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.withContext
 import com.gettogether.app.data.util.VCardParser
+import kotlinx.cinterop.ByteVar
+import kotlinx.cinterop.get
+import kotlinx.cinterop.reinterpret
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryOptionAllowBluetooth
 import platform.AVFAudio.AVAudioSessionCategoryOptionDefaultToSpeaker
@@ -145,10 +148,31 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     override fun onProfileReceived(accountId: String, from: String, displayName: String, avatarPath: String?) {
         IosFileLogger.d(TAG, "onProfileReceived: from=${from.take(8)}... displayName=$displayName avatarPath=$avatarPath")
 
-        // Try to parse vCard content if displayName contains vCard data
-        // (Native layer may pass raw vCard as displayName)
+        // The daemon's ProfileReceived signal passes a vCard FILE PATH as the third parameter
+        // (not the display name itself). Match Android behavior: read file, parse vCard, emit event.
         val profile = if (displayName.contains("BEGIN:VCARD")) {
+            // Raw vCard content (unlikely but handle it)
             VCardParser.parseString(displayName)
+        } else if (displayName.contains("/")) {
+            // File path to vCard - read and parse (this is the normal daemon behavior)
+            try {
+                val fileManager = platform.Foundation.NSFileManager.defaultManager
+                if (fileManager.fileExistsAtPath(displayName)) {
+                    val nsData = fileManager.contentsAtPath(displayName)
+                    if (nsData != null && nsData.length.toInt() > 0 && nsData.bytes != null) {
+                        val size = nsData.length.toInt()
+                        val ptr = nsData.bytes!!.reinterpret<ByteVar>()
+                        val bytes = ByteArray(size) { ptr[it] }
+                        VCardParser.parse(bytes)
+                    } else null
+                } else {
+                    IosFileLogger.w(TAG, "onProfileReceived: vCard file not found: $displayName")
+                    null
+                }
+            } catch (e: Exception) {
+                IosFileLogger.e(TAG, "onProfileReceived: Error reading vCard file: ${e.message}")
+                null
+            }
         } else {
             null
         }
@@ -165,9 +189,7 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
             _events.tryEmit(event)
             IosFileLogger.i(TAG, "onProfileReceived: Parsed vCard - displayName='${profile.displayName}' hasPhoto=${profile.photoBase64 != null}")
         } else {
-            // Fallback: emit as-is for backward compatibility
-            _accountEvents.tryEmit(JamiAccountEvent.ProfileReceived(accountId, from, displayName, avatarPath))
-            IosFileLogger.d(TAG, "onProfileReceived: No vCard detected, using raw values")
+            IosFileLogger.w(TAG, "onProfileReceived: Could not parse profile, ignoring to avoid path leak")
         }
     }
 
