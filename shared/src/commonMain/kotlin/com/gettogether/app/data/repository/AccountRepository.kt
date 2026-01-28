@@ -334,6 +334,13 @@ class AccountRepository(
                     println("[ACCOUNT-CREATE] Creating vCard profile with displayName='$displayName'...")
                     jamiBridge.updateProfile(accountId, displayName, null)
                     println("[ACCOUNT-CREATE] ✓ vCard profile created successfully")
+
+                    // Ensure display name is persisted in account details
+                    // (iOS native layer may overwrite Account.displayName with vCard path)
+                    val currentDetails = jamiBridge.getAccountDetails(accountId).toMutableMap()
+                    currentDetails["Account.displayName"] = displayName
+                    jamiBridge.setAccountDetails(accountId, currentDetails)
+                    println("[ACCOUNT-CREATE] ✓ Display name persisted to account details")
                 } catch (e: Exception) {
                     println("[ACCOUNT-CREATE] ⚠ vCard creation failed (non-fatal): ${e.message}")
                     // Non-fatal - account was still created, profile can be updated later
@@ -487,6 +494,12 @@ class AccountRepository(
             else -> _accountState.value.avatarPath
         }
 
+        // Persist display name to account details (daemon storage)
+        val currentDetails = jamiBridge.getAccountDetails(accountId).toMutableMap()
+        currentDetails["Account.displayName"] = displayName
+        jamiBridge.setAccountDetails(accountId, currentDetails)
+
+        // Update vCard profile (for trust requests)
         jamiBridge.updateProfile(accountId, displayName, effectiveAvatarPath)
 
         _accountState.value = _accountState.value.copy(
