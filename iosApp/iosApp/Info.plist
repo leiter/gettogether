@@ -23,7 +23,7 @@
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
-	<string>14</string>
+	<string>15</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIFileSharingEnabled</key>
@@ -36,6 +36,8 @@
 	<string>Get-Together can import contacts to find your friends</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Get-Together needs microphone access for audio and video calls</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Get-Together needs photo library access to select a profile picture</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
