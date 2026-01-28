@@ -12,10 +12,26 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+
+/**
+ * Transforms an avatar URI to ensure proper format for loading.
+ * - .vcf files are passed through for VCardFetcher
+ * - Absolute paths (starting with /) get file:// prefix for iOS compatibility
+ * - Other URIs are passed through as-is
+ */
+private fun transformAvatarUri(avatarUri: String?): String? {
+    return when {
+        avatarUri.isNullOrEmpty() -> null
+        avatarUri.endsWith(".vcf", ignoreCase = true) -> avatarUri  // VCardFetcher handles
+        avatarUri.startsWith("/") -> "file://$avatarUri"  // Add file:// prefix for iOS
+        else -> avatarUri
+    }
+}
 
 /**
  * Reusable avatar component that displays image or falls back to initials
@@ -29,6 +45,7 @@ fun AvatarImage(
 ) {
     val context = LocalPlatformContext.current
     val initial = displayName.firstOrNull()?.uppercase() ?: "?"
+    val effectiveUri = remember(avatarUri) { transformAvatarUri(avatarUri) }
 
     Box(
         modifier = modifier
@@ -37,10 +54,10 @@ fun AvatarImage(
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center
     ) {
-        if (!avatarUri.isNullOrEmpty()) {
+        if (!effectiveUri.isNullOrEmpty()) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(avatarUri)
+                    .data(effectiveUri)
                     .crossfade(true)
                     .build(),
                 contentDescription = "Avatar for $displayName",
@@ -75,6 +92,7 @@ fun ContactAvatarImage(
 ) {
     val context = LocalPlatformContext.current
     val initial = displayName.firstOrNull()?.uppercase() ?: "?"
+    val effectiveUri = remember(avatarUri) { transformAvatarUri(avatarUri) }
 
     Box(
         modifier = modifier
@@ -83,10 +101,10 @@ fun ContactAvatarImage(
             .background(MaterialTheme.colorScheme.primaryContainer),
         contentAlignment = Alignment.Center
     ) {
-        if (!avatarUri.isNullOrEmpty()) {
+        if (!effectiveUri.isNullOrEmpty()) {
             AsyncImage(
                 model = ImageRequest.Builder(context)
-                    .data(avatarUri)
+                    .data(effectiveUri)
                     .crossfade(true)
                     .build(),
                 contentDescription = "Avatar for $displayName",

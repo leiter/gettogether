@@ -108,6 +108,7 @@ static void fileLog(const char* level, const char* tag, NSString *message) {
 #include "callmanager_interface.h"
 #include "conversation_interface.h"
 #include "presencemanager_interface.h"
+#include "datatransfer_interface.h"
 #include "account_const.h"
 
 using namespace libjami;
@@ -712,11 +713,17 @@ static JBCallState toCallState(const std::string& state) {
             // Copy data before async dispatch to avoid use-after-free
             NSString *accountIdNS = toNSString(accountId);
             NSString *conversationIdNS = toNSString(conversationId);
+
+            FILE_LOG_I("JamiBridge-C++", @"ConversationReady: convId=%@",
+                [conversationIdNS substringToIndex:MIN(8, conversationIdNS.length)]);
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationReady:conversationId:)]) {
                     [strongSelf.delegate onConversationReady:accountIdNS
                                               conversationId:conversationIdNS];
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"ConversationReady: DELEGATE MISSING!");
                 }
             });
         }));
@@ -727,11 +734,17 @@ static JBCallState toCallState(const std::string& state) {
             // Copy data before async dispatch to avoid use-after-free
             NSString *accountIdNS = toNSString(accountId);
             NSString *conversationIdNS = toNSString(conversationId);
+
+            FILE_LOG_I("JamiBridge-C++", @"ConversationRemoved: convId=%@",
+                [conversationIdNS substringToIndex:MIN(8, conversationIdNS.length)]);
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationRemoved:conversationId:)]) {
                     [strongSelf.delegate onConversationRemoved:accountIdNS
                                                 conversationId:conversationIdNS];
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"ConversationRemoved: DELEGATE MISSING!");
                 }
             });
         }));
@@ -770,12 +783,22 @@ static JBCallState toCallState(const std::string& state) {
             NSString *accountIdNS = toNSString(accountId);
             NSString *conversationIdNS = toNSString(conversationId);
             JBSwarmMessage *messageNS = toJBSwarmMessage(message);
+
+            FILE_LOG_I("JamiBridge-C++", @"SwarmMessageReceived: convId=%@ msgId=%@ type=%@ author=%@",
+                [conversationIdNS substringToIndex:MIN(8, conversationIdNS.length)],
+                messageNS.messageId ?: @"nil",
+                messageNS.type ?: @"nil",
+                messageNS.author ? [messageNS.author substringToIndex:MIN(8, messageNS.author.length)] : @"nil");
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMessageReceived:conversationId:message:)]) {
+                    FILE_LOG_D("JamiBridge-C++", @"SwarmMessageReceived: dispatching to delegate msgId=%@", messageNS.messageId);
                     [strongSelf.delegate onMessageReceived:accountIdNS
                                             conversationId:conversationIdNS
                                                    message:messageNS];
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"SwarmMessageReceived: DELEGATE MISSING - message %@ may be lost!", messageNS.messageId);
                 }
             });
         }));
@@ -788,12 +811,19 @@ static JBCallState toCallState(const std::string& state) {
             NSString *accountIdNS = toNSString(accountId);
             NSString *conversationIdNS = toNSString(conversationId);
             JBSwarmMessage *messageNS = toJBSwarmMessage(message);
+
+            FILE_LOG_D("JamiBridge-C++", @"SwarmMessageUpdated: convId=%@ msgId=%@",
+                [conversationIdNS substringToIndex:MIN(8, conversationIdNS.length)],
+                messageNS.messageId ?: @"nil");
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMessageUpdated:conversationId:message:)]) {
                     [strongSelf.delegate onMessageUpdated:accountIdNS
                                            conversationId:conversationIdNS
                                                   message:messageNS];
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"SwarmMessageUpdated: DELEGATE MISSING - update for %@ may be lost!", messageNS.messageId);
                 }
             });
         }));
@@ -811,13 +841,22 @@ static JBCallState toCallState(const std::string& state) {
                 [msgArray addObject:toJBSwarmMessage(msg)];
             }
             NSArray *msgArrayCopy = [msgArray copy];
+
+            FILE_LOG_I("JamiBridge-C++", @"SwarmLoaded: convId=%@ requestId=%u count=%lu",
+                [conversationIdNS substringToIndex:MIN(8, conversationIdNS.length)],
+                requestId,
+                (unsigned long)msgArrayCopy.count);
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onMessagesLoaded:accountId:conversationId:messages:)]) {
+                    FILE_LOG_D("JamiBridge-C++", @"SwarmLoaded: dispatching %lu messages to delegate", (unsigned long)msgArrayCopy.count);
                     [strongSelf.delegate onMessagesLoaded:(int)requestId
                                                 accountId:accountIdNS
                                            conversationId:conversationIdNS
                                                  messages:msgArrayCopy];
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"SwarmLoaded: DELEGATE MISSING - %lu messages may be lost!", (unsigned long)msgArrayCopy.count);
                 }
             });
         }));
@@ -838,6 +877,12 @@ static JBCallState toCallState(const std::string& state) {
                 case 3: eventType = JBMemberEventTypeBan; break; // Banned
                 default: eventType = JBMemberEventTypeJoin; break;
             }
+
+            FILE_LOG_I("JamiBridge-C++", @"ConversationMemberEvent: convId=%@ member=%@ event=%d",
+                [conversationIdNS substringToIndex:MIN(8, conversationIdNS.length)],
+                [memberUriNS substringToIndex:MIN(8, memberUriNS.length)],
+                event);
+
             dispatch_async(dispatch_get_main_queue(), ^{
                 JamiBridgeWrapper *strongSelf = weakSelf;
                 if (strongSelf && [strongSelf.delegate respondsToSelector:@selector(onConversationMemberEvent:conversationId:memberUri:event:)]) {
@@ -845,6 +890,8 @@ static JBCallState toCallState(const std::string& state) {
                                                     conversationId:conversationIdNS
                                                          memberUri:memberUriNS
                                                              event:eventType];
+                } else {
+                    FILE_LOG_E("JamiBridge-C++", @"ConversationMemberEvent: DELEGATE MISSING!");
                 }
             });
         }));
@@ -1099,11 +1146,28 @@ static JBCallState toCallState(const std::string& state) {
 - (void)updateProfile:(NSString *)accountId
           displayName:(NSString *)displayName
            avatarPath:(nullable NSString *)avatarPath {
-    NSLog(@"[JamiBridge] updateProfile: %@ name: %@", accountId, displayName);
+    FILE_LOG_I("JamiBridge", @"updateProfile: accountId=%@ displayName=%@ avatarPath=%@",
+        accountId, displayName, avatarPath ?: @"(nil)");
+
+    // Determine MIME type based on file extension (matching Android behavior)
+    std::string mimeType = "";
+    if (avatarPath && avatarPath.length > 0) {
+        NSString *ext = [avatarPath pathExtension].lowercaseString;
+        if ([ext isEqualToString:@"jpg"] || [ext isEqualToString:@"jpeg"]) {
+            mimeType = "image/jpeg";
+        } else if ([ext isEqualToString:@"png"]) {
+            mimeType = "image/png";
+        } else {
+            // Default to JPEG for unknown extensions
+            mimeType = "image/jpeg";
+        }
+        FILE_LOG_D("JamiBridge", @"updateProfile: detected mimeType=%s for extension=%@", mimeType.c_str(), ext);
+    }
+
     libjami::updateProfile(toCppString(accountId),
                           toCppString(displayName),
                           avatarPath ? toCppString(avatarPath) : "",
-                          "",  // file type
+                          mimeType,
                           0);  // flags
 }
 
@@ -1554,10 +1618,32 @@ static JBCallState toCallState(const std::string& state) {
 
 - (void)acceptFileTransfer:(NSString *)accountId
             conversationId:(NSString *)conversationId
+             interactionId:(NSString *)interactionId
                     fileId:(NSString *)fileId
            destinationPath:(NSString *)destinationPath {
-    NSLog(@"[JamiBridge] acceptFileTransfer: %@ to %@", fileId, destinationPath);
-    // File transfers are automatically accepted in swarm conversations
+    FILE_LOG_I("JamiBridge", @"acceptFileTransfer: fileId=%@ interactionId=%@ destPath=%@", fileId, interactionId, destinationPath);
+
+    // Ensure destination directory exists
+    NSString *destDir = [destinationPath stringByDeletingLastPathComponent];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath:destDir]) {
+        NSError *error = nil;
+        [fm createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:&error];
+        if (error) {
+            FILE_LOG_E("JamiBridge", @"acceptFileTransfer: Failed to create directory: %@", error.localizedDescription);
+        }
+    }
+
+    // Call daemon to download the file
+    bool result = libjami::downloadFile(
+        toCppString(accountId),
+        toCppString(conversationId),
+        toCppString(interactionId),
+        toCppString(fileId),
+        toCppString(destinationPath)
+    );
+
+    FILE_LOG_I("JamiBridge", @"acceptFileTransfer: downloadFile returned %d", result);
 }
 
 - (void)cancelFileTransfer:(NSString *)accountId
@@ -1570,8 +1656,34 @@ static JBCallState toCallState(const std::string& state) {
 - (nullable JBFileTransferInfo *)getFileTransferInfo:(NSString *)accountId
                                       conversationId:(NSString *)conversationId
                                               fileId:(NSString *)fileId {
-    // File transfer info is obtained from message body
-    return nil;
+    std::string path;
+    int64_t total = 0;
+    int64_t progress = 0;
+
+    auto result = libjami::fileTransferInfo(
+        toCppString(accountId),
+        toCppString(conversationId),
+        toCppString(fileId),
+        path,
+        total,
+        progress
+    );
+
+    if (result != libjami::DataTransferError::success) {
+        FILE_LOG_D("JamiBridge", @"getFileTransferInfo: failed for fileId=%@ error=%d", fileId, (int)result);
+        return nil;
+    }
+
+    JBFileTransferInfo *info = [[JBFileTransferInfo alloc] init];
+    info.fileId = fileId;
+    info.path = toNSString(path);
+    info.totalSize = total;
+    info.progress = progress;
+
+    FILE_LOG_D("JamiBridge", @"getFileTransferInfo: fileId=%@ path=%@ total=%lld progress=%lld",
+        fileId, info.path, total, progress);
+
+    return info;
 }
 
 // =============================================================================

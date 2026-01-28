@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 
 class ChatViewModel(
@@ -740,14 +742,43 @@ class ChatViewModel(
     }
 
     private fun formatTimestamp(timestamp: Long): String {
-        // Simple timestamp formatting - could be enhanced
-        val now = Clock.System.now().toEpochMilliseconds()
-        val diff = now - timestamp
+        if (timestamp == 0L) return ""
+
+        val instant = kotlin.time.Instant.fromEpochMilliseconds(timestamp)
+        val now = Clock.System.now()
+        val tz = TimeZone.currentSystemDefault()
+        val nowDateTime = now.toLocalDateTime(tz)
+        val msgDateTime = instant.toLocalDateTime(tz)
+        val today = nowDateTime.date
+        val msgDate = msgDateTime.date
+
+        // Less than 1 minute ago
+        val diffMs = now.toEpochMilliseconds() - timestamp
+        if (diffMs < 60_000) return "Just now"
+
         return when {
-            diff < 60_000 -> "Just now"
-            diff < 3600_000 -> "${diff / 60_000}m ago"
-            diff < 86400_000 -> "${diff / 3600_000}h ago"
-            else -> "Yesterday"
+            msgDate == today -> {
+                // Today: show time "10:30"
+                "${msgDateTime.hour.toString().padStart(2, '0')}:${msgDateTime.minute.toString().padStart(2, '0')}"
+            }
+            msgDate.toEpochDays() == today.toEpochDays() - 1 -> "Yesterday"
+            diffMs < 7 * 24 * 60 * 60 * 1000L -> {
+                // This week: show short day name "Mon"
+                msgDateTime.dayOfWeek.name.take(3).lowercase()
+                    .replaceFirstChar { it.uppercase() }
+            }
+            msgDateTime.year == nowDateTime.year -> {
+                // Same year: "Jan 15"
+                val month = msgDateTime.month.name.take(3).lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                "$month ${msgDate.day}"
+            }
+            else -> {
+                // Different year: "Jan 15, 2024"
+                val month = msgDateTime.month.name.take(3).lowercase()
+                    .replaceFirstChar { it.uppercase() }
+                "$month ${msgDate.day}, ${msgDateTime.year}"
+            }
         }
     }
 

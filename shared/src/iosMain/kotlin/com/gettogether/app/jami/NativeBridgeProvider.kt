@@ -76,6 +76,12 @@ interface NativeBridgeOperations {
     fun switchCamera()
     fun switchAudioOutput(useSpeaker: Boolean)
 
+    // File Transfer
+    fun sendFile(accountId: String, conversationId: String, filePath: String, displayName: String): String
+    fun acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String)
+    fun cancelFileTransfer(accountId: String, conversationId: String, fileId: String)
+    fun getFileTransferInfo(accountId: String, conversationId: String, fileId: String): Map<String, Any?>?
+
     // Video/Audio
     fun getVideoDevices(): List<String>
     fun getCurrentVideoDevice(): String

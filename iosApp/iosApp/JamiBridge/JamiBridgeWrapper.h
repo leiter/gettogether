@@ -485,6 +485,7 @@ typedef NS_ENUM(NSInteger, JBMemberEventType) {
 
 - (void)acceptFileTransfer:(NSString *)accountId
             conversationId:(NSString *)conversationId
+             interactionId:(NSString *)interactionId
                     fileId:(NSString *)fileId
            destinationPath:(NSString *)destinationPath;
 
