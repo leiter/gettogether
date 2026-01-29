@@ -30,6 +30,10 @@ actual class ImagePicker {
         private const val TAG = "ImagePicker"
     }
 
+    // Strong reference to delegate — PHPickerViewController.delegate is weak,
+    // so without this the delegate gets garbage collected and callbacks never fire.
+    private var currentDelegate: ImagePickerDelegate? = null
+
     actual fun pickImage(onResult: (ImagePickerResult) -> Unit) {
         // Get the root view controller
         val keyWindow = UIApplication.sharedApplication.keyWindow
@@ -54,22 +58,26 @@ actual class ImagePicker {
 
         val picker = PHPickerViewController(configuration)
 
-        // Create delegate
+        // Create delegate and hold a strong reference (PHPickerViewController.delegate is weak)
         val delegate = ImagePickerDelegate(
             onImageSelected = { imagePath ->
                 picker.dismissViewControllerAnimated(true, null)
+                currentDelegate = null
                 onResult(ImagePickerResult.Success(imagePath))
             },
             onCancelled = {
                 picker.dismissViewControllerAnimated(true, null)
+                currentDelegate = null
                 onResult(ImagePickerResult.Cancelled)
             },
             onError = { message ->
                 picker.dismissViewControllerAnimated(true, null)
+                currentDelegate = null
                 onResult(ImagePickerResult.Error(message))
             }
         )
 
+        currentDelegate = delegate
         picker.delegate = delegate
 
         // Present the picker

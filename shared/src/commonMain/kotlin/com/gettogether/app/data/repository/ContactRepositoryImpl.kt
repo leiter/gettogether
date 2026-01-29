@@ -640,13 +640,13 @@ class ContactRepositoryImpl(
 
                 if (event.accountId == accountId) {
                     scope.launch {
-                        // Get the vCard path where daemon stores the contact's profile
-                        // The vCard contains the avatar - Coil's VCardFetcher extracts it
-                        val vCardPath = getContactVCardPath(accountId, event.contactUri)
+                        // Prefer the daemon's actual vCard path (passed through the event)
+                        // over the computed path (which may differ due to base64 encoding)
+                        val vCardPath = event.vcardPath ?: getContactVCardPath(accountId, event.contactUri)
                         val hasAvatarInProfile = event.avatarBase64 != null
 
                         if (vCardPath != null) {
-                            println("[CONTACT-EVENT]   vCard path: $vCardPath")
+                            println("[CONTACT-EVENT]   vCard path: $vCardPath (from ${if (event.vcardPath != null) "daemon" else "computed"})")
                         } else {
                             println("[CONTACT-EVENT]   Warning: Could not compute vCard path (dataPathProvider not available)")
                         }

@@ -177,19 +177,46 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
             null
         }
 
+        // The daemon passes the vCard file path as the third parameter.
+        // Capture it so we can forward it to ContactRepository (avoids recomputing the path).
+        val daemonVcardPath = if (displayName.contains("/") && !displayName.contains("BEGIN:VCARD")) displayName else null
+
         if (profile != null) {
             // Emit ContactProfileReceived with parsed vCard data (matches Android behavior)
             val event = JamiContactEvent.ContactProfileReceived(
                 accountId = accountId,
                 contactUri = from,
                 displayName = profile.displayName,
-                avatarBase64 = profile.photoBase64
+                avatarBase64 = profile.photoBase64,
+                vcardPath = daemonVcardPath
             )
             _contactEvents.tryEmit(event)
             _events.tryEmit(event)
-            IosFileLogger.i(TAG, "onProfileReceived: Parsed vCard - displayName='${profile.displayName}' hasPhoto=${profile.photoBase64 != null}")
+            IosFileLogger.i(TAG, "onProfileReceived: Parsed vCard - displayName='${profile.displayName}' hasPhoto=${profile.photoBase64 != null} vcardPath=$daemonVcardPath")
         } else {
-            IosFileLogger.w(TAG, "onProfileReceived: Could not parse profile, ignoring to avoid path leak")
+            // Fallback: vCard couldn't be parsed, try getContactDetails() for display name
+            IosFileLogger.w(TAG, "onProfileReceived: Could not parse vCard, falling back to getContactDetails()")
+            try {
+                val details = native?.getContactDetails(accountId, from) ?: emptyMap()
+                val fallbackName = details["displayName"]
+                    ?: details["Account.displayName"]
+                    ?: details["registeredName"]
+                if (!fallbackName.isNullOrBlank()) {
+                    val event = JamiContactEvent.ContactProfileReceived(
+                        accountId = accountId,
+                        contactUri = from,
+                        displayName = fallbackName,
+                        avatarBase64 = null
+                    )
+                    _contactEvents.tryEmit(event)
+                    _events.tryEmit(event)
+                    IosFileLogger.i(TAG, "onProfileReceived: Fallback displayName='$fallbackName' (no avatar)")
+                } else {
+                    IosFileLogger.w(TAG, "onProfileReceived: Fallback also produced no name, dropping event")
+                }
+            } catch (e: Exception) {
+                IosFileLogger.e(TAG, "onProfileReceived: Fallback getContactDetails() failed: ${e.message}")
+            }
         }
     }
 
@@ -225,46 +252,71 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
     override fun onConversationReady(accountId: String, conversationId: String) {
         IosFileLogger.i(TAG, "onConversationReady: convId=${conversationId.take(8)}...")
         val event = JamiConversationEvent.ConversationReady(accountId, conversationId)
-        _conversationEvents.tryEmit(event)
+        val emitted = _conversationEvents.tryEmit(event)
         _events.tryEmit(event)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onConversationReady: BUFFER OVERFLOW - event may be lost!")
+        }
     }
 
     override fun onConversationRemoved(accountId: String, conversationId: String) {
         IosFileLogger.i(TAG, "onConversationRemoved: convId=${conversationId.take(8)}...")
         val event = JamiConversationEvent.ConversationRemoved(accountId, conversationId)
-        _conversationEvents.tryEmit(event)
+        val emitted = _conversationEvents.tryEmit(event)
         _events.tryEmit(event)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onConversationRemoved: BUFFER OVERFLOW - event may be lost!")
+        }
     }
 
     override fun onConversationRequestReceived(accountId: String, conversationId: String, metadata: Map<String, String>) {
         IosFileLogger.i(TAG, "onConversationRequestReceived: convId=${conversationId.take(8)}... metadata=$metadata")
         val event = JamiConversationEvent.ConversationRequestReceived(accountId, conversationId, metadata)
-        _conversationEvents.tryEmit(event)
+        val emitted = _conversationEvents.tryEmit(event)
         _events.tryEmit(event)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onConversationRequestReceived: BUFFER OVERFLOW - request may be lost!")
+        }
     }
 
     override fun onMessageReceived(accountId: String, conversationId: String, messageData: Map<String, Any?>) {
+        IosFileLogger.i(TAG, "onMessageReceived: convId=${conversationId.take(8)}... msgId=${messageData["id"]}")
         val message = parseSwarmMessage(messageData)
+        IosFileLogger.d(TAG, "onMessageReceived: parsed - id=${message.id}, author=${message.author.take(8)}..., body=${message.body}")
         val event = JamiConversationEvent.MessageReceived(accountId, conversationId, message)
-        _conversationEvents.tryEmit(event)
+        val emitted = _conversationEvents.tryEmit(event)
         _events.tryEmit(event)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onMessageReceived: BUFFER OVERFLOW - message ${message.id} may be lost!")
+        }
     }
 
     override fun onMessageUpdated(accountId: String, conversationId: String, messageData: Map<String, Any?>) {
+        IosFileLogger.d(TAG, "onMessageUpdated: convId=${conversationId.take(8)}... msgId=${messageData["id"]}")
         val message = parseSwarmMessage(messageData)
         val event = JamiConversationEvent.MessageUpdated(accountId, conversationId, message)
-        _conversationEvents.tryEmit(event)
+        val emitted = _conversationEvents.tryEmit(event)
         _events.tryEmit(event)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onMessageUpdated: BUFFER OVERFLOW - update for ${message.id} may be lost!")
+        }
     }
 
     override fun onMessagesLoaded(requestId: Int, accountId: String, conversationId: String, messages: List<Map<String, Any?>>) {
+        IosFileLogger.i(TAG, "onMessagesLoaded: convId=${conversationId.take(8)}... count=${messages.size} requestId=$requestId")
         val parsedMessages = messages.map { parseSwarmMessage(it) }
         val event = JamiConversationEvent.MessagesLoaded(requestId, accountId, conversationId, parsedMessages)
-        _conversationEvents.tryEmit(event)
+        val emitted = _conversationEvents.tryEmit(event)
         _events.tryEmit(event)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onMessagesLoaded: BUFFER OVERFLOW - ${messages.size} messages may be lost!")
+        } else {
+            IosFileLogger.d(TAG, "onMessagesLoaded: emitted ${parsedMessages.size} messages successfully")
+        }
     }
 
     override fun onConversationMemberEvent(accountId: String, conversationId: String, memberUri: String, event: Int) {
+        IosFileLogger.i(TAG, "onConversationMemberEvent: convId=${conversationId.take(8)}... member=${memberUri.take(8)}... event=$event")
         // Event codes match Android: 0,1=JOIN, 2=LEAVE, 3=UNBAN
         val eventType = when (event) {
             0, 1 -> MemberEventType.JOIN
@@ -273,8 +325,11 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
             else -> MemberEventType.JOIN
         }
         val memberEvent = JamiConversationEvent.ConversationMemberEvent(accountId, conversationId, memberUri, eventType)
-        _conversationEvents.tryEmit(memberEvent)
+        val emitted = _conversationEvents.tryEmit(memberEvent)
         _events.tryEmit(memberEvent)
+        if (!emitted) {
+            IosFileLogger.e(TAG, "onConversationMemberEvent: BUFFER OVERFLOW - member event may be lost!")
+        }
     }
 
     override fun onComposingStatusChanged(accountId: String, conversationId: String, from: String, isComposing: Boolean) {
@@ -381,9 +436,17 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
 
     override suspend fun initDaemon(dataPath: String) {
         withContext(Dispatchers.Default) {
-            IosFileLogger.i(TAG, "initDaemon with path: $dataPath")
+            // dataPath from DataPathProvider is {Documents}/jami/jami (with extra /jami suffix
+            // so common code's getContactVCardPath() resolves correctly).
+            // The native daemon expects the actual config dir: {Documents}/jami
+            val nativeDaemonPath = if (dataPath.endsWith("/jami")) {
+                dataPath.substringBeforeLast("/jami")
+            } else {
+                dataPath
+            }
+            IosFileLogger.i(TAG, "initDaemon: dataPath=$dataPath nativeDaemonPath=$nativeDaemonPath")
             if (native != null) {
-                native?.initDaemon(dataPath)
+                native?.initDaemon(nativeDaemonPath)
             } else {
                 IosFileLogger.w(TAG, "Native bridge not available")
             }
@@ -930,8 +993,8 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
         filePath: String,
         displayName: String
     ): String = withContext(Dispatchers.Default) {
-        NSLog("$TAG: sendFile: $displayName")
-        generateId()
+        IosFileLogger.i(TAG, "sendFile: $displayName path=$filePath")
+        native?.sendFile(accountId, conversationId, filePath, displayName) ?: generateId()
     }
 
     override suspend fun acceptFileTransfer(
@@ -942,7 +1005,8 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
         destinationPath: String
     ) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: acceptFileTransfer: $fileId")
+            IosFileLogger.i(TAG, "acceptFileTransfer: fileId=$fileId interactionId=$interactionId destPath=$destinationPath")
+            native?.acceptFileTransfer(accountId, conversationId, interactionId, fileId, destinationPath)
         }
     }
 
@@ -952,7 +1016,8 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
         fileId: String
     ) {
         withContext(Dispatchers.Default) {
-            NSLog("$TAG: cancelFileTransfer: $fileId")
+            IosFileLogger.d(TAG, "cancelFileTransfer: $fileId")
+            native?.cancelFileTransfer(accountId, conversationId, fileId)
         }
     }
 
@@ -960,7 +1025,24 @@ class IOSJamiBridge : JamiBridge, NativeBridgeCallback {
         accountId: String,
         conversationId: String,
         fileId: String
-    ): FileTransferInfo? = null
+    ): FileTransferInfo? {
+        val info = native?.getFileTransferInfo(accountId, conversationId, fileId) ?: return null
+        val fileIdResult = info["fileId"] as? String ?: return null
+        val path = info["path"] as? String ?: ""
+        val totalSize = (info["totalSize"] as? Number)?.toLong() ?: 0L
+        val progress = (info["progress"] as? Number)?.toLong() ?: 0L
+
+        return FileTransferInfo(
+            fileId = fileIdResult,
+            path = path,
+            displayName = path.substringAfterLast("/"),
+            totalSize = totalSize,
+            progress = progress,
+            bytesPerSecond = 0L,
+            author = "",
+            flags = 0
+        )
+    }
 
     // =========================================================================
     // Video

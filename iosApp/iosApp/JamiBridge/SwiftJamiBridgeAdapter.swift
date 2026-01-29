@@ -320,6 +320,36 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
         wrapper.setAudioOutputDevice(index)
     }
 
+    // MARK: File Transfer
+
+    func sendFile(accountId: String, conversationId: String, filePath: String, displayName: String) -> String {
+        return wrapper.sendFile(accountId, conversationId: conversationId, filePath: filePath, displayName: displayName)
+    }
+
+    func acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String) {
+        wrapper.acceptFileTransfer(accountId, conversationId: conversationId, fileId: fileId, destinationPath: destinationPath)
+    }
+
+    func cancelFileTransfer(accountId: String, conversationId: String, fileId: String) {
+        wrapper.cancelFileTransfer(accountId, conversationId: conversationId, fileId: fileId)
+    }
+
+    func getFileTransferInfo(accountId: String, conversationId: String, fileId: String) -> [String: Any]? {
+        guard let info = wrapper.getFileTransferInfo(accountId, conversationId: conversationId, fileId: fileId) else {
+            return nil
+        }
+        return [
+            "fileId": info.fileId as Any,
+            "path": info.path as Any,
+            "displayName": info.displayName as Any,
+            "totalSize": info.totalSize as Any,
+            "progress": info.progress as Any,
+            "bytesPerSecond": info.bytesPerSecond as Any,
+            "author": info.author as Any,
+            "flags": info.flags as Any
+        ]
+    }
+
     // MARK: - JamiBridgeDelegate Implementation
     // These methods are called by JamiBridgeWrapper when events occur from libjami.
     // We forward them to the Kotlin callback.

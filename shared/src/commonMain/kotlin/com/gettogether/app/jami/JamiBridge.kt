@@ -984,6 +984,7 @@ sealed class JamiContactEvent : JamiEvent() {
         val contactUri: String,
         val displayName: String?,
         val avatarBase64: String?,
+        val vcardPath: String? = null,
         override val timestamp: Long = Clock.System.now().toEpochMilliseconds()
     ) : JamiContactEvent()
 }

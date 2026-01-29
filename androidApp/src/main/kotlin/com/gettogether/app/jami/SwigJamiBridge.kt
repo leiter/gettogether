@@ -142,7 +142,8 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
                         accountId = accountId,
                         contactUri = from,
                         displayName = profile.displayName,
-                        avatarBase64 = profile.photoBase64
+                        avatarBase64 = profile.photoBase64,
+                        vcardPath = vcardPath
                     )
                     val emitted = _contactEvents.tryEmit(event)
                     Log.i(TAG, "profileReceived: ContactProfileReceived event emitted=$emitted")
