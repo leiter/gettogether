@@ -83,7 +83,6 @@ class MockJamiBridge : JamiBridge {
     override suspend fun discardTrustRequest(accountId: String, uri: String) {}
     override fun getTrustRequests(accountId: String): List<TrustRequest> = emptyList()
     override suspend fun subscribeBuddy(accountId: String, uri: String, flag: Boolean) {}
-    override suspend fun setSubscriptions(accountId: String, uris: List<String>) {}
     override suspend fun publishPresence(accountId: String, isOnline: Boolean, note: String) {}
 
     override suspend fun startConversation(accountId: String): String = "test-conversation-id"
