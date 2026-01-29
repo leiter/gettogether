@@ -108,6 +108,7 @@ static void fileLog(const char* level, const char* tag, NSString *message) {
 #include "callmanager_interface.h"
 #include "conversation_interface.h"
 #include "presencemanager_interface.h"
+#include "datatransfer_interface.h"
 #include "account_const.h"
 
 using namespace libjami;
@@ -1568,24 +1569,51 @@ static JBCallState toCallState(const std::string& state) {
 
 - (void)acceptFileTransfer:(NSString *)accountId
             conversationId:(NSString *)conversationId
+             interactionId:(NSString *)interactionId
                     fileId:(NSString *)fileId
            destinationPath:(NSString *)destinationPath {
-    NSLog(@"[JamiBridge] acceptFileTransfer: %@ to %@", fileId, destinationPath);
-    // File transfers are automatically accepted in swarm conversations
+    NSLog(@"[JamiBridge] acceptFileTransfer: account=%@ conv=%@ interaction=%@ fileId=%@ dest=%@",
+          accountId, conversationId, interactionId, fileId, destinationPath);
+    bool result = libjami::downloadFile(toCppString(accountId),
+                                        toCppString(conversationId),
+                                        toCppString(interactionId),
+                                        toCppString(fileId),
+                                        toCppString(destinationPath));
+    NSLog(@"[JamiBridge] downloadFile returned: %@", result ? @"true" : @"false");
 }
 
 - (void)cancelFileTransfer:(NSString *)accountId
             conversationId:(NSString *)conversationId
                     fileId:(NSString *)fileId {
     NSLog(@"[JamiBridge] cancelFileTransfer: %@", fileId);
-    // File transfer cancellation is handled via message system
+    libjami::cancelDataTransfer(toCppString(accountId),
+                                toCppString(conversationId),
+                                toCppString(fileId));
 }
 
 - (nullable JBFileTransferInfo *)getFileTransferInfo:(NSString *)accountId
                                       conversationId:(NSString *)conversationId
                                               fileId:(NSString *)fileId {
-    // File transfer info is obtained from message body
-    return nil;
+    std::string path;
+    int64_t total = 0;
+    int64_t progress = 0;
+    libjami::DataTransferError err = libjami::fileTransferInfo(toCppString(accountId),
+                                                               toCppString(conversationId),
+                                                               toCppString(fileId),
+                                                               path, total, progress);
+    if (err != libjami::DataTransferError::success) {
+        return nil;
+    }
+    JBFileTransferInfo *info = [[JBFileTransferInfo alloc] init];
+    info.fileId = fileId;
+    info.path = toNSString(path);
+    info.displayName = [toNSString(path) lastPathComponent];
+    info.totalSize = total;
+    info.progress = progress;
+    info.bytesPerSecond = 0;
+    info.author = @"";
+    info.flags = 0;
+    return info;
 }
 
 // =============================================================================

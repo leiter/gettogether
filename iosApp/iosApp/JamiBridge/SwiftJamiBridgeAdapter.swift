@@ -327,7 +327,7 @@ class SwiftJamiBridgeAdapter: NSObject, NativeBridgeOperations, JamiBridgeDelega
     }
 
     func acceptFileTransfer(accountId: String, conversationId: String, interactionId: String, fileId: String, destinationPath: String) {
-        wrapper.acceptFileTransfer(accountId, conversationId: conversationId, fileId: fileId, destinationPath: destinationPath)
+        wrapper.acceptFileTransfer(accountId, conversationId: conversationId, interactionId: interactionId, fileId: fileId, destinationPath: destinationPath)
     }
 
     func cancelFileTransfer(accountId: String, conversationId: String, fileId: String) {
