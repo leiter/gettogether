@@ -76,16 +76,23 @@ actual class FileHelper {
             true
         )
         val documentsDir = paths.firstOrNull() as? String ?: return null
-
-        // Check Jami's data directory structure
-        val jamiDataPath = "$documentsDir/jami/$accountId/conversations/$conversationId/$fileId"
         val fileManager = NSFileManager.defaultManager
 
+        // Daemon stores conversation files at the parent of its config dir:
+        // {Documents}/{accountId}/conversation_data/{conversationId}/{fileId}
+        // (mirrors Android: context.filesDir/{accountId}/conversation_data/...)
+        val daemonPath = "$documentsDir/$accountId/conversation_data/$conversationId/$fileId"
+        if (fileManager.fileExistsAtPath(daemonPath)) {
+            return daemonPath
+        }
+
+        // Also check inside daemon root in case layout differs
+        val jamiDataPath = "$documentsDir/jami/$accountId/conversation_data/$conversationId/$fileId"
         if (fileManager.fileExistsAtPath(jamiDataPath)) {
             return jamiDataPath
         }
 
-        // Also check downloads directory
+        // Check app downloads directory
         val downloadPath = "$documentsDir/downloads/$conversationId/$fileId"
         if (fileManager.fileExistsAtPath(downloadPath)) {
             return downloadPath
