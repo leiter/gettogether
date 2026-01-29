@@ -1,3 +1,4 @@
 [submodule "jami-daemon"]
 	path = jami-daemon
 	url = https://github.com/leiter/jami-daemon.git
+	branch = develop
