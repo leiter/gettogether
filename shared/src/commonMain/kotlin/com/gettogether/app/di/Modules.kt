@@ -39,7 +39,7 @@ val sharedModule = module {
     // Repositories
     single {
         println("Koin: Creating AccountRepository")
-        AccountRepository(get(), get(), getOrNull()).also { println("Koin: AccountRepository created") }
+        AccountRepository(get(), get(), getOrNull(), getOrNull()).also { println("Koin: AccountRepository created") }
     }
     single { ContactRepositoryImpl(get(), get(), get(), get(), get()) }
     single<com.gettogether.app.domain.repository.ContactRepository> { get<ContactRepositoryImpl>() }

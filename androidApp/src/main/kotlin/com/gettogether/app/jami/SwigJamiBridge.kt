@@ -545,6 +545,7 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
 
     companion object {
         private const val TAG = "SwigJamiBridge"
+        @Volatile
         private var nativeLoaded = false
 
         // Retry configuration for daemon operations
@@ -900,45 +901,62 @@ class SwigJamiBridge(private val context: Context) : JamiBridge {
         JamiService.removeAccount(accountId)
     }
 
+    @Synchronized
     override fun getAccountIds(): List<String> {
         Log.i(TAG, "[ACCOUNT-PERSIST] getAccountIds() called")
         if (!nativeLoaded) {
             Log.e(TAG, "[ACCOUNT-PERSIST] getAccountIds() FAILED: Native not loaded")
             return emptyList()
         }
-        val accountIds = stringVectToList(JamiService.getAccountList())
-        Log.i(TAG, "[ACCOUNT-PERSIST] Found ${accountIds.size} accounts: $accountIds")
-        return accountIds
+        return try {
+            val accountIds = stringVectToList(JamiService.getAccountList())
+            Log.i(TAG, "[ACCOUNT-PERSIST] Found ${accountIds.size} accounts: $accountIds")
+            accountIds
+        } catch (e: Exception) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getAccountIds() EXCEPTION: ${e.message}")
+            emptyList()
+        }
     }
 
+    @Synchronized
     override fun getAccountDetails(accountId: String): Map<String, String> {
         Log.i(TAG, "[ACCOUNT-PERSIST] getAccountDetails() called for accountId=$accountId")
         if (!nativeLoaded) {
             Log.e(TAG, "[ACCOUNT-PERSIST] getAccountDetails() FAILED: Native not loaded")
             return emptyMap()
         }
-        val details = stringMapToKotlin(JamiService.getAccountDetails(accountId))
-        Log.i(TAG, "[ACCOUNT-PERSIST] Account details for $accountId:")
-        details.forEach { (key, value) ->
-            // Don't log sensitive values
-            val safeValue = if (key.contains("password", ignoreCase = true) || key.contains("secret", ignoreCase = true)) "***" else value
-            Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $safeValue")
+        return try {
+            val details = stringMapToKotlin(JamiService.getAccountDetails(accountId))
+            Log.i(TAG, "[ACCOUNT-PERSIST] Account details for $accountId:")
+            details.forEach { (key, value) ->
+                val safeValue = if (key.contains("password", ignoreCase = true) || key.contains("secret", ignoreCase = true)) "***" else value
+                Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $safeValue")
+            }
+            details
+        } catch (e: Exception) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getAccountDetails() EXCEPTION: ${e.message}")
+            emptyMap()
         }
-        return details
     }
 
+    @Synchronized
     override fun getVolatileAccountDetails(accountId: String): Map<String, String> {
         Log.i(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() called for accountId=$accountId")
         if (!nativeLoaded) {
             Log.e(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() FAILED: Native not loaded")
             return emptyMap()
         }
-        val details = stringMapToKotlin(JamiService.getVolatileAccountDetails(accountId))
-        Log.i(TAG, "[ACCOUNT-PERSIST] Volatile details for $accountId:")
-        details.forEach { (key, value) ->
-            Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $value")
+        return try {
+            val details = stringMapToKotlin(JamiService.getVolatileAccountDetails(accountId))
+            Log.i(TAG, "[ACCOUNT-PERSIST] Volatile details for $accountId:")
+            details.forEach { (key, value) ->
+                Log.i(TAG, "[ACCOUNT-PERSIST]   $key = $value")
+            }
+            details
+        } catch (e: Exception) {
+            Log.e(TAG, "[ACCOUNT-PERSIST] getVolatileAccountDetails() EXCEPTION: ${e.message}")
+            emptyMap()
         }
-        return details
     }
 
     override suspend fun setAccountDetails(accountId: String, details: Map<String, String>) = withContext(Dispatchers.IO) {

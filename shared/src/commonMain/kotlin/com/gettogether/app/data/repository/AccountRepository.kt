@@ -4,6 +4,8 @@ import com.gettogether.app.domain.model.ExistingAccount
 import com.gettogether.app.jami.JamiBridge
 import com.gettogether.app.jami.JamiAccountEvent
 import com.gettogether.app.jami.RegistrationState
+import com.gettogether.app.jami.DaemonManager
+import com.gettogether.app.jami.DaemonState
 import com.gettogether.app.util.procrastinate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +26,8 @@ import kotlinx.coroutines.withTimeout
 class AccountRepository(
     private val jamiBridge: JamiBridge,
     private val presenceManager: PresenceManager,
-    private val settingsRepository: SettingsRepository? = null
+    private val settingsRepository: SettingsRepository? = null,
+    private val daemonManager: DaemonManager? = null
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -147,6 +150,26 @@ class AccountRepository(
     suspend fun loadAccounts() {
         println("[ACCOUNT-RESTORE] === loadAccounts() called ===")
         try {
+            // Wait for daemon to be running before attempting native calls
+            daemonManager?.let { dm ->
+                if (dm.state.value != DaemonState.Running) {
+                    println("[ACCOUNT-RESTORE] Waiting for daemon to reach Running state (current: ${dm.state.value})...")
+                    try {
+                        withTimeout(10_000L) {
+                            dm.state.first { it == DaemonState.Running || it == DaemonState.Error }
+                        }
+                        println("[ACCOUNT-RESTORE] Daemon state: ${dm.state.value}")
+                        if (dm.state.value == DaemonState.Error) {
+                            println("[ACCOUNT-RESTORE] Daemon failed to start - aborting loadAccounts")
+                            _accountState.value = AccountState(isLoaded = true, error = "Daemon failed to start")
+                            return
+                        }
+                    } catch (e: Exception) {
+                        println("[ACCOUNT-RESTORE] Timeout waiting for daemon - proceeding anyway: ${e.message}")
+                    }
+                }
+            }
+
             println("[ACCOUNT-RESTORE] Calling jamiBridge.getAccountIds()...")
             val accountIds = jamiBridge.getAccountIds()
             println("[ACCOUNT-RESTORE] Found ${accountIds.size} accounts: $accountIds")
