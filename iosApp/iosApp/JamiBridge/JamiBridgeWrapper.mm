@@ -1099,11 +1099,25 @@ static JBCallState toCallState(const std::string& state) {
 - (void)updateProfile:(NSString *)accountId
           displayName:(NSString *)displayName
            avatarPath:(nullable NSString *)avatarPath {
-    NSLog(@"[JamiBridge] updateProfile: %@ name: %@", accountId, displayName);
+    NSLog(@"[JamiBridge] updateProfile: %@ name: %@ avatarPath: %@", accountId, displayName, avatarPath);
+    // Determine MIME type from file extension so the daemon broadcasts the profile to contacts.
+    // An empty fileType tells the daemon to skip avatar processing entirely.
+    NSString *fileType = @"";
+    if (avatarPath && avatarPath.length > 0) {
+        NSString *lower = [avatarPath lowercaseString];
+        if ([lower hasSuffix:@".jpg"] || [lower hasSuffix:@".jpeg"]) {
+            fileType = @"image/jpeg";
+        } else if ([lower hasSuffix:@".png"]) {
+            fileType = @"image/png";
+        } else {
+            fileType = @"image/jpeg"; // default for valid paths without recognized extension
+        }
+    }
+    NSLog(@"[JamiBridge] updateProfile fileType: %@", fileType);
     libjami::updateProfile(toCppString(accountId),
                           toCppString(displayName),
                           avatarPath ? toCppString(avatarPath) : "",
-                          "",  // file type
+                          toCppString(fileType),
                           0);  // flags
 }
 
